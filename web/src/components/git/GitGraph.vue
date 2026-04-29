@@ -12,9 +12,11 @@
           :key="'line-' + i"
           :d="line.path"
           :stroke="line.color"
-          stroke-width="2"
+          :stroke-width="line.fade ? 1.5 : 2"
           fill="none"
-          stroke-linecap="round"
+          :stroke-linecap="line.fade ? 'butt' : 'round'"
+          :stroke-dasharray="line.fade ? '6,4' : 'none'"
+          :opacity="line.fade ? 0.4 : 1"
           class="git-graph-line"
           @click.stop="onLineClick(line, $event)"
         />
@@ -132,7 +134,6 @@ const props = defineProps({
 const emit = defineEmits(['update:collapsed'])
 
 const scrollRef = ref(null)
-const actualHeight = ref(0) // tracks the real height of the commit list content
 
 // ── Tooltip ──
 const tooltip = ref(null)
@@ -141,39 +142,11 @@ const tooltipEl = ref(null)
 // Dismiss tooltip on scroll or outside click
 function dismissTooltip() { tooltip.value = null }
 
-// Sync SVG height with the actual commit list content height.
-// Commit rows can be taller than rowHeight (e.g. expanded messages),
-// so the SVG must stretch to match.
-let resizeObserver = null
-
-function syncHeight() {
-  const graphEl = scrollRef.value
-  if (!graphEl) return
-  const container = graphEl.closest('.commit-list-container')
-  const content = container?.querySelector('.commit-list-content')
-  if (!content) return
-
-  const update = () => {
-    // Sum up actual item heights (exclude load-more sentinel)
-    const items = content.querySelectorAll('.drilldown-item')
-    let h = 0
-    items.forEach(item => h += item.offsetHeight)
-    if (h > 0) actualHeight.value = h + 4
-  }
-
-  update()
-  resizeObserver = new ResizeObserver(update)
-  resizeObserver.observe(content)
-}
-
 onMounted(() => {
   document.addEventListener('click', dismissTooltip, true)
-  syncHeight()
 })
-
 onUnmounted(() => {
   document.removeEventListener('click', dismissTooltip, true)
-  if (resizeObserver) resizeObserver.disconnect()
 })
 
 // Persist lane assignments across lazy-load recomputations to prevent visual
@@ -188,15 +161,9 @@ watch(() => props.commits, (val) => {
   }
 })
 
-// Bottom padding for continuation lines when content is taller than row-based height
-const bottomPadding = computed(() => {
-  const base = props.commits.length * props.rowHeight + 4
-  return Math.max(0, actualHeight.value - base)
-})
-
 // Compute graph data, passing previous lane assignments for stability
 const graphData = computed(() => {
-  const result = computeGraphData(props.commits, props.rowHeight, persistedShaToLane.value, bottomPadding.value)
+  const result = computeGraphData(props.commits, props.rowHeight, persistedShaToLane.value)
   persistedShaToLane.value = result.shaToLane
   return result
 })
@@ -204,10 +171,10 @@ const nodes = computed(() => graphData.value.nodes)
 const lines = computed(() => graphData.value.lines)
 const laneBranchName = computed(() => graphData.value.laneBranchName)
 const svgHeight = computed(() => {
-  // Use actual content height if available (accounts for expanded messages etc.)
-  // Plus one extra rowHeight for continuation lines at the bottom
-  const base = Math.max(actualHeight.value, props.commits.length * props.rowHeight + 4)
-  return base + props.rowHeight
+  const base = props.commits.length * props.rowHeight + 4
+  // If there are continuation lines (fade), they extend below the last row
+  const hasFade = lines.value.some(l => l.fade)
+  return hasFade ? base + props.rowHeight : base
 })
 
 // SVG width: only lanes, no ref labels (refs shown via tooltip)
@@ -289,7 +256,6 @@ const tooltipStyle = computed(() => {
   max-width: 300px;
   scrollbar-width: thin;
   position: relative;
-  align-self: stretch;
 }
 
 .git-graph-scroll.collapsed-mode {

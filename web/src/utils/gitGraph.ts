@@ -13,7 +13,7 @@ const LANE_COLORS = [
   '#34495e', // dark gray
 ]
 
-export { LANE_WIDTH, LANE_COLORS }
+export { LANE_WIDTH, LANE_COLORS, GRAPH_LEFT_PADDING }
 
 function laneCx(lane) {
   return lane * LANE_WIDTH + LANE_WIDTH / 2 + GRAPH_LEFT_PADDING
@@ -33,7 +33,7 @@ function laneCx(lane) {
  *    - Cross-lane "merge-in" (branch commit whose parent is on another lane) →
  *      vertical line on branch lane + short bezier at merge point
  */
-export function computeGraphData(commits, rowHeight, previousShaToLane, bottomPadding = 0) {
+export function computeGraphData(commits, rowHeight, previousShaToLane) {
   if (!commits || !commits.length) {
     return { nodes: [], lines: [], laneCount: 0, graphWidth: 40, shaToLane: new Map() }
   }
@@ -300,9 +300,9 @@ export function computeGraphData(commits, rowHeight, previousShaToLane, bottomPa
   }
 
   // Connection lines: for each commit→parent edge
-  // SVG bottom Y for continuation lines (when parent is outside loaded commits)
-  // Add extra padding so continuation lines clearly reach the bottom edge
-  const svgBottomY = commits.length * rowHeight + bottomPadding + rowHeight
+  // Continuation lines extend beyond the last row by one rowHeight so they
+  // are visually obvious (not just a tiny 18px stub).
+  const svgBottomY = commits.length * rowHeight + rowHeight
 
   for (let row = 0; row < commits.length; row++) {
     const c = commits[row]
@@ -315,10 +315,10 @@ export function computeGraphData(commits, rowHeight, previousShaToLane, bottomPa
     for (let pi = 0; pi < parents.length; pi++) {
       const pSha = parents[pi]
 
-      // Parent not in loaded commits
+      // Parent not in loaded commits — draw continuation line to SVG bottom
       if (!shaToRow.has(pSha)) {
         if (pi === 0) {
-          // First parent: draw vertical continuation line to bottom of SVG
+          // First parent: vertical continuation on same lane
           const x = laneCx(childLane)
           const y1 = childCy + 5
           const y2 = svgBottomY
@@ -327,11 +327,12 @@ export function computeGraphData(commits, rowHeight, previousShaToLane, bottomPa
               path: `M${x},${y1} L${x},${y2}`,
               color: laneColor(childLane),
               lane: childLane,
+              fade: true,
             })
           }
         }
-        // Non-first parents outside visible range are skipped;
-        // their lines will appear when more commits are loaded.
+        // Non-first parents outside visible range are not drawn;
+        // they will appear when more commits are loaded.
         continue
       }
 
