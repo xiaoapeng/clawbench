@@ -77,7 +77,7 @@
             @click="$emit('select', c)"
           >
             <div class="git-commit-info">
-              <div class="git-commit-msg" :class="{ 'msg-expanded': expandedSha === c.sha }" @click.stop="toggleExpand(c.sha)">{{ c.msg }}</div>
+              <div class="git-commit-msg">{{ c.msg }}</div>
               <div class="git-commit-meta">
                 <span v-if="!c.isWT" class="git-commit-sha">{{ c.sha.slice(0, 7) }}</span>
                 <span v-if="c.refs && c.refs.length" class="git-commit-refs">
@@ -177,11 +177,6 @@ function refTagClass(ref) {
   if (ref === 'HEAD') return 'ref-head'
   if (ref.startsWith('tag: ')) return 'ref-tag'
   return 'ref-branch'
-}
-
-const expandedSha = ref(null)
-function toggleExpand(sha) {
-  expandedSha.value = expandedSha.value === sha ? null : sha
 }
 
 let searchTimer = null
@@ -296,8 +291,9 @@ defineExpose({ observeList, unobserveList, commitSearch })
   cursor: pointer;
   transition: background 0.15s;
   border-bottom: 1px solid var(--border-color, #dee2e6);
-  min-height: 46px;
+  height: 46px;
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 .drilldown-item:hover {
@@ -469,9 +465,4 @@ defineExpose({ observeList, unobserveList, commitSearch })
 .ref-branch { background: rgba(74, 144, 217, 0.15); color: #4a90d9; }
 .ref-tag { background: rgba(85, 85, 85, 0.15); color: #666; }
 
-/* Message expand */
-.msg-expanded {
-  white-space: normal !important;
-  overflow: visible !important;
-}
 </style>
