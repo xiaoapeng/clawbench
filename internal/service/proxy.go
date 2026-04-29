@@ -3,6 +3,7 @@ package service
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
 	"fmt"
 	"log/slog"
 	"net"
@@ -74,12 +75,15 @@ func (r *ProxyRegistry) Stop() {
 }
 
 // RegisterPort adds a port to the forwarding registry.
-func (r *ProxyRegistry) RegisterPort(port int, name string) error {
+func (r *ProxyRegistry) RegisterPort(port int, name string, protocol string) error {
 	if port <= 0 || port > 65535 {
 		return fmt.Errorf("invalid port number: %d", port)
 	}
 	if !r.IsPortAllowed(port) {
 		return fmt.Errorf("port %d is not in the allowed range", port)
+	}
+	if protocol != "https" {
+		protocol = "http"
 	}
 
 	r.mu.Lock()
@@ -92,6 +96,7 @@ func (r *ProxyRegistry) RegisterPort(port int, name string) error {
 	r.ports[port] = &model.ForwardedPort{
 		Port:       port,
 		Name:       name,
+		Protocol:   protocol,
 		AutoDetect: false,
 		Active:     false, // will be updated by health check
 	}
@@ -99,6 +104,7 @@ func (r *ProxyRegistry) RegisterPort(port int, name string) error {
 	slog.Info("proxy port registered",
 		slog.Int("port", port),
 		slog.String("name", name),
+		slog.String("protocol", protocol),
 	)
 
 	return nil
@@ -149,9 +155,26 @@ func (r *ProxyRegistry) IsPortRegistered(port int) bool {
 	return exists
 }
 
+// GetPortProtocol returns the protocol for a registered port, defaults to "http".
+func (r *ProxyRegistry) GetPortProtocol(port int) string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if p, ok := r.ports[port]; ok && p.Protocol != "" {
+		return p.Protocol
+	}
+	return "http"
+}
+
+// DetectedPort represents an auto-detected listening port with its protocol.
+type DetectedPort struct {
+	Port     int    `json:"port"`
+	Protocol string `json:"protocol"` // "http" or "https"
+}
+
 // DetectListeningPorts returns a list of TCP ports currently in LISTEN state
 // on the server, filtered to exclude system ports and ClawBench's own port.
-func (r *ProxyRegistry) DetectListeningPorts() []int {
+// Each port is probed to determine if it speaks TLS (https).
+func (r *ProxyRegistry) DetectListeningPorts() []DetectedPort {
 	var ports []int
 
 	switch runtime.GOOS {
@@ -175,7 +198,32 @@ func (r *ProxyRegistry) DetectListeningPorts() []int {
 	}
 
 	sort.Ints(filtered)
-	return filtered
+
+	// Probe each port for TLS
+	result := make([]DetectedPort, len(filtered))
+	for i, p := range filtered {
+		protocol := "http"
+		if detectTLS(p) {
+			protocol = "https"
+		}
+		result[i] = DetectedPort{Port: p, Protocol: protocol}
+	}
+	return result
+}
+
+// detectTLS attempts a TLS handshake to determine if a port speaks HTTPS.
+func detectTLS(port int) bool {
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	conn, err := net.DialTimeout("tcp", addr, 1*time.Second)
+	if err != nil {
+		return false
+	}
+	defer conn.Close()
+
+	tlsConn := tls.Client(conn, &tls.Config{InsecureSkipVerify: true})
+	conn.SetDeadline(time.Now().Add(2 * time.Second))
+	err = tlsConn.Handshake()
+	return err == nil
 }
 
 // healthCheckLoop periodically checks if registered ports are still listening.

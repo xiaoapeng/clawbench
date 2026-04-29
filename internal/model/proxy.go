@@ -4,6 +4,7 @@ package model
 type ForwardedPort struct {
 	Port       int    `json:"port"`       // Local port number (e.g. 5173)
 	Name       string `json:"name"`       // User-friendly name (e.g. "Vite Dev Server")
+	Protocol   string `json:"protocol"`   // "http" or "https" (default: "http")
 	AutoDetect bool   `json:"autoDetect"` // Whether this was auto-detected
 	Active     bool   `json:"active"`     // Whether the port is currently listening
 }

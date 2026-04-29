@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"crypto/tls"
 	"fmt"
 	"io"
 	"log/slog"
@@ -14,6 +15,11 @@ import (
 	"clawbench/internal/model"
 	"clawbench/internal/service"
 )
+
+// htmlContentType matches any text/html content type (may include charset).
+func isHTMLContentType(ct string) bool {
+	return strings.HasPrefix(ct, "text/html")
+}
 
 // Hop-by-hop headers that must not be forwarded (RFC 2616 Section 13.5.1).
 var hopByHopHeaders = []string{
@@ -60,12 +66,13 @@ func ServeProxyForward(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 3. Construct target URL
+	// 3. Construct target URL using registered protocol
 	targetPath := "/"
 	if len(parts) > 1 {
 		targetPath += parts[1]
 	}
-	targetURL := fmt.Sprintf("http://127.0.0.1:%d%s", port, targetPath)
+	protocol := service.ProxyService.GetPortProtocol(port)
+	targetURL := fmt.Sprintf("%s://127.0.0.1:%d%s", protocol, port, targetPath)
 	if r.URL.RawQuery != "" {
 		targetURL += "?" + r.URL.RawQuery
 	}
@@ -86,11 +93,21 @@ func ServeProxyForward(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	proxyReq.Header.Set("X-Forwarded-For", r.RemoteAddr)
-	proxyReq.Header.Set("X-Forwarded-Proto", "http")
+	proxyReq.Header.Set("X-Forwarded-Proto", protocol)
 	proxyReq.Host = fmt.Sprintf("127.0.0.1:%d", port)
 
-	// 6. Execute proxy request
-	resp, err := http.DefaultClient.Do(proxyReq)
+	// 6. Execute proxy request (use TLS skip-verify for https backends)
+	client := http.DefaultClient
+	if protocol == "https" {
+		client = &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{
+					InsecureSkipVerify: true, // backend is localhost, self-signed certs are common
+				},
+			},
+		}
+	}
+	resp, err := client.Do(proxyReq)
 	if err != nil {
 		slog.Debug("proxy forward: backend unreachable",
 			slog.Int("port", port),
@@ -104,14 +121,35 @@ func ServeProxyForward(w http.ResponseWriter, r *http.Request) {
 
 	// 7. Copy response headers (filter hop-by-hop)
 	for k, vv := range resp.Header {
-		if !isHopByHop(k) {
-			for _, v := range vv {
-				w.Header().Add(k, v)
-			}
+		if isHopByHop(k) {
+			continue
+		}
+		// Drop Content-Length for HTML responses since we modify the body
+		if strings.EqualFold(k, "Content-Length") && isHTMLContentType(resp.Header.Get("Content-Type")) {
+			continue
+		}
+		for _, v := range vv {
+			w.Header().Add(k, v)
 		}
 	}
 
-	// 8. Stream response body with flush support (critical for SSE)
+	// 8. For HTML responses, inject <base> tag to fix relative URLs
+	if isHTMLContentType(resp.Header.Get("Content-Type")) {
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			model.WriteErrorf(w, http.StatusBadGateway, "Failed to read backend response")
+			return
+		}
+		content := string(body)
+		// Inject <base> tag right after <head> so relative URLs resolve correctly
+		baseTag := fmt.Sprintf(`<base href="/api/proxy/forward/%d/">`, port)
+		content = strings.Replace(content, "<head>", "<head>"+baseTag, 1)
+		w.WriteHeader(resp.StatusCode)
+		w.Write([]byte(content))
+		return
+	}
+
+	// 9. Stream non-HTML response body with flush support (critical for SSE)
 	w.WriteHeader(resp.StatusCode)
 	flusher, canFlush := w.(http.Flusher)
 
@@ -160,12 +198,17 @@ func ServeProxyWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 3. Construct backend WebSocket URL
+	// 3. Construct backend WebSocket URL using registered protocol
 	targetPath := "/"
 	if len(parts) > 1 {
 		targetPath += parts[1]
 	}
-	targetURL := fmt.Sprintf("ws://127.0.0.1:%d%s", port, targetPath)
+	protocol := service.ProxyService.GetPortProtocol(port)
+	wsScheme := "ws"
+	if protocol == "https" {
+		wsScheme = "wss"
+	}
+	targetURL := fmt.Sprintf("%s://127.0.0.1:%d%s", wsScheme, port, targetPath)
 	if r.URL.RawQuery != "" {
 		targetURL += "?" + r.URL.RawQuery
 	}

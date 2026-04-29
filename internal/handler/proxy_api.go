@@ -35,8 +35,9 @@ func ServeProxyPortAction(w http.ResponseWriter, r *http.Request) {
 
 func registerPort(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Port int    `json:"port"`
-		Name string `json:"name"`
+		Port     int    `json:"port"`
+		Name     string `json:"name"`
+		Protocol string `json:"protocol"`
 	}
 	if !decodeJSON(w, r, &req) {
 		return
@@ -47,7 +48,7 @@ func registerPort(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := service.ProxyService.RegisterPort(req.Port, req.Name); err != nil {
+	if err := service.ProxyService.RegisterPort(req.Port, req.Name, req.Protocol); err != nil {
 		model.WriteErrorf(w, http.StatusForbidden, err.Error())
 		return
 	}

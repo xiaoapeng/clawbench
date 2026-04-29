@@ -5,13 +5,19 @@ import { useAppMode } from './useAppMode.ts'
 interface ForwardedPort {
   port: number
   name: string
+  protocol: string
   autoDetect: boolean
   active: boolean
 }
 
+interface DetectedPort {
+  port: number
+  protocol: string
+}
+
 // Module-level shared state
 const ports = ref<ForwardedPort[]>([])
-const detectedPorts = ref<number[]>([])
+const detectedPorts = ref<DetectedPort[]>([])
 const loading = ref(false)
 
 /**
@@ -31,8 +37,8 @@ export function usePortForward() {
     }
   }
 
-  async function registerPort(port: number, name?: string) {
-    await apiPost('/api/proxy/ports', { port, name: name || '' })
+  async function registerPort(port: number, name?: string, protocol?: string) {
+    await apiPost('/api/proxy/ports', { port, name: name || '', protocol: protocol || 'http' })
     // Register with Android native layer
     if (isAppMode.value) {
       ;(window as any).AndroidNative?.addForwardedPort(port)
@@ -49,7 +55,7 @@ export function usePortForward() {
   }
 
   async function detectPorts() {
-    const data = await apiGet<{ ports: number[] }>('/api/proxy/detect')
+    const data = await apiGet<{ ports: DetectedPort[] }>('/api/proxy/detect')
     detectedPorts.value = data.ports || []
   }
 
@@ -62,9 +68,10 @@ export function usePortForward() {
     }
   }
 
-  /** Open a forwarded port in the WebView (triggers shouldInterceptRequest on Android) */
-  function openPort(port: number) {
-    window.open(`http://localhost:${port}`, '_blank')
+  /** Open a forwarded port via ClawBench reverse proxy */
+  function openPort(port: number, _protocol?: string) {
+    const base = window.location.origin
+    window.open(`${base}/api/proxy/forward/${port}/`, '_blank')
   }
 
   return {

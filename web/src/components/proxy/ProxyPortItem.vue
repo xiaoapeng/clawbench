@@ -3,12 +3,13 @@
     <div class="port-info">
       <div class="port-main">
         <span class="port-number">{{ port }}</span>
+        <span class="port-protocol" :class="protocol">{{ protocol }}</span>
         <span class="port-status" :class="active ? 'active' : 'inactive'" :title="active ? '活跃' : '离线'"></span>
         <span v-if="name" class="port-name">{{ name }}</span>
       </div>
     </div>
     <div class="port-actions">
-      <button class="port-action-btn open" @click.stop="$emit('open', port)" title="打开">
+      <button class="port-action-btn open" @click.stop="$emit('open', port, protocol)" title="打开">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
           <polyline points="15 3 21 3 21 9"/>
@@ -29,6 +30,7 @@
 defineProps({
   port: { type: Number, required: true },
   name: { type: String, default: '' },
+  protocol: { type: String, default: 'http' },
   active: { type: Boolean, default: false },
 })
 
@@ -68,6 +70,25 @@ defineEmits(['open', 'remove'])
   font-weight: 600;
   font-family: monospace;
   color: var(--text-primary, #1a1a1a);
+}
+
+.port-protocol {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 4px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.port-protocol.http {
+  background: rgba(34, 197, 94, 0.12);
+  color: #16a34a;
+}
+
+.port-protocol.https {
+  background: rgba(59, 130, 246, 0.12);
+  color: #2563eb;
 }
 
 .port-status {

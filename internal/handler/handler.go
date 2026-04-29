@@ -151,8 +151,8 @@ func RegisterRoutes(mux *http.ServeMux) {
 	// Port forwarding proxy
 	register("/api/proxy/ports", middleware.Auth(ServeProxyPortAction))
 	register("/api/proxy/detect", middleware.Auth(ServeProxyDetect))
-	register("/api/proxy/forward/", middleware.Auth(ServeProxyForward))
-	register("/api/proxy/ws/", middleware.Auth(ServeProxyWebSocket))
+	register("/api/proxy/forward/", ServeProxyForward)
+	register("/api/proxy/ws/", ServeProxyWebSocket)
 
 	if _, err := os.Stat("public"); err == nil {
 		mux.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(http.Dir("public"))))

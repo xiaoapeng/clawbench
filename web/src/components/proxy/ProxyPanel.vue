@@ -20,6 +20,7 @@
           :key="p.port"
           :port="p.port"
           :name="p.name"
+          :protocol="p.protocol"
           :active="p.active"
           @open="openPort"
           @remove="handleRemove"
@@ -35,6 +36,10 @@
       <!-- Add port form -->
       <div class="proxy-add">
         <div v-if="showAddForm" class="proxy-add-form">
+          <select v-model="newProtocol" class="proxy-add-select">
+            <option value="http">HTTP</option>
+            <option value="https">HTTPS</option>
+          </select>
           <input
             ref="portInputRef"
             v-model="newPort"
@@ -73,10 +78,11 @@
         <div class="proxy-detected-chips">
           <button
             v-for="p in detectedPortsNotRegistered"
-            :key="p"
+            :key="p.port"
             class="detect-chip"
-            @click="handleQuickAdd(p)"
-          >{{ p }}</button>
+            :class="p.protocol"
+            @click="handleQuickAdd(p.port, p.protocol)"
+          >{{ p.port }} <span class="chip-proto">{{ p.protocol }}</span></button>
           <span v-if="detectedPortsNotRegistered.length === 0" class="detect-all-registered">全部已注册</span>
         </div>
       </div>
@@ -97,6 +103,7 @@ const bottomSheetRef = ref(null)
 const showAddForm = ref(false)
 const newPort = ref('')
 const newName = ref('')
+const newProtocol = ref('http')
 const detecting = ref(false)
 const portInputRef = ref(null)
 
@@ -109,19 +116,19 @@ const isValidPort = computed(() => {
 
 const detectedPortsNotRegistered = computed(() => {
   const registered = new Set(ports.value.map(p => p.port))
-  return detectedPorts.value.filter(p => !registered.has(p))
+  return detectedPorts.value.filter(p => !registered.has(p.port))
 })
 
 async function handleAdd() {
   if (!isValidPort.value) return
-  await registerPort(parseInt(newPort.value), newName.value || undefined)
+  await registerPort(parseInt(newPort.value), newName.value || undefined, newProtocol.value)
   newPort.value = ''
   newName.value = ''
   showAddForm.value = false
 }
 
-async function handleQuickAdd(port) {
-  await registerPort(port, '自动检测')
+async function handleQuickAdd(port, protocol) {
+  await registerPort(port, '自动检测', protocol || 'http')
 }
 
 async function handleRemove(port) {
@@ -231,6 +238,23 @@ watch(() => props.open, async (val) => {
   border-color: var(--accent-color, #0066cc);
 }
 
+.proxy-add-select {
+  padding: 6px 4px;
+  border: 1px solid var(--border-color, #e5e5e5);
+  border-radius: 4px;
+  font-size: 13px;
+  background: var(--bg-primary, #fff);
+  color: var(--text-primary, #1a1a1a);
+  font-family: inherit;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.proxy-add-select:focus {
+  outline: none;
+  border-color: var(--accent-color, #0066cc);
+}
+
 .name-input {
   flex: 2;
 }
@@ -286,6 +310,26 @@ watch(() => props.open, async (val) => {
   font-family: monospace;
   cursor: pointer;
   transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.detect-chip.https {
+  border-color: #2563eb;
+  color: #2563eb;
+}
+
+.detect-chip .chip-proto {
+  font-size: 9px;
+  font-family: sans-serif;
+  padding: 1px 3px;
+  border-radius: 3px;
+  background: rgba(0, 102, 204, 0.1);
+}
+
+.detect-chip.https .chip-proto {
+  background: rgba(37, 99, 235, 0.12);
 }
 
 .detect-chip:hover {

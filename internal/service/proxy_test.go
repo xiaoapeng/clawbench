@@ -17,7 +17,7 @@ func TestProxyRegistry_RegisterPort(t *testing.T) {
 	r := newTestRegistry(t)
 	defer r.Stop()
 
-	err := r.RegisterPort(8080, "test")
+	err := r.RegisterPort(8080, "test", "http")
 	assert.NoError(t, err)
 	assert.True(t, r.IsPortRegistered(8080))
 }
@@ -37,7 +37,7 @@ func TestProxyRegistry_RegisterPort_Invalid(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := r.RegisterPort(tt.port, "")
+			err := r.RegisterPort(tt.port, "", "")
 			assert.Error(t, err)
 		})
 	}
@@ -47,10 +47,10 @@ func TestProxyRegistry_RegisterPort_Duplicate(t *testing.T) {
 	r := newTestRegistry(t)
 	defer r.Stop()
 
-	err := r.RegisterPort(3000, "first")
+	err := r.RegisterPort(3000, "first", "")
 	assert.NoError(t, err)
 
-	err = r.RegisterPort(3000, "second")
+	err = r.RegisterPort(3000, "second", "")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "already registered")
 }
@@ -59,7 +59,7 @@ func TestProxyRegistry_UnregisterPort(t *testing.T) {
 	r := newTestRegistry(t)
 	defer r.Stop()
 
-	_ = r.RegisterPort(9090, "metrics")
+	_ = r.RegisterPort(9090, "metrics", "")
 
 	err := r.UnregisterPort(9090)
 	assert.NoError(t, err)
@@ -79,9 +79,9 @@ func TestProxyRegistry_ListPorts_Sorted(t *testing.T) {
 	r := newTestRegistry(t)
 	defer r.Stop()
 
-	_ = r.RegisterPort(8080, "api")
-	_ = r.RegisterPort(3000, "app")
-	_ = r.RegisterPort(5173, "vite")
+	_ = r.RegisterPort(8080, "api", "")
+	_ = r.RegisterPort(3000, "app", "")
+	_ = r.RegisterPort(5173, "vite", "")
 
 	ports := r.ListPorts()
 	assert.Len(t, ports, 3)
@@ -103,7 +103,7 @@ func TestProxyRegistry_IsPortRegistered(t *testing.T) {
 	defer r.Stop()
 
 	assert.False(t, r.IsPortRegistered(8080))
-	_ = r.RegisterPort(8080, "")
+	_ = r.RegisterPort(8080, "", "")
 	assert.True(t, r.IsPortRegistered(8080))
 }
 
@@ -144,8 +144,44 @@ func TestProxyRegistry_DisabledConfig(t *testing.T) {
 	defer r.Stop()
 
 	// Register should still work (no allowed_ports check when disabled, default allows all)
-	err := r.RegisterPort(8080, "test")
+	err := r.RegisterPort(8080, "test", "http")
 	assert.NoError(t, err)
+}
+
+func TestProxyRegistry_RegisterPort_Protocol(t *testing.T) {
+	r := newTestRegistry(t)
+	defer r.Stop()
+
+	err := r.RegisterPort(4443, "secure", "https")
+	assert.NoError(t, err)
+
+	ports := r.ListPorts()
+	assert.Len(t, ports, 1)
+	assert.Equal(t, "https", ports[0].Protocol)
+
+	err = r.RegisterPort(8080, "plain", "http")
+	assert.NoError(t, err)
+
+	protocol := r.GetPortProtocol(4443)
+	assert.Equal(t, "https", protocol)
+
+	protocol = r.GetPortProtocol(8080)
+	assert.Equal(t, "http", protocol)
+
+	// Unregistered port defaults to http
+	protocol = r.GetPortProtocol(9999)
+	assert.Equal(t, "http", protocol)
+}
+
+func TestProxyRegistry_RegisterPort_InvalidProtocolDefaultsToHTTP(t *testing.T) {
+	r := newTestRegistry(t)
+	defer r.Stop()
+
+	err := r.RegisterPort(8080, "test", "ftp")
+	assert.NoError(t, err)
+
+	ports := r.ListPorts()
+	assert.Equal(t, "http", ports[0].Protocol) // non-https defaults to http
 }
 
 func TestParseProcNetTCPData(t *testing.T) {
