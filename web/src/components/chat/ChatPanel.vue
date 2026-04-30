@@ -405,8 +405,8 @@ onUnmounted(() => {
 
 watch(() => props.open, async (val) => {
     if (val) {
-        // Re-open: don't force scroll to bottom, keep user's reading position
-        await session.loadHistory(false)
+        // Re-open: show overlay for smooth transition, don't force scroll
+        await session.loadHistory(false, true)
     }
 })
 </script>

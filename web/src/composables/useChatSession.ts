@@ -116,11 +116,11 @@ export function useChatSession(options: UseChatSessionOptions) {
 
   // forceScrollBottom: true = always scroll to bottom (switch session, first load)
   //                   false = only scroll if already near bottom (re-open panel, polling)
-  async function loadHistory(forceScrollBottom = true) {
+  // showOverlay: true = show the switching overlay (session switch, first open)
+  //            false = silent reload (stream done, polling) — avoids jarring flash
+  async function loadHistory(forceScrollBottom = true, showOverlay = false) {
     expandedTools.value = {}
-    // Show the same overlay spinner as session switching so the user sees
-    // immediate feedback instead of a blank/stale message list.
-    switching.value = true
+    if (showOverlay) switching.value = true
     try {
       // Load agents first so we can resolve agent names
       if (agents.value.length === 0) await loadAgents()
