@@ -127,6 +127,10 @@
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
           重命名
         </div>
+        <div class="context-menu-item" v-if="ctxMenu.entry && ctxMenu.entry.type !== 'dir'" @click.stop="doDownload">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          下载
+        </div>
         <div class="context-menu-item danger" v-if="ctxMenu.entry" @click.stop="doDelete">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3,6 5,6 21,6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
           删除
@@ -149,10 +153,12 @@ import { ref, computed, reactive, inject, nextTick, Teleport, watch } from 'vue'
 import BottomSheet from '@/components/common/BottomSheet.vue'
 import { getFileType } from '@/utils/helpers.ts'
 import { store } from '@/stores/app.ts'
+import { useAppMode } from '@/composables/useAppMode.ts'
 import SearchInput from '@/components/common/SearchInput.vue'
 import DirBreadcrumb from './DirBreadcrumb.vue'
 
 const toast = inject('toast', null)
+const { isAppMode } = useAppMode()
 
 const props = defineProps({
     entries: Array,
@@ -442,6 +448,21 @@ function doRename() {
     if (!newName || newName === ctxMenu.entry.name) { ctxMenu.visible = false; return }
     emit('rename', { path: ctxMenu.entry.path, name: newName })
     ctxMenu.visible = false
+}
+
+function doDownload() {
+    if (!ctxMenu.entry) return
+    ctxMenu.visible = false
+    const path = ctxMenu.entry.path
+    const native = window.AndroidNative
+    if (isAppMode.value && native && native.downloadFile) {
+        native.downloadFile(path)
+    } else {
+        const a = document.createElement('a')
+        a.href = '/api/local-file/' + encodeURIComponent(path)
+        a.download = ctxMenu.entry.name
+        a.click()
+    }
 }
 
 function doDelete() {
