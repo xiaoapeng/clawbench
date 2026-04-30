@@ -198,6 +198,9 @@ watch(() => props.open, async (val) => {
   flex-direction: column;
   gap: 8px;
   padding: 6px;
+  max-height: 60vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .proxy-loading,
