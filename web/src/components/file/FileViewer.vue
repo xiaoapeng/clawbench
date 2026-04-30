@@ -326,6 +326,7 @@ function handleDownload(path) {
     padding: 5px 12px;
     background: var(--accent-color);
     color: #fff;
+    border: none;
     border-radius: 14px;
     text-decoration: none;
     font-size: 12px;
