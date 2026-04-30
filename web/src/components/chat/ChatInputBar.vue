@@ -161,13 +161,9 @@
       <!-- Teleported quick-send menu -->
       <Teleport to="body">
         <div v-if="showQuickMenu" class="quick-send-menu" :style="quickMenuStyle" @click.stop>
-          <div class="attach-menu-group-title">快捷发送</div>
-          <button v-for="text in quickSend" :key="text" class="attach-menu-item" @click="handleQuickSend(text)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14">
-              <line x1="22" y1="2" x2="11" y2="13"/>
-              <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-            </svg>
-            <span>{{ text }}</span>
+          <div class="quick-send-title">快捷发送</div>
+          <button v-for="text in quickSend" :key="text" class="quick-send-item" @click="handleQuickSend(text)">
+            {{ text }}
           </button>
         </div>
       </Teleport>
@@ -661,12 +657,38 @@ defineExpose({
   position: fixed;
   background: var(--bg-secondary, #fff);
   border: 1px solid var(--border-color, #e5e5e5);
-  border-radius: 8px;
-  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.12);
+  border-radius: 10px;
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.15);
   z-index: 9999;
-  min-width: 120px;
-  max-width: 240px;
-  padding: 3px 0;
+  min-width: 140px;
+  max-width: 260px;
+  padding: 4px 0;
+}
+
+.quick-send-title {
+  padding: 6px 14px 2px;
+  font-size: 11px;
+  color: var(--text-muted, #999);
+  font-weight: 500;
+  letter-spacing: 0.3px;
+}
+
+.quick-send-item {
+  display: block;
+  width: 100%;
+  padding: 8px 14px;
+  border: none;
+  background: none;
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s, color 0.12s;
+}
+
+.quick-send-item:hover {
+  background: var(--accent-color, #0066cc);
+  color: #fff;
 }
 
 /* Attachment tags row */
