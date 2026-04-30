@@ -19,16 +19,16 @@ DEV_PID_FILE="/tmp/${NAME}-vite.pid"
 # Dev 模式端口（与正式版分离）
 DEV_BACKEND_PORT=20002
 DEV_FRONTEND_PORT=20001
-DEV_HOST="0.0.0.0"
+DEV_HOST="localhost"
 
 get_watch_dir() {
     grep "^watch_dir:" "config.yaml" 2>/dev/null | awk '{print $2}' | tr -d '"' || echo ""
 }
 
 get_dev_host() {
-    # Try to read dev.host from config.yaml; fallback to 0.0.0.0
+    # Try to read dev.host from config.yaml; fallback to localhost
     local host=$(sed -n '/^dev:/,/^[a-z]/{/^  host:/p}' "config.yaml" 2>/dev/null | awk '{print $2}' | tr -d '"' || echo "")
-    echo "${host:-0.0.0.0}"
+    echo "${host:-localhost}"
 }
 
 check_binary() {

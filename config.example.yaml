@@ -41,7 +41,7 @@ tls:
 dev:
   port: 20002        # 开发版后端端口
   frontend_port: 20001 # Vite 前端端口（HMR 热更新）
-  host: "0.0.0.0"    # 绑定地址："0.0.0.0" 允许公网访问，"localhost" 仅限本地
+  host: "localhost"  # 绑定地址："0.0.0.0" 允许公网访问，"localhost" 仅限本地
 
 # Chat UI settings
 chat:
