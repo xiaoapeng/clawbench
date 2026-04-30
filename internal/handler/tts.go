@@ -110,6 +110,9 @@ func TTSGenerate(w http.ResponseWriter, r *http.Request) {
 	if _, ok := speechProvider.(*speech.PiperProvider); ok {
 		audioExt = ".wav"
 	}
+	if _, ok := speechProvider.(*speech.KokoroProvider); ok {
+		audioExt = ".wav"
+	}
 	relAudioPath := filepath.Join(".clawbench", "generated", "tts", cacheKey+audioExt)
 
 	// Validate the output path (defense-in-depth)
@@ -156,8 +159,12 @@ func TTSGenerate(w http.ResponseWriter, r *http.Request) {
 		summary = cachedSummary
 		summarizeFailed = cachedFailed
 	} else {
-		// Phase 1: Summarize
-		ttsWriteSSE(w, ttsSSEEvent{Type: "phase", Phase: "summarizing"})
+		// Only send "summarizing" phase if text is long enough to require AI summarization.
+		// Short texts (<300 chars) skip summarization entirely, so we go straight to synthesizing.
+		needsSummary := speech.NeedsSummarization(req.Text)
+		if needsSummary {
+			ttsWriteSSE(w, ttsSSEEvent{Type: "phase", Phase: "summarizing"})
+		}
 
 		summarizeCtx, summarizeCancel := context.WithTimeout(r.Context(), ttsSummarizeTimeout)
 		defer summarizeCancel()

@@ -22,7 +22,7 @@ export interface UseChatSessionOptions {
   onMessage: () => void
   onOpen: () => void
   isOpen: Ref<boolean>
-  onPlaySound?: () => void
+  onStreamDone?: () => void
 }
 
 export function useChatSession(options: UseChatSessionOptions) {
@@ -44,7 +44,7 @@ export function useChatSession(options: UseChatSessionOptions) {
     onMessage,
     onOpen,
     isOpen,
-    onPlaySound,
+    onStreamDone,
   } = options
 
   const toast = useToast()
@@ -374,7 +374,7 @@ export function useChatSession(options: UseChatSessionOptions) {
               // Other session completed
               const session = sessions.find(s => s.id === sessionId)
               if (session) {
-                onPlaySound?.()
+                onStreamDone?.()
                 toast.show('会话已完成', {
                   icon: '✅',
                   type: 'success',

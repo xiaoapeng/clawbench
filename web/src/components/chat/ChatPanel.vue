@@ -185,7 +185,7 @@ const session = useChatSession({
   onMessage: () => emit('message'),
   onOpen: () => emit('open'),
   isOpen: toRef(props, 'open'),
-  onPlaySound: playNotificationSound,
+  onStreamDone: playNotificationSound,
 })
 
 const swipeSession = useSwipeSession({
@@ -193,7 +193,8 @@ const swipeSession = useSwipeSession({
   switchSession: session.switchSession,
 })
 
-// onStreamDone: only fires for current session stream completion (auto-speech trigger)
+// onStreamDone: fires when current session stream completes
+// Plays notification sound and triggers auto-speech if enabled
 function onStreamDone() {
   playNotificationSound()
   if (autoSpeech.enabled.value) {
@@ -201,8 +202,8 @@ function onStreamDone() {
     if (lastMsg?.role === 'assistant') {
       const textBlocks = (lastMsg.blocks || []).filter(b => b.type === 'text')
       const fullText = textBlocks.map(b => b.text || '').join('\n')
-      if (fullText.trim()) {
-        autoSpeech.speakMessage(fullText.trim())
+      if (fullText.trim() && lastMsg.id) {
+        autoSpeech.speakMessage(lastMsg.id, fullText.trim())
       }
     }
   }
@@ -224,7 +225,7 @@ const stream = useChatStream({
   onParseAssistantContent: (content) => render.parseAssistantContent(content),
   onToast: (msg, opts) => toast.show(msg, opts),
   onNotification: (title, opts) => notification.show(title, opts),
-  onPlaySound: onStreamDone,
+  onStreamDone,
 })
 
 provide('chatRender', {
@@ -239,6 +240,7 @@ provide('chatRender', {
 })
 provide('chatSession', { getAgentIcon: session.getAgentIcon, getAgentName: session.getAgentName })
 provide('chatUI', { closeSheet: () => bottomSheetRef.value?.close() })
+provide('autoSpeech', autoSpeech)
 
 // 子抽屉跟随聊天框关闭
 watch(() => props.open, (val) => {

@@ -98,6 +98,14 @@ func prepareTextForSummarization(text string) (string, bool) {
 	return cleaned, true
 }
 
+// NeedsSummarization returns true if the text is long enough to require
+// AI-based summarization before TTS synthesis. Short texts (<300 chars
+// after markdown stripping) can be synthesized directly.
+func NeedsSummarization(text string) bool {
+	_, needs := prepareTextForSummarization(text)
+	return needs
+}
+
 // MMXSummarizer implements Summarizer using the mmx CLI tool (mmx text chat).
 type MMXSummarizer struct {
 	// Model is the model ID for text chat (default: "MiniMax-M2.7").

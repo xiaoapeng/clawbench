@@ -6,10 +6,10 @@
  * Toggle state is persisted in localStorage.
  *
  * Uses module-level singleton state so all consumers share the same toggle/audio state.
- * Should only be instantiated once (in ChatPanel.vue).
+ * Should only be instantiated once (in ChatPanel.vue) and provided via inject to children.
  */
 
-import { ref, onUnmounted } from 'vue'
+import { ref, nextTick } from 'vue'
 import { useToast } from '@/composables/useToast.ts'
 
 const STORAGE_KEY = 'clawbench-auto-speech'
@@ -18,8 +18,9 @@ const STORAGE_KEY = 'clawbench-auto-speech'
 const enabled = ref(false)
 const isGenerating = ref(false)
 const currentAudio = ref<HTMLAudioElement | null>(null)
-const playingText = ref<string>('')
+const activeId = ref<string>('')
 const playingSummary = ref<string>('')
+const currentPhase = ref<string>('')  // 'summarizing' | 'synthesizing' | ''
 const lastError = ref<string>('')
 let abortController: AbortController | null = null
 
@@ -31,9 +32,10 @@ try {
   // localStorage may be unavailable (e.g. private browsing)
 }
 
-export function useAutoSpeech() {
-  const toast = useToast()
+// Module-level toast instance (shared, not per-component)
+const toast = useToast()
 
+export function useAutoSpeech() {
   // --- Persistence ---
   function saveState() {
     try {
@@ -61,8 +63,9 @@ export function useAutoSpeech() {
       currentAudio.value.currentTime = 0
       currentAudio.value = null
     }
-    playingText.value = ''
+    activeId.value = ''
     playingSummary.value = ''
+    currentPhase.value = ''
   }
 
   // --- Report an error to the user via toast ---
@@ -72,7 +75,7 @@ export function useAutoSpeech() {
   }
 
   // --- Internal: generate and play TTS for text ---
-  async function _speak(text: string) {
+  async function _speak(id: string, text: string) {
     if (!text) return
 
     // Interrupt any currently playing audio and pending request
@@ -83,7 +86,8 @@ export function useAutoSpeech() {
     const controller = new AbortController()
     abortController = controller
     isGenerating.value = true
-    playingText.value = text
+    activeId.value = id
+    currentPhase.value = ''
 
     try {
       // POST to backend TTS endpoint (SSE streaming)
@@ -127,7 +131,11 @@ export function useAutoSpeech() {
             if (!line.startsWith('data: ')) continue
             try {
               const event = JSON.parse(line.slice(6))
-              if (event.type === 'result') {
+              if (event.type === 'phase') {
+                // Update phase and yield to Vue for DOM render
+                currentPhase.value = event.phase || ''
+                await nextTick()
+              } else if (event.type === 'result') {
                 resultData = event
               }
             } catch { /* ignore malformed SSE lines */ }
@@ -149,7 +157,7 @@ export function useAutoSpeech() {
         toast.show('摘要生成失败，将朗读原文', { icon: '🔊', type: 'info', duration: 3000 })
       }
 
-      // Store the AI-generated summary for display in TtsPopover
+      // Store the AI-generated summary for display
       if (resultData.summary) {
         playingSummary.value = resultData.summary
       }
@@ -161,13 +169,15 @@ export function useAutoSpeech() {
 
       audio.onended = () => {
         currentAudio.value = null
-        playingText.value = ''
+        activeId.value = ''
         playingSummary.value = ''
+        currentPhase.value = ''
       }
       audio.onerror = () => {
         currentAudio.value = null
-        playingText.value = ''
+        activeId.value = ''
         playingSummary.value = ''
+        currentPhase.value = ''
         reportError('音频播放失败，请重试')
       }
 
@@ -185,8 +195,9 @@ export function useAutoSpeech() {
       }
       reportError(message)
       // Reset state on error
-      playingText.value = ''
+      activeId.value = ''
       playingSummary.value = ''
+      currentPhase.value = ''
     } finally {
       // Only clear generating state if this is still the active request
       if (abortController === controller) {
@@ -197,44 +208,48 @@ export function useAutoSpeech() {
   }
 
   // --- Auto-speech trigger (respects toggle state) ---
-  function speakMessage(text: string) {
+  function speakMessage(id: string, text: string) {
     if (!enabled.value) return
-    _speak(text)
+    _speak(id, text)
   }
 
   // --- Manual play trigger (always works, regardless of toggle) ---
-  function speakText(text: string) {
-    _speak(text)
+  function speakText(id: string, text: string) {
+    _speak(id, text)
   }
 
-  // --- Check if a specific text is currently generating ---
-  function isGeneratingText(text: string): boolean {
-    return playingText.value === text && isGenerating.value
+  // --- Check if a specific message (by id) is currently generating ---
+  function isGeneratingText(id: string): boolean {
+    return activeId.value === id && isGenerating.value
   }
 
-  // --- Check if a specific text is currently playing audio ---
-  function isPlayingAudio(text: string): boolean {
-    return playingText.value === text && !isGenerating.value && currentAudio.value !== null
+  // --- Check if a specific message (by id) is currently playing audio ---
+  function isPlayingAudio(id: string): boolean {
+    return activeId.value === id && !isGenerating.value && currentAudio.value !== null
   }
 
-  // --- Check if a specific text is in any active state (generating or playing) ---
-  function isActive(text: string): boolean {
-    return playingText.value === text && (isGenerating.value || currentAudio.value !== null)
+  // --- Check if a specific message (by id) is in any active state (generating or playing) ---
+  function isActive(id: string): boolean {
+    return activeId.value === id && (isGenerating.value || currentAudio.value !== null)
   }
 
-  // --- Get the AI-generated summary for the currently playing text ---
-  function getSummary(text: string): string {
-    return playingText.value === text ? playingSummary.value : ''
+  // --- Get the AI-generated summary for the currently playing message ---
+  function getSummary(id: string): string {
+    return activeId.value === id ? playingSummary.value : ''
   }
 
-  // --- Lifecycle ---
-  onUnmounted(() => {
-    stopAudio()
-  })
+  // --- Get current phase label for a message ---
+  function getPhaseLabel(id: string): string {
+    if (activeId.value !== id || !isGenerating.value) return ''
+    if (currentPhase.value === 'summarizing') return '摘要中'
+    if (currentPhase.value === 'synthesizing') return '合成中'
+    return '生成中'
+  }
 
   return {
     enabled,
     isGenerating,
+    currentPhase,
     lastError,
     toggle,
     speakMessage,
@@ -244,5 +259,6 @@ export function useAutoSpeech() {
     isPlayingAudio,
     isActive,
     getSummary,
+    getPhaseLabel,
   }
 }

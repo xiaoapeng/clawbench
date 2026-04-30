@@ -223,6 +223,27 @@ func main() {
 			slog.Float64("length_scale", p.LengthScale),
 			slog.Float64("sentence_silence", p.SentenceSilence),
 		)
+	case "kokoro":
+		k := speech.NewKokoroProvider()
+		if cfg.TTS.Voice != "" {
+			k.Voice = cfg.TTS.Voice
+		}
+		if cfg.TTS.Speed > 0 {
+			k.Speed = cfg.TTS.Speed
+		}
+		if cfg.TTS.Kokoro.Lang != "" {
+			k.Lang = cfg.TTS.Kokoro.Lang
+		}
+		k.ModelPath, k.VoicesPath = speech.ResolveKokoroPaths(cfg.TTS.Kokoro.ModelPath, cfg.TTS.Kokoro.VoicesPath)
+		ttsProvider = k
+		slog.Info("tts provider configured",
+			slog.String("engine", "kokoro"),
+			slog.String("model_path", k.ModelPath),
+			slog.String("voices_path", k.VoicesPath),
+			slog.String("voice", k.Voice),
+			slog.String("lang", k.Lang),
+			slog.Float64("speed", k.Speed),
+		)
 	default:
 		p := speech.NewMiniMaxProvider()
 		if cfg.TTS.TTSModel != "" {
