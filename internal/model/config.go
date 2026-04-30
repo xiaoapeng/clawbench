@@ -28,6 +28,9 @@ type Config struct {
 		CollapsedHeight int      `yaml:"collapsed_height"` // Collapsed message height in pixels (default: 150)
 		QuickSend       []string `yaml:"quick_send"`       // Quick-send preset texts, shown when input is empty
 	} `yaml:"chat"`
+	Session struct {
+		MaxCount int `yaml:"max_count"` // Maximum number of chat sessions per project (default: 10)
+	} `yaml:"session"`
 	TTS struct {
 		Engine           string      `yaml:"engine"`            // TTS engine: "minimax" (default), "edge", "piper", or "kokoro"
 		SummarizeBackend string      `yaml:"summarize_backend"` // Summarization backend: "mmx" (default), "claude", "codebuddy", "gemini", "opencode", "codex"
@@ -77,4 +80,7 @@ var (
 	ChatPageSize        int // Default: 20
 	ChatCollapsedHeight int // Default: 150
 	ChatQuickSend       []string // Quick-send preset texts
+
+	// Session limits (set from config, with defaults)
+	SessionMaxCount int // Default: 10
 )

@@ -39,6 +39,7 @@ interface AppState {
     chatPageSize: number
     chatCollapsedHeight: number
     chatQuickSend: string[]
+    sessionMaxCount: number
 
     // Chat unread badge
     chatUnread: boolean
@@ -76,6 +77,7 @@ const state = reactive<AppState>({
     chatPageSize: 20,
     chatCollapsedHeight: 150,
     chatQuickSend: [],
+    sessionMaxCount: 10,
     chatUnread: false,
 
     // File browser
@@ -104,7 +106,7 @@ async function loadProject(): Promise<void> {
     try {
         console.log('[loadProject] 开始加载项目...')
         try {
-            const wd = await apiGet<{ watchDir: string; uploadMaxSizeMB: number; uploadMaxFiles: number; chatInitialMessages?: number; chatPageSize?: number; chatCollapsedHeight?: number; chatQuickSend?: string[] }>('/api/watch-dir')
+            const wd = await apiGet<{ watchDir: string; uploadMaxSizeMB: number; uploadMaxFiles: number; chatInitialMessages?: number; chatPageSize?: number; chatCollapsedHeight?: number; chatQuickSend?: string[]; sessionMaxCount?: number }>('/api/watch-dir')
             state.watchDir = wd.watchDir || ''
             if (wd.uploadMaxSizeMB > 0) state.uploadMaxSizeMB = wd.uploadMaxSizeMB
             if (wd.uploadMaxFiles > 0) state.uploadMaxFiles = wd.uploadMaxFiles
@@ -112,6 +114,7 @@ async function loadProject(): Promise<void> {
             if (wd.chatPageSize > 0) state.chatPageSize = wd.chatPageSize
             if (wd.chatCollapsedHeight > 0) state.chatCollapsedHeight = wd.chatCollapsedHeight
             if (wd.chatQuickSend && wd.chatQuickSend.length > 0) state.chatQuickSend = wd.chatQuickSend
+            if (wd.sessionMaxCount > 0) state.sessionMaxCount = wd.sessionMaxCount
             console.log('[loadProject] watchDir 加载成功:', state.watchDir)
         } catch (error) {
             console.error('[loadProject] watchDir 加载失败:', error)

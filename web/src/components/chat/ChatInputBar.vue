@@ -3,11 +3,11 @@
     <!-- Top action bar (above input box) -->
     <div class="chat-top-actions">
       <div class="chat-action-group">
-        <button class="chat-action-btn" @click="$emit('open-session-tab', 'sessions')" title="切换会话">
+        <button class="chat-action-btn" @click="$emit('open-session-tab', 'sessions')" title="会话">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
             <rect x="3" y="6" width="18" height="12" rx="2"/><line x1="12" y1="2" x2="12" y2="6"/><circle cx="9" cy="12" r="1" fill="currentColor"/><circle cx="15" cy="12" r="1" fill="currentColor"/><line x1="1" y1="10" x2="3" y2="10"/><line x1="1" y1="14" x2="3" y2="14"/><line x1="21" y1="10" x2="23" y2="10"/><line x1="21" y1="14" x2="23" y2="14"/>
           </svg>
-          <span class="chat-action-label">切换</span>
+          <span class="chat-action-label">会话</span>
         </button>
         <button class="chat-action-btn" @click="$emit('create-session')" title="新建会话">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">

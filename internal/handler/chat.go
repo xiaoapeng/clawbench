@@ -156,6 +156,11 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 	sessionID := getSessionID(r)
 	if sessionID == "" {
 		// No session yet — auto-create one (same logic as GET)
+		// Check session count limit before auto-creating
+		if count, cerr := service.GetSessionCount(projectPath); cerr == nil && count >= model.SessionMaxCount {
+			model.WriteErrorf(w, http.StatusConflict, fmt.Sprintf("已达会话数量上限（%d），请先删除旧会话", model.SessionMaxCount))
+			return
+		}
 		agentID2 := model.GetDefaultAgentID()
 		sessionBackend2, defaultModel2, _, _, ok := resolveAgentConfig(agentID2)
 		if !ok {

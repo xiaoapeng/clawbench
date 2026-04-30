@@ -174,5 +174,6 @@ func ServeWatchDir(w http.ResponseWriter, r *http.Request) {
 		"chatPageSize":          model.ChatPageSize,
 		"chatCollapsedHeight":   model.ChatCollapsedHeight,
 		"chatQuickSend":         model.ChatQuickSend,
+		"sessionMaxCount":       model.SessionMaxCount,
 	})
 }

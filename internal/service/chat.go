@@ -283,6 +283,13 @@ func DeleteSession(projectPath, backend, sessionID string) error {
 	return err
 }
 
+// GetSessionCount returns the number of sessions for a given project.
+func GetSessionCount(projectPath string) (int, error) {
+	var count int
+	err := DB.QueryRow("SELECT COUNT(*) FROM chat_sessions WHERE project_path = ?", projectPath).Scan(&count)
+	return count, err
+}
+
 // GetSessionTitle returns the title of a session.
 func GetSessionTitle(sessionID string) (string, error) {
 	var title string

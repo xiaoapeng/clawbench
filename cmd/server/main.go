@@ -136,6 +136,12 @@ func main() {
 	}
 	model.ChatQuickSend = cfg.Chat.QuickSend
 
+	// Set session limits with defaults
+	if cfg.Session.MaxCount <= 0 {
+		cfg.Session.MaxCount = 10
+	}
+	model.SessionMaxCount = cfg.Session.MaxCount
+
 	// Initialize TTS summarizer from config
 	summarizeBackend := cfg.TTS.SummarizeBackend
 	if summarizeBackend == "" {

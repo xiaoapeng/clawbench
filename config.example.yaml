@@ -56,6 +56,10 @@ chat:
     - "提交"
     - "放弃工作区修改"
 
+# 会话数量限制
+session:
+  max_count: 10  # 会话数量上限，默认10，达到上限后需删除旧会话才能创建新会话
+
 # TTS (语音合成) 配置
 # 支持四种引擎：
 #   minimax — 云端合成，音质最佳，需要 mmx CLI 和 API 配额（默认）
@@ -63,7 +67,7 @@ chat:
 #   piper   — 本地离线合成，无需网络，速度极快，需要安装 piper 二进制和语音模型
 #   kokoro  — 本地离线合成，音质优秀，需要 Python + kokoro-onnx + ONNX 模型
 tts:
-  engine: "edge"                                       # TTS引擎: "minimax" (默认), "edge" (免费无限制), "piper" (本地离线), "kokoro" (本地高质量)
+  engine: "minimax"                                       # TTS引擎: "minimax" (默认), "edge" (免费无限制), "piper" (本地离线), "kokoro" (本地高质量)
 
   # --- 总结后端（将AI回复压缩为适合朗读的摘要） ---
   # summarize_backend: 决定用哪个 AI 来做总结
