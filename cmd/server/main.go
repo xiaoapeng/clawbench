@@ -132,7 +132,7 @@ func main() {
 
 	// Set quick-send presets with defaults
 	if len(cfg.Chat.QuickSend) == 0 {
-		cfg.Chat.QuickSend = []string{"OK", "继续", "提交", "放弃工作区修改"}
+		cfg.Chat.QuickSend = []string{"OK", "继续", "提交", "工作区改了什么", "放弃工作区修改"}
 	}
 	model.ChatQuickSend = cfg.Chat.QuickSend
 
