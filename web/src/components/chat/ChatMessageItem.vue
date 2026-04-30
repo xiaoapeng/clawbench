@@ -1067,6 +1067,120 @@ onUnmounted(() => {
     overflow-wrap: break-word;
 }
 
+.chat-message.user pre {
+    padding: 10px;
+    margin: 6px 0;
+    border-radius: var(--radius-sm);
+    overflow-x: auto;
+    max-width: 100%;
+    box-sizing: border-box;
+    word-break: normal;
+    word-wrap: normal;
+    white-space: pre;
+    background: rgba(0, 0, 0, 0.15);
+}
+
+.chat-message.user pre code {
+    white-space: pre;
+    word-break: normal;
+}
+
+.chat-message.user code {
+    padding: 2px 6px;
+    font-size: 13px;
+    background: rgba(0, 0, 0, 0.15);
+}
+
+.chat-message.user h1,
+.chat-message.user h2,
+.chat-message.user h3 {
+    margin: 6px 0 3px;
+    font-weight: 600;
+}
+
+.chat-message.user h1 { font-size: 16px; }
+.chat-message.user h2 { font-size: 14px; }
+.chat-message.user h3 { font-size: 13px; }
+
+.chat-message.user p {
+    margin: 3px 0;
+}
+
+.chat-message.user ul,
+.chat-message.user ol {
+    margin: 6px 0;
+}
+
+.chat-message.user blockquote {
+    margin: 6px 0;
+    padding: 5px 10px;
+    border-left-color: rgba(255, 255, 255, 0.35);
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.chat-message.user a {
+    word-break: break-all;
+    overflow-wrap: break-word;
+    color: #b8daff;
+}
+
+.chat-message.user a:hover {
+    color: #9dc5f0;
+}
+
+.chat-message.user img {
+    margin: 6px 0;
+}
+
+.chat-message.user hr {
+    margin: 8px 0;
+    border-top-color: rgba(255, 255, 255, 0.25);
+}
+
+.chat-message.user .table-wrap {
+    overflow-x: auto;
+    border: none;
+    border-radius: 6px;
+    margin: 0.75em 0;
+}
+
+.chat-message.user table {
+    display: block;
+    margin: 0;
+}
+
+.chat-message.user th {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.95);
+    background: rgba(0, 0, 0, 0.15);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.chat-message.user td {
+    white-space: nowrap;
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+.chat-message.user tr:nth-child(odd) td {
+    background: rgba(0, 0, 0, 0.08);
+}
+
+.chat-message.user tr:nth-child(even) td {
+    background: rgba(0, 0, 0, 0.15);
+}
+
+.chat-message.user .chat-file-path {
+    background: rgba(0, 0, 0, 0.15);
+}
+
+.chat-message.user .chat-file-open-btn {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.chat-message.user .chat-file-open-btn:hover {
+    color: white;
+}
+
 .chat-message.assistant pre {
     padding: 10px;
     margin: 6px 0;

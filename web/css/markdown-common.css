@@ -16,40 +16,64 @@
 
 /* Links */
 .markdown-body a,
-.chat-message.assistant a,
-.chat-message.user a {
+.chat-message.assistant a {
     color: var(--accent-color);
     text-decoration: none;
 }
 
 .markdown-body a:hover,
-.chat-message.assistant a:hover,
+.chat-message.assistant a:hover {
+    text-decoration: underline;
+}
+
+/* User message links use lighter blue for readability on blue background */
+.chat-message.user a {
+    color: #b8daff;
+    text-decoration: none;
+}
+
 .chat-message.user a:hover {
+    color: #9dc5f0;
     text-decoration: underline;
 }
 
 /* Blockquote */
 .markdown-body blockquote,
-.chat-message.assistant blockquote,
-.chat-message.user blockquote {
+.chat-message.assistant blockquote {
     border-left: 3px solid var(--border-color);
     background: var(--bg-secondary);
     border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
 
+/* User message blockquote uses translucent overlays on blue background */
+.chat-message.user blockquote {
+    border-left-color: rgba(255, 255, 255, 0.35);
+    background: rgba(0, 0, 0, 0.1);
+}
+
 /* Inline Code */
 .markdown-body code,
-.chat-message.assistant code,
-.chat-message.user code {
+.chat-message.assistant code {
     background: var(--code-bg);
+    border-radius: 4px;
+}
+
+/* User message inline code uses translucent overlay on blue background */
+.chat-message.user code {
+    background: rgba(0, 0, 0, 0.15);
     border-radius: 4px;
 }
 
 /* Code Block */
 .markdown-body pre,
-.chat-message.assistant pre,
-.chat-message.user pre {
+.chat-message.assistant pre {
     background: var(--code-bg);
+    overflow-x: auto;
+}
+
+/* User message code block uses translucent overlay on blue background */
+.chat-message.user pre {
+    background: rgba(0, 0, 0, 0.15);
     overflow-x: auto;
 }
 
@@ -78,39 +102,59 @@
 
 /* Table */
 .markdown-body table,
-.chat-message.assistant table,
-.chat-message.user table {
+.chat-message.assistant table {
     border-collapse: collapse;
 }
 
 .markdown-body th,
 .markdown-body td,
 .chat-message.assistant th,
-.chat-message.assistant td,
-.chat-message.user th,
-.chat-message.user td {
+.chat-message.assistant td {
     padding: 8px 14px;
     border: 1px solid var(--table-border);
     text-align: left;
 }
 
 .markdown-body th,
-.chat-message.assistant th,
-.chat-message.user th {
+.chat-message.assistant th {
     background: var(--bg-tertiary);
     font-weight: 600;
 }
 
 .markdown-body tr:nth-child(odd) td,
-.chat-message.assistant tr:nth-child(odd) td,
-.chat-message.user tr:nth-child(odd) td {
+.chat-message.assistant tr:nth-child(odd) td {
     background: var(--bg-primary);
 }
 
 .markdown-body tr:nth-child(even) td,
-.chat-message.assistant tr:nth-child(even) td,
-.chat-message.user tr:nth-child(even) td {
+.chat-message.assistant tr:nth-child(even) td {
     background: var(--bg-secondary);
+}
+
+/* User message table uses translucent overlays on blue background */
+.chat-message.user table {
+    border-collapse: collapse;
+}
+
+.chat-message.user th,
+.chat-message.user td {
+    padding: 8px 14px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    text-align: left;
+}
+
+.chat-message.user th {
+    background: rgba(0, 0, 0, 0.15);
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.95);
+}
+
+.chat-message.user tr:nth-child(odd) td {
+    background: rgba(0, 0, 0, 0.08);
+}
+
+.chat-message.user tr:nth-child(even) td {
+    background: rgba(0, 0, 0, 0.15);
 }
 
 /* Image */
@@ -132,10 +176,15 @@
 
 /* Horizontal Rule */
 .markdown-body hr,
-.chat-message.assistant hr,
-.chat-message.user hr {
+.chat-message.assistant hr {
     border: none;
     border-top: 1px solid var(--border-color);
+}
+
+/* User message horizontal rule */
+.chat-message.user hr {
+    border: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.25);
 }
 
 /* Deleted Text */
@@ -147,8 +196,7 @@
 
 /* File path annotation & open button */
 .markdown-body .chat-file-path,
-.chat-message.assistant .chat-file-path,
-.chat-message.user .chat-file-path {
+.chat-message.assistant .chat-file-path {
     font-family: monospace;
     background: var(--bg-secondary);
     border-radius: 3px;
@@ -156,8 +204,7 @@
 }
 
 .markdown-body .chat-file-open-btn,
-.chat-message.assistant .chat-file-open-btn,
-.chat-message.user .chat-file-open-btn {
+.chat-message.assistant .chat-file-open-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -178,11 +225,44 @@
     box-shadow: none;
 }
 
+/* User message file path annotation & open button */
+.chat-message.user .chat-file-path {
+    font-family: monospace;
+    background: rgba(0, 0, 0, 0.15);
+    border-radius: 3px;
+    padding: 0 3px;
+}
+
+.chat-message.user .chat-file-open-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: none;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.7);
+    cursor: pointer;
+    vertical-align: middle;
+    margin-left: 1px;
+    padding: 0;
+    line-height: 1;
+    opacity: 0.5;
+    transition: opacity 0.15s, color 0.15s;
+    outline: none;
+    box-shadow: none;
+}
+
 .markdown-body .chat-file-open-btn:hover,
-.chat-message.assistant .chat-file-open-btn:hover,
-.chat-message.user .chat-file-open-btn:hover {
+.chat-message.assistant .chat-file-open-btn:hover {
     opacity: 1;
     color: var(--accent-color, #3b82f6);
+}
+
+.chat-message.user .chat-file-open-btn:hover {
+    opacity: 1;
+    color: white;
 }
 
 .markdown-body .chat-file-open-btn svg,
