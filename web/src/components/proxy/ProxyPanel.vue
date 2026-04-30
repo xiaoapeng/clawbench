@@ -1,5 +1,5 @@
 <template>
-  <BottomSheet ref="bottomSheetRef" :open="open" compact title="端口转发" @close="$emit('close')">
+  <BottomSheet ref="bottomSheetRef" :open="open" title="端口转发" @close="$emit('close')">
     <template #header>
       <svg class="bs-header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
         <path d="M12 2L2 7l10 5 10-5-10-5z"/>
@@ -198,7 +198,7 @@ watch(() => props.open, async (val) => {
   flex-direction: column;
   gap: 8px;
   padding: 6px;
-  max-height: 60vh;
+  flex: 1;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
 }
