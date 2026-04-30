@@ -5,6 +5,7 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.app.DownloadManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -14,10 +15,14 @@ import android.net.Uri;
 import android.net.http.SslError;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 import android.view.View;
 import android.view.WindowManager;
 import android.webkit.CookieManager;
+import android.webkit.DownloadListener;
 import android.webkit.JavascriptInterface;
 import android.webkit.SslErrorHandler;
 import android.webkit.WebChromeClient;
@@ -147,6 +152,46 @@ public class MainActivity extends Activity {
 
         // Enable cookies (needed for auth session)
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true);
+
+        // Handle file downloads via DownloadManager
+        webView.setDownloadListener((url, userAgent, contentDisposition, mimetype, contentLength) -> {
+            try {
+                DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
+                // Carry auth cookies so the download is authorized
+                String cookies = CookieManager.getInstance().getCookie(url);
+                if (cookies != null) {
+                    request.addRequestHeader("Cookie", cookies);
+                }
+                request.setMimeType(mimetype);
+                request.setTitle(getFileNameFromUrl(url));
+                request.setDescription(getString(R.string.download_description));
+                request.allowScanningByMediaScanner();
+                request.setNotificationVisibility(
+                        DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+                request.setDestinationInExternalPublicDir(
+                        Environment.DIRECTORY_DOWNLOADS, "ClawBench/" + getFileNameFromUrl(url));
+
+                DownloadManager dm = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+                dm.enqueue(request);
+                Toast.makeText(this, R.string.download_started, Toast.LENGTH_SHORT).show();
+            } catch (Exception e) {
+                Log.e(TAG, "Download failed", e);
+                Toast.makeText(this, R.string.download_failed, Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    /**
+     * Extract a file name from a /api/local-file/ URL.
+     * Falls back to "download" if parsing fails.
+     */
+    private String getFileNameFromUrl(String url) {
+        String decoded = Uri.decode(url);
+        int lastSlash = decoded.lastIndexOf('/');
+        if (lastSlash >= 0 && lastSlash < decoded.length() - 1) {
+            return decoded.substring(lastSlash + 1);
+        }
+        return "download";
     }
 
     private void loadUrl(String url) {
@@ -431,6 +476,22 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void setSSHPassword(String pwd) {
             PortForwardService.setPassword(activity, pwd);
+        }
+
+        /**
+         * Download a file from the ClawBench server to the Downloads directory.
+         * @param path Relative file path (as used in /api/local-file/ URL)
+         */
+        @JavascriptInterface
+        public void downloadFile(String path) {
+            activity.runOnUiThread(() -> {
+                String serverUrl = activity.prefs.getString(KEY_SERVER_URL, "");
+                if (serverUrl.isEmpty()) return;
+                String url = serverUrl + "/api/local-file/" + Uri.encode(path, "/");
+                // Trigger the DownloadListener by asking WebView to load the URL
+                // The DownloadListener will intercept and use DownloadManager
+                activity.webView.loadUrl(url);
+            });
         }
     }
 }

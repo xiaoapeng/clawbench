@@ -54,7 +54,7 @@
           </svg>
           <div class="unsupported-title">{{ file.name }}</div>
           <div class="unsupported-desc">文件过大，无法在浏览器中预览 {{ file.size ? '(' + formatSize(file.size) + ')' : '' }}</div>
-          <a :href="'/api/local-file/' + encodeURIComponent(file.path)" class="download-btn" download>
+          <a v-if="!isAppMode" :href="'/api/local-file/' + encodeURIComponent(file.path)" class="download-btn" download>
             <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" width="14" height="14">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
               <polyline points="7,10 12,15 17,10"/>
@@ -62,6 +62,14 @@
             </svg>
             下载
           </a>
+          <button v-else class="download-btn" @click="handleDownload(file.path)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" width="14" height="14">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7,10 12,15 17,10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            下载
+          </button>
         </div>
       </div>
 
@@ -74,7 +82,7 @@
           </svg>
           <div class="unsupported-title">{{ file.name }}</div>
           <div class="unsupported-desc">二进制文件，无法在浏览器中预览 {{ file.size ? '(' + formatSize(file.size) + ')' : '' }}</div>
-          <a :href="'/api/local-file/' + encodeURIComponent(file.path)" class="download-btn" download>
+          <a v-if="!isAppMode" :href="'/api/local-file/' + encodeURIComponent(file.path)" class="download-btn" download>
             <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" width="14" height="14">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
               <polyline points="7,10 12,15 17,10"/>
@@ -82,6 +90,14 @@
             </svg>
             下载
           </a>
+          <button v-else class="download-btn" @click="handleDownload(file.path)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" width="14" height="14">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7,10 12,15 17,10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            下载
+          </button>
         </div>
       </div>
 
@@ -119,6 +135,9 @@ import CodePreview from './CodePreview.vue'
 import FileHeader from './FileHeader.vue'
 import { getFileType, formatFileSize } from '@/utils/helpers.ts'
 import { store } from '@/stores/app.ts'
+import { useAppMode } from '@/composables/useAppMode.ts'
+
+const { isAppMode } = useAppMode()
 
 const props = defineProps({
     file: Object,
@@ -242,6 +261,13 @@ function formatSize(bytes) {
 function handleOpenAsText() {
     if (!props.file?.path) return
     store.selectFile(props.file.path, false, false, false, true)
+}
+
+function handleDownload(path) {
+    const native = window.AndroidNative
+    if (isAppMode.value && native && native.downloadFile) {
+        native.downloadFile(path)
+    }
 }
 </script>
 
