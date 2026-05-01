@@ -124,7 +124,7 @@ export function useSessionIdentity() {
       const data = await resp.json()
       if (data.ok && data.sessionId) {
         currentSessionId.value = data.sessionId
-        currentSessionTitle.value = ''
+        currentSessionTitle.value = data.title || ''
         currentBackend.value = data.backend || ''
         currentAgentId.value = data.agentId || agentId || ''
       }

@@ -250,7 +250,7 @@ export function useChatSession(options: UseChatSessionOptions) {
         throw new Error(data.error || `创建失败 (${resp.status})`)
       }
       currentSessionId.value = data.sessionId
-      currentSessionTitle.value = ''
+      currentSessionTitle.value = data.title || ''
       currentBackend.value = data.backend || ''
       currentAgentId.value = data.agentId || agentId || ''
       messages.value = []

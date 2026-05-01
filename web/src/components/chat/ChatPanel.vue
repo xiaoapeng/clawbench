@@ -5,8 +5,8 @@
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
       </svg>
       <span class="bs-header-title">{{ session.agentHeaderTitle.value }}</span>
-      <div class="bs-header-description">
-        <HeaderMarquee :text="session.currentSessionTitle.value || '新会话'">{{ session.currentSessionTitle.value || '新会话' }}</HeaderMarquee>
+      <div v-if="session.currentSessionTitle.value" class="bs-header-description">
+        <HeaderMarquee :text="session.currentSessionTitle.value">{{ session.currentSessionTitle.value }}</HeaderMarquee>
       </div>
     </template>
 
