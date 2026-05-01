@@ -11,6 +11,8 @@ __pycache__/
 
 # Go build output
 /clawbench
+clawbench-dev
+coverage.out
 
 # Runtime
 nohup.out
