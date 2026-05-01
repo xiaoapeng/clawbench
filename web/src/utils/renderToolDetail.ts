@@ -30,19 +30,17 @@ function renderEditDiff(input: Record<string, any>): string {
 
   // Build header
   let header = '<div class="tool-file-header">'
+  header += `<span class="tool-file-path">${escapeHtml(displayPath)}</span>`
   if (resolvedPath) {
-    header += `<span class="tool-file-path chat-file-open-btn" data-file-path="${escapeHtml(resolvedPath)}" title="打开文件">${escapeHtml(displayPath)}</span>`
     header += fileOpenButtonHtml(resolvedPath)
-  } else {
-    header += `<span class="tool-file-path">${escapeHtml(displayPath)}</span>`
   }
   if (replaceAll) {
     header += '<span class="edit-diff-replace-all" title="Replace all occurrences">replaceAll</span>'
   }
   header += '</div>'
 
-  // Build diff body
-  let body = '<div class="edit-diff-body">'
+  // Build diff body (scroll wrapper + inner content)
+  let body = '<div class="edit-diff-scroll"><div class="edit-diff-body">'
 
   // Old lines (red)
   if (oldStr) {
@@ -60,7 +58,7 @@ function renderEditDiff(input: Record<string, any>): string {
     }
   }
 
-  body += '</div>'
+  body += '</div></div>'
 
   return `<div class="edit-diff-view">${header}${body}</div>`
 }
@@ -106,11 +104,9 @@ function filePathHeader(input: Record<string, any>, extraBadge = ''): string {
   const displayPath = resolvedPath || filePath.replace(/^\.\//, '')
 
   let html = '<div class="tool-file-header">'
+  html += `<span class="tool-file-path">${escapeHtml(displayPath)}</span>`
   if (resolvedPath) {
-    html += `<span class="tool-file-path chat-file-open-btn" data-file-path="${escapeHtml(resolvedPath)}" title="打开文件">${escapeHtml(displayPath)}</span>`
     html += fileOpenButtonHtml(resolvedPath)
-  } else {
-    html += `<span class="tool-file-path">${escapeHtml(displayPath)}</span>`
   }
   if (extraBadge) html += extraBadge
   html += '</div>'
@@ -191,15 +187,17 @@ export function formatToolInput(input: any, toolName?: string): string {
   // Default: JSON rendering
   if (!input || (typeof input === 'object' && Object.keys(input).length === 0)) {
     try {
-      return hljs.highlight('{}', { language: 'json' }).value
+      const highlighted = hljs.highlight('{}', { language: 'json' }).value
+      return `<div class="tool-json-body"><code>${highlighted}</code></div>`
     } catch {
-      return '{}'
+      return '<div class="tool-json-body"><code>{}</code></div>'
     }
   }
   try {
     const json = JSON.stringify(input, null, 2)
-    return hljs.highlight(json, { language: 'json' }).value
+    const highlighted = hljs.highlight(json, { language: 'json' }).value
+    return `<div class="tool-json-body"><code>${highlighted}</code></div>`
   } catch {
-    return JSON.stringify(input, null, 2)
+    return `<div class="tool-json-body"><code>${escapeHtml(JSON.stringify(input, null, 2))}</code></div>`
   }
 }

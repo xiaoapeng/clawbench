@@ -79,7 +79,7 @@
                 <line x1="12" y1="16" x2="12.01" y2="16"/>
               </svg>
             </div>
-            <div v-if="expandedTools[`${index}-${bi}`]" class="tool-detail" @click.stop v-html="formatToolInput(block.input, block.name)"></div>
+            <div v-if="expandedTools[`${index}-${bi}`]" class="tool-detail" @click="handleToolDetailClick" v-html="formatToolInput(block.input, block.name)"></div>
           </template>
           <!-- Error block -->
           <div v-else-if="block.type === 'error'" class="chat-error-card">
@@ -360,6 +360,15 @@ watch(() => props.msg?.streaming, (streaming, wasStreaming) => {
 
 function toggleThinking(key) {
   thinkingExpanded.value = { ...thinkingExpanded.value, [key]: !thinkingExpanded.value[key] }
+}
+
+/** Click inside expanded tool-detail: allow file-open buttons to bubble, block everything else. */
+function handleToolDetailClick(event) {
+  if ((event.target).closest('.chat-file-open-btn')) {
+    // Let it bubble to ChatMessageList.handleChatClick for file opening
+    return
+  }
+  event.stopPropagation()
 }
 
 function normalizeFileEntry(f) {
@@ -739,8 +748,9 @@ onUnmounted(() => {
   background: var(--bg-primary);
   border-radius: 4px;
   border: 1px solid var(--border-color);
-  white-space: pre;
-  overflow-x: auto;
+  white-space: normal;
+  overflow-x: hidden;
+  overflow-y: auto;
   max-height: 150px;
   cursor: default;
 }
@@ -1295,12 +1305,22 @@ onUnmounted(() => {
 
 /* ── Shared file header (used by Edit/Read/Write) ── */
 .tool-detail .tool-file-header {
+  position: relative;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
   margin-bottom: 4px;
   padding-bottom: 4px;
+  padding-right: 22px;
   border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.tool-detail .tool-file-header .chat-file-open-btn {
+  position: absolute;
+  top: 0;
+  right: 0;
+  flex-shrink: 0;
 }
 
 .tool-detail .tool-file-path {
@@ -1308,21 +1328,15 @@ onUnmounted(() => {
   font-size: 11px;
   font-weight: 600;
   color: var(--accent-color);
-  cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  word-break: break-all;
   flex: 1;
   min-width: 0;
 }
 
-.tool-detail .tool-file-path:hover {
-  text-decoration: underline;
-}
-
 /* ── Edit tool diff view ── */
 .tool-detail .edit-diff-view {
-  white-space: normal;
+  display: flex;
+  flex-direction: column;
   font-size: 11px;
   line-height: 1.5;
 }
@@ -1337,12 +1351,15 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
+.tool-detail .edit-diff-scroll {
+  overflow-x: auto;
+}
+
 .tool-detail .edit-diff-body {
   white-space: pre;
   font-family: 'SF Mono', 'Fira Code', Menlo, Monaco, monospace;
   font-size: 11px;
   line-height: 1.5;
-  overflow-x: auto;
   min-width: max-content;
 }
 
@@ -1375,7 +1392,8 @@ onUnmounted(() => {
 
 /* ── Read tool file preview ── */
 .tool-detail .file-preview-view {
-  white-space: normal;
+  display: flex;
+  flex-direction: column;
   font-size: 11px;
   line-height: 1.5;
 }
@@ -1386,7 +1404,6 @@ onUnmounted(() => {
   font-size: 11px;
   line-height: 1.5;
   overflow-x: auto;
-  min-width: max-content;
 }
 
 .tool-detail .file-preview-line {
@@ -1403,7 +1420,8 @@ onUnmounted(() => {
 
 /* ── Write tool file view ── */
 .tool-detail .file-write-view {
-  white-space: normal;
+  display: flex;
+  flex-direction: column;
   font-size: 11px;
   line-height: 1.5;
 }
@@ -1429,12 +1447,24 @@ onUnmounted(() => {
   font-size: 11px;
   line-height: 1.5;
   overflow-x: auto;
-  min-width: max-content;
 }
 
 .tool-detail .file-write-line {
   white-space: pre;
   color: var(--text-primary);
+}
+
+/* ── JSON default view (non-Edit/Read/Write/Bash tools) ── */
+.tool-detail .tool-json-body {
+  white-space: pre;
+  font-family: 'SF Mono', 'Fira Code', Menlo, Monaco, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-x: auto;
+}
+
+.tool-detail .tool-json-body code {
+  font-family: inherit;
 }
 
 /* ── Bash tool terminal view ── */
