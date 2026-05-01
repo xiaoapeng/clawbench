@@ -412,7 +412,8 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         ChatKeepAliveService.stop(this);
-        PortForwardService.stop(this);
+        // Do NOT stop PortForwardService here — it should survive Activity lifecycle
+        // so the SSH tunnel continues running when the app is in background.
         super.onDestroy();
     }
 
@@ -570,10 +571,13 @@ public class MainActivity extends AppCompatActivity {
                 activity.forwardedPorts.add(port);
                 PortForwardService.addForwardedPort(activity, port);
 
-                // Request battery optimization exemption on first port forward
-                // This helps prevent the SSH tunnel service from being killed on some OEM ROMs
-                if (!PortForwardService.isBatteryOptRequested(activity)) {
-                    requestIgnoreBatteryOptimization();
+                // Request battery optimization exemption if not already granted.
+                // Re-check every time in case the user previously dismissed the dialog.
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    PowerManager pm = (PowerManager) activity.getSystemService(Context.POWER_SERVICE);
+                    if (pm != null && !pm.isIgnoringBatteryOptimizations(activity.getPackageName())) {
+                        requestIgnoreBatteryOptimization();
+                    }
                 }
             });
         }

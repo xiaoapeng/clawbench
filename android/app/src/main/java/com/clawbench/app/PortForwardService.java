@@ -4,6 +4,7 @@ import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.app.AlarmManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -11,6 +12,9 @@ import android.net.Uri;
 import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.IBinder;
+import android.os.PowerManager;
+import android.os.SystemClock;
+import android.content.pm.ServiceInfo;
 import android.util.Log;
 
 import androidx.annotation.Nullable;
@@ -92,6 +96,9 @@ public class PortForwardService extends Service {
     // WifiLock: prevents WiFi from being disabled while SSH tunnel is active
     private WifiManager.WifiLock wifiLock;
 
+    // WakeLock: prevents CPU from sleeping so SSH keep-alive packets are sent
+    private PowerManager.WakeLock wakeLock;
+
     // Reconnect state
     private volatile boolean isReconnecting = false;
     private volatile int reconnectAttempt = 0;
@@ -156,7 +163,7 @@ public class PortForwardService extends Service {
         super.onCreate();
         isRunning = true;
         jsch = new JSch();
-        startForeground(NOTIFICATION_ID, buildNotification(0, null));
+        startForegroundCompat(NOTIFICATION_ID, buildNotification(0, null));
 
         // Restore previously saved ports (from before Service was killed)
         restoreForwardedPorts();
@@ -166,7 +173,7 @@ public class PortForwardService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (!isRunning) {
             isRunning = true;
-            startForeground(NOTIFICATION_ID, buildNotification(0, null));
+            startForegroundCompat(NOTIFICATION_ID, buildNotification(0, null));
         }
 
         if (intent != null) {
@@ -205,11 +212,29 @@ public class PortForwardService extends Service {
         intentionalDisconnect = true;
         stopConnectionMonitor();
         releaseWifiLock();
+        releaseWakeLock();
         disconnectInternal();
         isRunning = false;
         networkExecutor.shutdownNow();
         stopForeground(true);
         super.onDestroy();
+    }
+
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        // When the user swipes the app from recents, restart the service
+        // so the SSH tunnel keeps running.
+        Intent restartIntent = new Intent(this, PortForwardService.class);
+        restartIntent.setAction("RESTORE_PORTS");
+        PendingIntent pendingIntent = PendingIntent.getService(
+                this, 1, restartIntent,
+                PendingIntent.FLAG_ONE_SHOT | PendingIntent.FLAG_IMMUTABLE);
+        AlarmManager alarmManager = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+        if (alarmManager != null) {
+            alarmManager.set(AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                    SystemClock.elapsedRealtime() + 1000, pendingIntent);
+        }
+        super.onTaskRemoved(rootIntent);
     }
 
     @Nullable
@@ -471,6 +496,9 @@ public class PortForwardService extends Service {
         // Acquire WifiLock to prevent WiFi from being disabled
         acquireWifiLock();
 
+        // Acquire WakeLock to prevent CPU from sleeping (keeps SSH keep-alive working)
+        acquireWakeLock();
+
         // Re-establish any previously forwarded ports
         int reEstablished = 0;
         for (int port : forwardedPorts) {
@@ -618,6 +646,7 @@ public class PortForwardService extends Service {
         intentionalDisconnect = true;
         stopConnectionMonitor();
         releaseWifiLock();
+        releaseWakeLock();
         disconnectInternal();
     }
 
@@ -694,6 +723,58 @@ public class PortForwardService extends Service {
                 .setOngoing(true)
                 .setSilent(true)
                 .build();
+    }
+
+    // --- Foreground service compat ---
+
+    /**
+     * Start the service as foreground, passing the required foregroundServiceType
+     * on Android 14+ (API 34+). Without this, Android 14 throws
+     * ForegroundServiceStartNotAllowedException.
+     */
+    private void startForegroundCompat(int id, Notification notification) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(id, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
+        } else {
+            startForeground(id, notification);
+        }
+    }
+
+    // --- WakeLock ---
+
+    /**
+     * Acquire a partial WakeLock to prevent CPU from sleeping.
+     * This ensures SSH keep-alive packets are sent even when the screen is off
+     * and the device enters Doze mode.
+     */
+    private void acquireWakeLock() {
+        if (wakeLock != null && wakeLock.isHeld()) return;
+        try {
+            PowerManager pm = (PowerManager) getApplicationContext().getSystemService(Context.POWER_SERVICE);
+            if (pm != null) {
+                wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ClawBench:SSH-Tunnel");
+                wakeLock.setReferenceCounted(false);
+                wakeLock.acquire();
+                Log.i(TAG, "SSH: WakeLock acquired");
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "SSH: failed to acquire WakeLock", e);
+        }
+    }
+
+    /**
+     * Release the WakeLock.
+     */
+    private void releaseWakeLock() {
+        if (wakeLock != null && wakeLock.isHeld()) {
+            try {
+                wakeLock.release();
+                Log.i(TAG, "SSH: WakeLock released");
+            } catch (Exception e) {
+                Log.w(TAG, "SSH: failed to release WakeLock", e);
+            }
+            wakeLock = null;
+        }
     }
 
     // --- Static helper methods for Activity to use ---
