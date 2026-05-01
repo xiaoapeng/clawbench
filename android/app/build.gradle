@@ -16,10 +16,20 @@ android {
 
     signingConfigs {
         release {
-            storeFile file('../clawbench.jks')
-            storePassword 'clawbench123'
-            keyAlias 'clawbench'
-            keyPassword 'clawbench123'
+            // CI: read from environment variables; Local: fallback to keystore file
+            def keystoreFile = System.getenv("KEYSTORE_FILE")
+            storeFile keystoreFile ? file(keystoreFile) : file('../clawbench.jks')
+            storePassword System.getenv("KEYSTORE_PASSWORD") ?: 'clawbench123'
+            keyAlias System.getenv("KEY_ALIAS") ?: 'clawbench'
+            keyPassword System.getenv("KEY_PASSWORD") ?: 'clawbench123'
+        }
+    }
+
+    applicationVariants.all { variant ->
+        if (variant.buildType.name == "release") {
+            variant.outputs.all { output ->
+                outputFileName = "clawbench-android.apk"
+            }
         }
     }
 
