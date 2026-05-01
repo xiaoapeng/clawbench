@@ -28,10 +28,12 @@ func ServeSessions(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]interface{}{"sessions": sessions})
 
 	case http.MethodPost:
-		// Check session count limit before creating
-		if count, cerr := service.GetSessionCount(projectPath); cerr == nil && count >= model.SessionMaxCount {
-			model.WriteErrorf(w, http.StatusConflict, fmt.Sprintf("已达会话数量上限（%d），请先删除旧会话", model.SessionMaxCount))
-			return
+		// Check session count limit before creating (0 = unlimited)
+		if model.SessionMaxCount > 0 {
+			if count, cerr := service.GetSessionCount(projectPath); cerr == nil && count >= model.SessionMaxCount {
+				model.WriteErrorf(w, http.StatusConflict, fmt.Sprintf("已达会话数量上限（%d），请先删除旧会话", model.SessionMaxCount))
+				return
+			}
 		}
 
 		var req struct {
