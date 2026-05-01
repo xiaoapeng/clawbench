@@ -115,6 +115,22 @@
         @close="proxyOpen = false"
       />
 
+      <!-- Quote question floating bar + sheet -->
+      <QuoteQuestionBar
+        :visible="quoteQuestion.visible.value"
+        :quoteData="quoteQuestion.quoteData.value"
+        @open="quoteQuestion.openSheet()"
+      />
+      <QuoteQuestionSheet
+        :open="quoteQuestion.sheetOpen.value"
+        :quoteData="quoteQuestion.quoteData.value"
+        :sessionIcon="chatSessionInfo?.getAgentIcon?.(chatSessionInfo?.currentAgentId?.value) || '🤖'"
+        :sessionName="chatSessionInfo?.agentHeaderTitle?.value || 'AI 对话'"
+        :currentSessionId="chatSessionInfo?.currentSessionId?.value || ''"
+        @close="quoteQuestion.closeSheet()"
+        @send="quoteQuestion.sendMessage"
+      />
+
       <!-- Bottom dock -->
       <div v-if="isAuthenticated" class="bottom-dock-wrapper">
         <div class="bottom-dock">
@@ -185,7 +201,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted, provide, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, provide, inject, nextTick } from 'vue'
 import AppHeader from './components/common/AppHeader.vue'
 import FileManager from './components/file/FileManager.vue'
 import WelcomeView from './components/WelcomeView.vue'
@@ -201,6 +217,9 @@ import SearchDrawer from './components/common/SearchDrawer.vue'
 import ToastNotification from './components/common/ToastNotification.vue'
 import ProxyPanel from './components/proxy/ProxyPanel.vue'
 import PortForwardBrowser from './components/proxy/PortForwardBrowser.vue'
+import QuoteQuestionBar from './components/common/QuoteQuestionBar.vue'
+import QuoteQuestionSheet from './components/common/QuoteQuestionSheet.vue'
+import { useQuoteQuestion } from './composables/useQuoteQuestion.ts'
 import { useToast } from './composables/useToast.ts'
 import { useAppMode } from './composables/useAppMode.ts'
 import { usePortForward, setOpenPortBrowser } from './composables/usePortForward.ts'
@@ -248,6 +267,10 @@ const sortDir = ref('asc')
 const { isAppMode } = useAppMode()
 const { syncToNative } = usePortForward()
 const proxyOpen = ref(false)
+
+// Quote question feature
+const quoteQuestion = useQuoteQuestion()
+const chatSessionInfo = inject('chatSessionInfo', null)
 
 // 抽屉互斥：打开一个时关闭其他（瞬间关闭，无动画）
 const drawerStates = {
