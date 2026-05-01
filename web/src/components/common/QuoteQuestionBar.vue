@@ -1,19 +1,24 @@
 <template>
   <Transition name="quote-bar">
     <div v-if="visible && quoteData" ref="barRef" class="quote-question-bar">
-      <!-- Collapsed: preview + button -->
-      <div v-if="!expanded" class="quote-bar-row">
+      <!-- Preview row — always visible when bar is shown -->
+      <div class="quote-bar-row" @click="!expanded && expand()">
         <div class="quote-bar-preview">
           <span class="quote-bar-icon">💬</span>
           <span class="quote-bar-text">{{ previewText }}</span>
         </div>
-        <button class="quote-bar-btn" @click="expand">
-          引用提问
+        <button v-if="!expanded" class="quote-bar-btn" @click.stop="expand">
+          对话
+        </button>
+        <button v-else class="quote-bar-btn quote-bar-btn-collapse" @click.stop="collapse" title="收起">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+            <polyline points="18 15 12 9 6 15"/>
+          </svg>
         </button>
       </div>
 
       <!-- Expanded: session info + input + send -->
-      <div v-else class="quote-bar-expanded">
+      <div v-if="expanded" class="quote-bar-expanded">
         <div class="qq-session" @click="openSessionDrawer">
           <span class="qq-session-label">{{ sessionLabel }}</span>
           <div v-if="sessionTitle" class="qq-session-title">
@@ -62,7 +67,7 @@ const props = defineProps({
   sessionTitle: { type: String, default: '' },
   currentSessionId: { type: String, default: '' },
 })
-const emit = defineEmits(['send', 'close', 'pin', 'open-sessions'])
+const emit = defineEmits(['send', 'close', 'pin', 'unpin', 'open-sessions'])
 
 const expanded = ref(false)
 const inputText = ref('')
@@ -114,7 +119,10 @@ async function expand() {
 function collapse() {
   expanded.value = false
   inputText.value = ''
-  emit('close')
+  collapseTextarea()
+  // Don't close the bar — just collapse the input area, keep the preview visible
+  // Reset barPinned so selection changes can auto-hide the bar again
+  emit('unpin')
 }
 
 function autoResizeTextarea() {
@@ -139,10 +147,11 @@ function openSessionDrawer() {
 
 function handleSend() {
   if (!canSend.value) return
-  // Always send to current session (after switching via SessionDrawer if needed)
   emit('send', inputText.value)
+  // Keep the bar visible after send, just collapse the input area
   expanded.value = false
   inputText.value = ''
+  collapseTextarea()
 }
 </script>
 
@@ -207,6 +216,22 @@ function handleSend() {
 
 .quote-bar-btn:active {
   opacity: 0.8;
+}
+
+.quote-bar-btn-collapse {
+  padding: 4px 6px;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.quote-bar-btn-collapse:active {
+  background: var(--bg-secondary);
 }
 
 /* Expanded */

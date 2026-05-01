@@ -124,6 +124,7 @@
         @send="quoteQuestion.sendMessage($event, sessionIdentity.currentSessionId.value)"
         @close="quoteQuestion.closeSheet()"
         @pin="quoteQuestion.pinBar()"
+        @unpin="quoteQuestion.unpinBar()"
         @open-sessions="handleQuoteOpenSessions"
       />
 

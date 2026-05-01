@@ -136,6 +136,10 @@ export function useQuoteQuestion() {
     barPinned.value = true
   }
 
+  function unpinBar() {
+    barPinned.value = false
+  }
+
   async function sendMessage(userMessage: string, sessionId?: string) {
     if (!quoteData.value || !userMessage.trim()) return
 
@@ -159,7 +163,9 @@ export function useQuoteQuestion() {
       toast.show('发送失败: ' + (err as Error).message, { icon: '⚠️', type: 'error' })
     }
 
-    closeSheet()
+    // Don't close the bar — keep the preview visible for follow-up questions.
+    // Just unpin so selection changes can auto-hide the bar again.
+    unpinBar()
   }
 
   return {
@@ -169,6 +175,7 @@ export function useQuoteQuestion() {
     openSheet: () => { sheetOpen.value = true },
     closeSheet,
     pinBar,
+    unpinBar,
     sendMessage,
   }
 }
