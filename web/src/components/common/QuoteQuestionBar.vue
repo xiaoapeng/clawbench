@@ -21,8 +21,8 @@
       <div v-if="expanded" class="quote-bar-expanded">
         <div class="qq-session" @click="openSessionDrawer">
           <span class="qq-session-label">{{ sessionLabel }}</span>
-          <div v-if="sessionTitle" class="qq-session-title">
-            <HeaderMarquee :text="sessionTitle">{{ sessionTitle }}</HeaderMarquee>
+          <div class="qq-session-title">
+            <HeaderMarquee :text="displaySessionTitle">{{ displaySessionTitle }}</HeaderMarquee>
           </div>
           <svg class="qq-session-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
             <polyline points="6 9 12 15 18 9"/>
@@ -81,6 +81,8 @@ const previewText = computed(() => {
 })
 
 const canSend = computed(() => inputText.value.trim().length > 0)
+
+const displaySessionTitle = computed(() => props.sessionTitle || '新会话')
 
 // Reset when bar hides
 watch(() => props.visible, (val) => {

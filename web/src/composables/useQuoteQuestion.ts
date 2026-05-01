@@ -152,7 +152,7 @@ export function useQuoteQuestion() {
       lineSuffix = `:${q.startLine}`
     }
 
-    const message = `\`\`\`${langPrefix}${q.filePath}${lineSuffix}\n${q.text}\n\`\`\`\n\n${userMessage.trim()}`
+    const message = `${userMessage.trim()}\n\n\`\`\`${langPrefix}${q.filePath}${lineSuffix}\n${q.text}\n\`\`\``
 
     // Pass the quoted file as a file attachment so the backend builds
     // the [当前文件: ...] prompt prefix and sets the CLI work_dir.
