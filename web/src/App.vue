@@ -119,6 +119,7 @@
         :visible="quoteQuestion.visible.value"
         :quoteData="quoteQuestion.quoteData.value"
         :sessionLabel="sessionIdentity.agentHeaderTitle.value"
+        :sessionTitle="sessionIdentity.currentSessionTitle.value"
         :currentSessionId="sessionIdentity.currentSessionId.value"
         @send="quoteQuestion.sendMessage($event, sessionIdentity.currentSessionId.value)"
         @close="quoteQuestion.closeSheet()"

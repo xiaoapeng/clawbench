@@ -16,7 +16,10 @@
       <div v-else class="quote-bar-expanded">
         <div class="qq-session" @click="openSessionDrawer">
           <span class="qq-session-label">{{ sessionLabel }}</span>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+          <div v-if="sessionTitle" class="qq-session-title">
+            <HeaderMarquee :text="sessionTitle">{{ sessionTitle }}</HeaderMarquee>
+          </div>
+          <svg class="qq-session-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
             <polyline points="6 9 12 15 18 9"/>
           </svg>
         </div>
@@ -50,11 +53,13 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import HeaderMarquee from '@/components/common/HeaderMarquee.vue'
 
 const props = defineProps({
   visible: Boolean,
   quoteData: Object,
   sessionLabel: { type: String, default: 'AI 对话' },
+  sessionTitle: { type: String, default: '' },
   currentSessionId: { type: String, default: '' },
 })
 const emit = defineEmits(['send', 'close', 'pin', 'open-sessions'])
@@ -213,12 +218,23 @@ function handleSend() {
 }
 
 .qq-session-label {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.qq-session-title {
   flex: 1;
+  min-width: 0;
   font-size: 12px;
   color: var(--text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.qq-session-arrow {
+  flex-shrink: 0;
+  color: var(--text-muted);
 }
 
 .qq-input-row {
