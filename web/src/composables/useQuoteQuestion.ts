@@ -1,4 +1,6 @@
-import { ref, onMounted, onUnmounted, inject, type Ref } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
+import { useSessionIdentity } from '@/composables/useSessionIdentity.ts'
+import { useToast } from '@/composables/useToast.ts'
 
 export interface QuoteData {
   text: string           // selected text
@@ -103,7 +105,8 @@ function onSelectionChange() {
 let listenerCount = 0
 
 export function useQuoteQuestion() {
-  const toast = inject<any>('toast', null)
+  const toast = useToast()
+  const sessionIdentity = useSessionIdentity()
 
   onMounted(() => {
     listenerCount++
@@ -133,7 +136,7 @@ export function useQuoteQuestion() {
     barPinned.value = true
   }
 
-  async function sendMessage(userMessage: string, sessionId: string) {
+  async function sendMessage(userMessage: string, sessionId?: string) {
     if (!quoteData.value || !userMessage.trim()) return
 
     const q = quoteData.value
@@ -147,37 +150,13 @@ export function useQuoteQuestion() {
 
     const message = `\`\`\`${langPrefix}${q.filePath}${lineSuffix}\n${q.text}\n\`\`\`\n\n${userMessage.trim()}`
 
-    // Direct API call — always works regardless of provide/inject hierarchy
+    // Delegate to session identity singleton — it routes to ChatPanel's
+    // sendMessage if registered, otherwise falls back to a direct API call.
     try {
-      // If no session ID provided, create one first
-      let sid = sessionId
-      if (!sid) {
-        const createResp = await fetch('/api/ai/sessions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}),
-        })
-        const createData = await createResp.json()
-        if (createData.ok && createData.sessionId) {
-          sid = createData.sessionId
-        }
-      }
-
-      const url = sid
-        ? `/api/ai/chat?session_id=${encodeURIComponent(sid)}`
-        : '/api/ai/chat'
-      const resp = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message }),
-      })
-      if (!resp.ok) {
-        const errData = await resp.json().catch(() => ({}))
-        throw new Error(errData.error || '发送失败')
-      }
-      if (toast) toast.show('已发送到会话', { icon: '✅', type: 'success', duration: 2000 })
+      await sessionIdentity.sendMessage(message)
+      toast.show('已发送到会话', { icon: '✅', type: 'success', duration: 2000 })
     } catch (err) {
-      if (toast) toast.show('发送失败: ' + (err as Error).message, { icon: '⚠️', type: 'error' })
+      toast.show('发送失败: ' + (err as Error).message, { icon: '⚠️', type: 'error' })
     }
 
     closeSheet()

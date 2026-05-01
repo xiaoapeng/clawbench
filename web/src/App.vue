@@ -62,11 +62,9 @@
       <ChatPanel
         :open="chatOpen"
         :current-file="currentFile"
-        :chat-session-state="chatSessionState"
         @close="chatOpen = false"
         @open="chatOpen = true"
         @message="handleChatMessage()"
-        :initial-tab="initialChatTab"
       />
 
       <GitHistoryDrawer
@@ -116,14 +114,14 @@
         @close="proxyOpen = false"
       />
 
-      <!-- Quote question floating bar -->
+      <!-- Quote question floating bar — uses session identity singleton -->
       <QuoteQuestionBar
         :visible="quoteQuestion.visible.value"
         :quoteData="quoteQuestion.quoteData.value"
-        :sessionIcon="chatSessionState.getAgentIcon(chatSessionState.currentAgentId)"
-        :sessionTitle="chatSessionState.currentSessionTitle"
-        :currentSessionId="chatSessionState.currentSessionId"
-        @send="quoteQuestion.sendMessage($event, chatSessionState.currentSessionId)"
+        :sessionIcon="getAgentIcon(sessionIdentity.currentAgentId.value)"
+        :sessionTitle="sessionIdentity.currentSessionTitle.value"
+        :currentSessionId="sessionIdentity.currentSessionId.value"
+        @send="quoteQuestion.sendMessage($event, sessionIdentity.currentSessionId.value)"
         @close="quoteQuestion.closeSheet()"
         @pin="quoteQuestion.pinBar()"
         @open-sessions="handleQuoteOpenSessions"
@@ -132,8 +130,8 @@
       <!-- Session drawer for quote-question session switching -->
       <SessionDrawer
         :open="quoteSessionDrawerOpen"
-        :currentSessionId="chatSessionState.currentSessionId"
-        :runningSessionIds="chatSessionState.runningSessions"
+        :currentSessionId="sessionIdentity.currentSessionId.value"
+        :runningSessionIds="sessionIdentity.runningSessions.value"
         @close="quoteSessionDrawerOpen = false"
         @select="handleQuoteSessionSelect"
         @create="handleQuoteSessionCreate"
@@ -210,7 +208,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, reactive, onMounted, onUnmounted, provide, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, provide, nextTick } from 'vue'
 import AppHeader from './components/common/AppHeader.vue'
 import FileManager from './components/file/FileManager.vue'
 import WelcomeView from './components/WelcomeView.vue'
@@ -229,6 +227,8 @@ import ProxyPanel from './components/proxy/ProxyPanel.vue'
 import PortForwardBrowser from './components/proxy/PortForwardBrowser.vue'
 import QuoteQuestionBar from './components/common/QuoteQuestionBar.vue'
 import { useQuoteQuestion } from './composables/useQuoteQuestion.ts'
+import { useSessionIdentity } from './composables/useSessionIdentity.ts'
+import { useAgents } from './composables/useAgents.ts'
 import { useToast } from './composables/useToast.ts'
 import { useAppMode } from './composables/useAppMode.ts'
 import { usePortForward, setOpenPortBrowser } from './composables/usePortForward.ts'
@@ -256,12 +256,14 @@ const markdownViewMode = ref('rendered')
 
 // Chat
 const chatOpen = ref(false)
-const initialChatTab = ref(null)
 
 // Global toast
 const toast = useToast()
 provide('toast', toast)
 
+// Session identity singleton — single source of truth for session state
+const sessionIdentity = useSessionIdentity()
+const { getAgentIcon } = useAgents()
 
 // TOC state
 const tocOpen = ref(false)
@@ -279,18 +281,6 @@ const proxyOpen = ref(false)
 
 // Quote question feature
 const quoteQuestion = useQuoteQuestion()
-const chatSessionState = reactive({
-  currentSessionId: '',
-  currentSessionTitle: '',
-  currentAgentId: '',
-  agentHeaderTitle: '',
-  getAgentIcon: () => '🤖',
-  getAgentName: () => '助手',
-  switchSession: () => {},
-  createSession: () => {},
-  deleteSession: () => {},
-  runningSessions: new Set(),
-})
 const quoteSessionDrawerOpen = ref(false)
 
 // Open session drawer directly when user clicks session info in QuoteQuestionBar
@@ -299,17 +289,17 @@ function handleQuoteOpenSessions() {
 }
 
 function handleQuoteSessionSelect(sessionId) {
-  chatSessionState.switchSession(sessionId)
+  sessionIdentity.switchSession(sessionId)
   quoteSessionDrawerOpen.value = false
 }
 
 function handleQuoteSessionCreate(agentId) {
-  chatSessionState.createSession(agentId)
+  sessionIdentity.createSession(agentId)
   quoteSessionDrawerOpen.value = false
 }
 
 function handleQuoteSessionDelete(sessionId, backend) {
-  chatSessionState.deleteSession(sessionId, backend)
+  sessionIdentity.deleteSession(sessionId, backend)
 }
 
 // 抽屉互斥：打开一个时关闭其他（瞬间关闭，无动画）
@@ -338,12 +328,6 @@ function openDrawer(name, tab = null) {
       ref.value = false
     }
   })
-  // 如果是 chat 抽屉，设置 initial tab
-  if (name === 'chat' && tab) {
-    initialChatTab.value = tab
-  } else {
-    initialChatTab.value = null
-  }
   // 打开目标抽屉
   drawerStates[name].value = true
 }
@@ -559,40 +543,9 @@ onMounted(async () => {
         return
     }
     initMermaid()
-    // Pre-fetch current session info for QuoteQuestionBar
-    // (ChatPanel may not be opened yet, so chatSessionState would be empty)
-    try {
-      const [chatResp, agentsResp] = await Promise.all([
-        fetch('/api/ai/chat?limit=1'),
-        fetch('/api/agents'),
-      ])
-      if (chatResp.ok) {
-        const chatData = await chatResp.json()
-        if (chatData.sessionId) {
-          chatSessionState.currentSessionId = chatData.sessionId
-          chatSessionState.currentSessionTitle = chatData.sessionTitle || ''
-          chatSessionState.currentAgentId = chatData.agentId || ''
-        }
-      }
-      if (agentsResp.ok) {
-        const agentsData = await agentsResp.json()
-        const agents = agentsData.agents || []
-        // Provide getAgentIcon/getAgentName with the loaded agents list
-        chatSessionState.getAgentIcon = (agentId) => {
-          const agent = agents.find(a => a.id === agentId)
-          return agent ? agent.icon : '🤖'
-        }
-        chatSessionState.getAgentName = (agentId) => {
-          const agent = agents.find(a => a.id === agentId)
-          return agent ? agent.name : (agentId || '助手')
-        }
-        // Set agentHeaderTitle based on current agent
-        if (chatSessionState.currentAgentId) {
-          const agent = agents.find(a => a.id === chatSessionState.currentAgentId)
-          chatSessionState.agentHeaderTitle = agent ? `${agent.icon} ${agent.name}` : 'AI 对话'
-        }
-      }
-    } catch (_) {}
+    // Pre-fill session identity from API so QuoteQuestionBar shows correct info
+    // even before ChatPanel is opened
+    await sessionIdentity.initSessionFromAPI()
     // Check unread chat messages on startup
     try {
         const sr = await fetch('/api/ai/sessions')
