@@ -16,20 +16,26 @@ BIN="./clawbench"
 DEV_BACKEND_PID_FILE="/tmp/${NAME}-backend.pid"
 DEV_PID_FILE="/tmp/${NAME}-vite.pid"
 
-# Dev 模式端口（与正式版分离）
-DEV_BACKEND_PORT=20002
-DEV_FRONTEND_PORT=20001
-DEV_HOST="localhost"
-
 get_watch_dir() {
     grep "^watch_dir:" "config.yaml" 2>/dev/null | awk '{print $2}' | tr -d '"' || echo ""
 }
 
+get_dev_port() {
+    local key="$1"
+    local default="$2"
+    local val=$(sed -n '/^dev:/,/^[a-z]/{/^  '"$key"':/p}' "config.yaml" 2>/dev/null | awk '{print $2}' | tr -d '"' || echo "")
+    echo "${val:-$default}"
+}
+
 get_dev_host() {
-    # Try to read dev.host from config.yaml; fallback to localhost
     local host=$(sed -n '/^dev:/,/^[a-z]/{/^  host:/p}' "config.yaml" 2>/dev/null | awk '{print $2}' | tr -d '"' || echo "")
     echo "${host:-localhost}"
 }
+
+# Dev 模式端口（从 config.yaml 读取，与正式版分离）
+DEV_BACKEND_PORT=$(get_dev_port "port" 20002)
+DEV_FRONTEND_PORT=$(get_dev_port "frontend_port" 20001)
+DEV_HOST=$(get_dev_host)
 
 check_binary() {
     if [[ ! -f "$BIN" ]]; then
@@ -72,7 +78,6 @@ start_dev() {
 
     check_binary
 
-    DEV_HOST=$(get_dev_host)
     local WATCH_DIR=$(get_watch_dir)
     echo "=== Starting $NAME (dev mode) ==="
     echo "  Binary:   $BIN"
@@ -96,7 +101,7 @@ start_dev() {
     echo "Dev backend started (PID $(cat "$DEV_BACKEND_PID_FILE")) on port $DEV_BACKEND_PORT"
 
     # Start Vite dev server
-    VITE_BACKEND_PORT=$DEV_BACKEND_PORT nohup npx vite --port $DEV_FRONTEND_PORT > /tmp/vite-dev.log 2>&1 &
+    VITE_BACKEND_PORT=$DEV_BACKEND_PORT VITE_FRONTEND_PORT=$DEV_FRONTEND_PORT nohup npx vite --port $DEV_FRONTEND_PORT > /tmp/vite-dev.log 2>&1 &
     echo $! > "$DEV_PID_FILE"
     echo "Vite dev server started (PID $(cat "$DEV_PID_FILE")) on port $DEV_FRONTEND_PORT"
     echo ""

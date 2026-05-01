@@ -40,6 +40,9 @@ function hljsThemeWrapper(): Plugin {
   }
 }
 
+const backendPort = process.env.VITE_BACKEND_PORT || 20000
+const frontendPort = parseInt(process.env.VITE_FRONTEND_PORT || '20001', 10)
+
 export default defineConfig({
   plugins: [vue(), hljsThemeWrapper()],
   root: 'web',
@@ -47,10 +50,10 @@ export default defineConfig({
   server: {
     host: 'localhost',
     allowedHosts: ['xulongzhe.top', 'your-domain.com', 'localhost', '127.0.0.1'],
-    port: 20001,
+    port: frontendPort,
     proxy: {
       '/api': {
-        target: `http://localhost:${process.env.VITE_BACKEND_PORT || 20000}`,
+        target: `http://localhost:${backendPort}`,
         // Don't buffer SSE responses - needed for streaming chat
         configure: (proxy) => {
           proxy.on('proxyRes', (proxyRes) => {
@@ -61,9 +64,9 @@ export default defineConfig({
           })
         },
       },
-      '/login': `http://localhost:${process.env.VITE_BACKEND_PORT || 20000}`,
-      '/dialog': `http://localhost:${process.env.VITE_BACKEND_PORT || 20000}`,
-      '/assets': `http://localhost:${process.env.VITE_BACKEND_PORT || 20000}`,
+      '/login': `http://localhost:${backendPort}`,
+      '/dialog': `http://localhost:${backendPort}`,
+      '/assets': `http://localhost:${backendPort}`,
     },
   },
   build: {
