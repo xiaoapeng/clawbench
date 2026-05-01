@@ -26,14 +26,14 @@ const runningSessions = ref(new Set<string>())
 let _switchSession: ((sessionId: string) => Promise<void>) | null = null
 let _createSession: ((agentId?: string) => Promise<void>) | null = null
 let _deleteSession: ((sessionId: string, backend?: string) => Promise<void>) | null = null
-let _sendMessage: ((text: string) => Promise<void>) | null = null
+let _sendMessage: ((text: string, filePaths?: string[]) => Promise<void>) | null = null
 let _openChatPanel: (() => void) | null = null
 
 export interface SessionActions {
   switchSession: (sessionId: string) => Promise<void>
   createSession: (agentId?: string) => Promise<void>
   deleteSession: (sessionId: string, backend?: string) => Promise<void>
-  sendMessage: (text: string) => Promise<void>
+  sendMessage: (text: string, filePaths?: string[]) => Promise<void>
   openChatPanel: () => void
 }
 
@@ -146,9 +146,9 @@ export function useSessionIdentity() {
    * Send a message to the current session. Delegates to ChatPanel
    * if available, otherwise makes a direct API call.
    */
-  async function sendMessage(text: string) {
+  async function sendMessage(text: string, filePaths?: string[]) {
     if (_sendMessage) {
-      await _sendMessage(text)
+      await _sendMessage(text, filePaths)
       return
     }
     // Fallback: direct API call (ChatPanel not yet mounted)
@@ -172,7 +172,7 @@ export function useSessionIdentity() {
       await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify({ message: text, filePaths: filePaths || [] }),
       })
     } catch (err) {
       console.error('Failed to send message:', err)

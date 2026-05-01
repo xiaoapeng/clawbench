@@ -259,7 +259,7 @@ identity.registerSessionActions({
     cleanupActiveStream()
     await session.deleteSession(sessionId, backend)
   },
-  sendMessage: (text) => sendMessage(text),
+  sendMessage: (text, filePaths) => sendMessage(text, filePaths),
   openChatPanel: () => emit('open'),
 })
 
@@ -315,13 +315,14 @@ async function handleDeleteSessionById(sessionId, backend) {
   await session.deleteSession(sessionId, backend)
 }
 
-async function sendMessage(text) {
+async function sendMessage(text, extraFilePaths) {
     const inputText = text !== undefined ? text : (inputBarRef.value?.inputText?.trim() || '')
     const hasFiles = pendingFiles.value.length > 0 || attachedFiles.value.length > 0
 
     if ((!inputText && !hasFiles) || inputDisabled.value) return
 
-    const filePaths = attachedFiles.value.length > 0 ? [...attachedFiles.value] : []
+    // Merge attached files from the input bar with extra file paths (e.g. from quote-question)
+    const filePaths = [...(extraFilePaths || []), ...(attachedFiles.value.length > 0 ? attachedFiles.value : [])]
     const uploadedFiles = pendingFiles.value.map(f => ({ path: f.path }))
     const projectFiles = filePaths.map(p => ({ path: p }))
 

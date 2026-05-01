@@ -154,10 +154,14 @@ export function useQuoteQuestion() {
 
     const message = `\`\`\`${langPrefix}${q.filePath}${lineSuffix}\n${q.text}\n\`\`\`\n\n${userMessage.trim()}`
 
+    // Pass the quoted file as a file attachment so the backend builds
+    // the [当前文件: ...] prompt prefix and sets the CLI work_dir.
+    const filePaths = q.filePath ? [q.filePath] : []
+
     // Delegate to session identity singleton — it routes to ChatPanel's
     // sendMessage if registered, otherwise falls back to a direct API call.
     try {
-      await sessionIdentity.sendMessage(message)
+      await sessionIdentity.sendMessage(message, filePaths)
       toast.show('已发送到会话', { icon: '✅', type: 'success', duration: 2000 })
     } catch (err) {
       toast.show('发送失败: ' + (err as Error).message, { icon: '⚠️', type: 'error' })
