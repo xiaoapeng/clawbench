@@ -134,7 +134,7 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
               </svg>
-              <span v-if="store.state.chatUnread" class="dock-badge"></span>
+              <span v-if="store.state.chatUnread && !chatOpen" class="dock-badge"></span>
             </button>
             <button class="dock-btn" :class="{ active: fileManagerOpen }" @click.stop="openDrawer('fileManager')" title="文件管理器">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -389,7 +389,7 @@ async function handleDelete(path) {
 
 function handleChatMessage() {
     handleRefresh()
-    if (!chatOpen.value) chatUnread.value = true
+    if (!chatOpen.value) store.state.chatUnread = true
 }
 
 async function handleRefresh() {
@@ -653,14 +653,20 @@ onUnmounted(() => {
     right: 4px;
     width: 8px;
     height: 8px;
-    background: var(--danger-color, #dc3545);
+    background: var(--accent-color, #0066cc);
     border-radius: 50%;
     pointer-events: none;
-    animation: badge-pulse 2s ease-in-out infinite;
+    animation: dock-badge-glow 2.4s ease-in-out infinite;
 }
 
-@keyframes badge-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
+@keyframes dock-badge-glow {
+    0%, 100% {
+        box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-color, #0066cc) 40%, transparent);
+        transform: scale(1);
+    }
+    50% {
+        box-shadow: 0 0 6px 2px color-mix(in srgb, var(--accent-color, #0066cc) 30%, transparent);
+        transform: scale(1.1);
+    }
 }
 </style>

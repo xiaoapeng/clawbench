@@ -30,7 +30,7 @@
       <!-- Empty state -->
       <div v-else class="proxy-empty">
         <div class="proxy-empty-text">暂无转发端口</div>
-        <div class="proxy-empty-hint">添加服务器上的端口，即可在 WebView 中访问</div>
+        <div class="proxy-empty-hint">添加服务器上的端口，即可在浏览器或其他应用中直接访问</div>
       </div>
 
       <!-- Add port form -->
