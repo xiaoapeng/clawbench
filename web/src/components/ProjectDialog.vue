@@ -271,10 +271,14 @@ async function confirm() {
 .dialog-item {
   display: flex;
   align-items: center;
-  padding: 5px 16px;
+  padding: 4px 16px;
+  min-height: 36px;
   cursor: pointer;
   gap: 8px;
   transition: background 0.1s;
+}
+.dialog-item + .dialog-item {
+  border-top: 1px solid var(--border-color, #e5e5e5);
 }
 .dialog-item:hover { background: var(--bg-tertiary, #f0f0f0); }
 .dialog-item.selected { background: var(--accent-color, #0066cc); color: #fff; }
@@ -282,7 +286,7 @@ async function confirm() {
 
 .item-icon-svg { flex-shrink: 0; color: var(--accent-color, #0066cc); }
 .dialog-item.selected .item-icon-svg { color: #fff; }
-.item-name { flex: 1; font-size: 14px; color: var(--text-primary, #1a1a1a); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item-name { flex: 1; font-size: 13px; color: var(--text-primary, #1a1a1a); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* Item action buttons */
 .item-action-btn {

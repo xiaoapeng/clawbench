@@ -596,16 +596,22 @@ function doDelete() {
 
 
 /* ── File Items ── */
+
+.file-item + .file-item {
+    border-top: 1px solid var(--border-color, #e5e5e5);
+}
+
 .file-item {
     display: flex;
     align-items: center;
-    padding: 6px 12px;
-    border-radius: var(--radius-sm, 6px);
+    padding: 4px 16px;
+    border-radius: 0;
+    min-height: 36px;
     cursor: pointer;
     transition: background 0.15s;
-    gap: 10px;
+    gap: 8px;
     color: var(--text-secondary, #666);
-    font-size: 14px;
+    font-size: 13px;
     user-select: none;
     -webkit-user-select: none;
 }
@@ -645,8 +651,8 @@ function doDelete() {
 
 .file-icon {
     flex-shrink: 0;
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
 }
 
 .file-name {
