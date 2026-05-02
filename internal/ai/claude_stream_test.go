@@ -952,3 +952,41 @@ func TestStreamParser_ToolUseInputInContentBlockStartWithDelta(t *testing.T) {
 		t.Errorf("expected input to contain 'file_path', got %q", stopEvent.Tool.Input)
 	}
 }
+
+func TestStreamParser_EmptyInputInStartDoesNotCorruptDelta(t *testing.T) {
+	// When content_block_start has input:{} (placeholder) and input_json_delta
+	// follows, the empty {} must NOT be set on currentTool.Input — otherwise
+	// appending deltas would produce "{}{...}" which is invalid JSON.
+	lines := []string{
+		`{"type":"stream_event","event":{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_999","name":"Bash","input":{}}}}`,
+		`{"type":"stream_event","event":{"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"command\""}}}`,
+		`{"type":"stream_event","event":{"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":":\"ls\"}"}}}`,
+		`{"type":"stream_event","event":{"type":"content_block_stop","index":1}}`,
+	}
+
+	events := parseLines(lines)
+
+	// Find the stop event
+	var stopEvent *StreamEvent
+	for i := range events {
+		if events[i].Type == "tool_use" && events[i].Tool != nil && events[i].Tool.Done {
+			stopEvent = &events[i]
+			break
+		}
+	}
+	if stopEvent == nil {
+		t.Fatal("expected a tool_use stop event with Done=true")
+	}
+
+	// Input should be valid JSON accumulated from deltas only (NOT "{}{...}")
+	expectedInput := `{"command":"ls"}`
+	if stopEvent.Tool.Input != expectedInput {
+		t.Errorf("expected input %q, got %q", expectedInput, stopEvent.Tool.Input)
+	}
+
+	// Verify it's valid JSON
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(stopEvent.Tool.Input), &parsed); err != nil {
+		t.Errorf("input is not valid JSON: %v, raw=%q", err, stopEvent.Tool.Input)
+	}
+}

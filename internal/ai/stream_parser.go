@@ -288,7 +288,11 @@ func (p *StreamParser) ParseLine(line string, ch chan<- StreamEvent) {
 				// Some CLIs (e.g., Claude CLI with certain models) include the
 				// full tool input in the content_block_start event instead of
 				// sending separate input_json_delta events.
-				if len(msg.Event.ContentBlock.Input) > 0 {
+				// Skip empty input "{}" — it's a placeholder; the real input
+				// will arrive via input_json_delta events. Setting it would
+				// cause JSON corruption when deltas are appended.
+				if len(msg.Event.ContentBlock.Input) > 0 &&
+					string(msg.Event.ContentBlock.Input) != "{}" {
 					p.currentTool.Input = string(msg.Event.ContentBlock.Input)
 				}
 				// Send a copy to the channel so that later mutations (Input accumulation,
