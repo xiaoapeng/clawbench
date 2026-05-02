@@ -3,7 +3,9 @@
     <!-- Top action bar (above input box) -->
     <div class="chat-top-actions">
       <div class="chat-action-group">
-        <button class="chat-action-btn" :class="{ 'has-unread': chatUnread, 'has-running': chatRunning && !chatUnread }" @click="$emit('open-session-tab', 'sessions')" title="会话">
+        <button class="chat-action-btn" :class="{ 'has-unread': chatUnread, 'has-running': chatRunning && !chatUnread }"
+          @click="$emit('open-session-tab', 'sessions')"
+          title="会话">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
           </svg>
@@ -14,6 +16,7 @@
           @touchstart="onCreateTouchStart"
           @touchmove="onCreateTouchMove"
           @touchend="onCreateTouchEnd"
+          @touchcancel="onCreateTouchCancel"
           @contextmenu.prevent="onCreateContextMenu"
           title="选择智能体（长按直接新建）">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
@@ -21,20 +24,26 @@
           </svg>
           <span class="chat-action-label">新建</span>
         </button>
-        <button class="chat-action-btn chat-action-btn-delete" :class="{ disabled: !currentSessionId }" @click="handleDelete" :title="currentSessionId ? '删除当前会话' : '无会话可删除'">
+        <button class="chat-action-btn chat-action-btn-delete" :class="{ disabled: !currentSessionId }"
+          @click="handleDelete"
+          :title="currentSessionId ? '删除当前会话' : '无会话可删除'">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
             <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
           </svg>
           <span class="chat-action-label">删除</span>
         </button>
       </div>
-      <button class="chat-action-btn" :class="{ 'has-unread': taskUnread }" @click="$emit('open-session-tab', 'tasks')" title="定时任务">
+      <button class="chat-action-btn" :class="{ 'has-unread': taskUnread }"
+        @click="$emit('open-session-tab', 'tasks')"
+        title="定时任务">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
           <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
         </svg>
         <span class="chat-action-label">定时</span>
       </button>
-      <button class="chat-action-btn" :class="{ active: autoSpeechEnabled }" @click="$emit('toggle-auto-speech')" title="自动朗读">
+      <button class="chat-action-btn" :class="{ active: autoSpeechEnabled }"
+        @click="$emit('toggle-auto-speech')"
+        title="自动朗读">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
           <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
           <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
@@ -115,14 +124,14 @@
           @keydown.enter.exact.prevent="$emit('send', inputText.trim())"
           @input="autoResizeTextarea"
           @blur="collapseTextarea"></textarea>
-        <button v-if="hasInputContent" class="chat-send-btn" @click.stop="handleSendClick" title="发送">
+        <button v-if="loading" class="chat-stop-btn" @click="$emit('cancel')" title="停止生成">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+        </button>
+        <button v-else class="chat-send-btn" @click.stop="handleSendClick" :class="{ disabled: !hasInputContent }" title="发送">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
             <line x1="22" y1="2" x2="11" y2="13"/>
             <polygon points="22 2 15 22 11 13 2 9 22 2"/>
           </svg>
-        </button>
-        <button v-else-if="loading" class="chat-stop-btn" @click="$emit('cancel')" title="停止生成">
-          <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
         </button>
       </div>
       <!-- Teleported attach menu (avoids overflow:hidden clipping) -->
@@ -281,11 +290,14 @@ const LONG_PRESS_MS = 500
 const MOVE_THRESHOLD = 10
 
 function onCreateTouchStart(e) {
+  const btn = e.currentTarget
+  btn.classList.add('pressing')
   const touch = e.touches[0]
   createPressStartX = touch.clientX
   createPressStartY = touch.clientY
   createPressTimer = setTimeout(() => {
     createPressTimer = null
+    btn.classList.remove('pressing')
     lastCreateEmitTime = Date.now()
     emit('create-session')
   }, LONG_PRESS_MS)
@@ -305,13 +317,24 @@ function onCreateTouchMove(e) {
 // Prevent double-fire: touch devices fire both touchend → click
 let lastCreateEmitTime = 0
 
-function onCreateTouchEnd() {
+function onCreateTouchEnd(e) {
+  const btn = e.currentTarget
+  btn.classList.remove('pressing')
   if (createPressTimer) {
     clearTimeout(createPressTimer)
     createPressTimer = null
     // Short tap: show agent selector
     lastCreateEmitTime = Date.now()
     emit('show-agent-selector')
+  }
+}
+
+function onCreateTouchCancel(e) {
+  const btn = e.currentTarget
+  btn.classList.remove('pressing')
+  if (createPressTimer) {
+    clearTimeout(createPressTimer)
+    createPressTimer = null
   }
 }
 
@@ -554,7 +577,8 @@ defineExpose({
   }
 }
 
-.chat-action-btn:active {
+.chat-action-btn:active,
+.chat-action-btn.pressing {
   color: var(--accent-color, #0066cc);
   background: color-mix(in srgb, var(--accent-color, #0066cc) 15%, transparent);
   transform: scale(0.92);
