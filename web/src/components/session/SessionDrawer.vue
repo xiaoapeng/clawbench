@@ -5,6 +5,11 @@
         <rect x="3" y="6" width="18" height="12" rx="2"/><line x1="12" y1="2" x2="12" y2="6"/><circle cx="9" cy="12" r="1" fill="currentColor"/><circle cx="15" cy="12" r="1" fill="currentColor"/><line x1="1" y1="10" x2="3" y2="10"/><line x1="1" y1="14" x2="3" y2="14"/><line x1="21" y1="10" x2="23" y2="10"/><line x1="21" y1="14" x2="23" y2="14"/>
       </svg>
       <span class="bs-header-title">会话</span>
+      <button class="create-btn" @click.stop="showAgentSelector = true" title="新建会话">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+      </button>
     </template>
 
     <div class="session-list">
@@ -43,18 +48,6 @@
         </div>
       </div>
     </div>
-
-    <template #footer>
-      <div class="session-footer">
-        <button class="create-btn" @click="showAgentSelector = true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-            <line x1="12" y1="5" x2="12" y2="19"/>
-            <line x1="5" y1="12" x2="19" y2="12"/>
-          </svg>
-          新建会话
-        </button>
-      </div>
-    </template>
   </BottomSheet>
 
   <!-- Agent selector dialog -->
@@ -338,31 +331,23 @@ watch(() => props.open, async (val) => {
   background: var(--bg-tertiary, #f0f0f0);
 }
 
-.session-footer {
-  display: flex;
-  gap: 8px;
-  width: 100%;
-}
-
 .create-btn {
-  flex: 1;
-  display: inline-flex;
+  margin-left: auto;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: none;
+  color: var(--accent-color, #0066cc);
+  cursor: pointer;
+  display: flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  padding: 6px 12px;
-  border: none;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  background: var(--accent-color, #0066cc);
-  color: #fff;
+  border-radius: 4px;
   transition: background 0.15s;
 }
 
 .create-btn:hover {
-  background: #0055aa;
+  background: rgba(0, 102, 204, 0.1);
 }
 
 /* Agent selector content */

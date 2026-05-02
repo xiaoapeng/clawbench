@@ -34,10 +34,34 @@ export function humanizeCron(expr: string): string {
     const parts = expr.split(' ')
     if (parts.length !== 5) return expr
     const [min, hour, day, month, weekday] = parts
+    const isNumeric = (s: string) => /^\d+$/.test(s)
+
+    // Every N minutes: */N * * * *
     if (min.startsWith('*/') && hour === '*') return `每 ${min.slice(2)} 分钟`
-    if (hour.startsWith('*/') && min === '0') return `每 ${hour.slice(2)} 小时`
-    if (min === '0' && !hour.includes('/') && day === '*' && month === '*' && weekday === '*') return `每天 ${hour}:00`
-    if (min === '0' && weekday === '1-5') return `工作日 ${hour}:00`
+    // Every N hours: 0 */N * * *
+    if (hour.startsWith('*/') && day === '*' && month === '*' && weekday === '*') return `每 ${hour.slice(2)} 小时`
+
+    const timeStr = isNumeric(hour) ? `${hour}:${min.padStart(2, '0')}` : ''
+
+    // Hourly at minute M: M * * * *
+    if (isNumeric(min) && hour === '*' && day === '*' && month === '*' && weekday === '*') {
+        return `每小时 :${min.padStart(2, '0')}`
+    }
+    // Daily: M H * * *
+    if (isNumeric(min) && isNumeric(hour) && day === '*' && month === '*' && weekday === '*') {
+        return `每天 ${timeStr}`
+    }
+    // Weekly: M H * * DOW
+    const weekdayNames = ['日', '一', '二', '三', '四', '五', '六']
+    if (isNumeric(min) && isNumeric(hour) && day === '*' && month === '*') {
+        if (weekday === '1-5') return `工作日 ${timeStr}`
+        if (isNumeric(weekday)) return `每周${weekdayNames[parseInt(weekday)]} ${timeStr}`
+    }
+    // Monthly: M H D * *
+    if (isNumeric(min) && isNumeric(hour) && isNumeric(day) && month === '*' && weekday === '*') {
+        return `每月${day}日 ${timeStr}`
+    }
+
     return expr
 }
 

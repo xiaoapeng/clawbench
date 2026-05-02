@@ -234,7 +234,9 @@ func (s *Scheduler) executeTask(task *model.ScheduledTask, projectPath string) {
 	}
 
 	// Build chat request — no session resume, standalone execution
-	systemPrompt := agent.SystemPrompt
+	// Strip schedule-proposal instructions from system prompt to prevent
+	// recursive task creation during scheduled execution
+	systemPrompt := stripScheduleProposal(agent.SystemPrompt)
 
 	chatReq := ai.ChatRequest{
 		Prompt:       task.Prompt,
@@ -393,6 +395,35 @@ func (s *Scheduler) executeTask(task *model.ScheduledTask, projectPath string) {
 	)
 }
 
+// stripScheduleProposal removes the schedule-proposal instruction section from
+// a system prompt to prevent recursive task creation when an agent executes a
+// scheduled task. It strips from "## 定时任务" through the line containing
+// "输出标签后", which is the final line of the schedule-proposal block in
+// all agent YAML files.
+func stripScheduleProposal(prompt string) string {
+	startMarker := "## 定时任务"
+	startIdx := strings.Index(prompt, startMarker)
+	if startIdx == -1 {
+		return prompt
+	}
+
+	endMarker := "输出标签后"
+	endIdx := strings.Index(prompt, endMarker)
+	if endIdx == -1 || endIdx < startIdx {
+		return prompt
+	}
+
+	// Find the end of the line containing endMarker
+	lineEnd := strings.Index(prompt[endIdx:], "\n")
+	if lineEnd == -1 {
+		// End marker is on the last line — strip from start to end of string
+		return strings.TrimSpace(prompt[:startIdx])
+	}
+
+	// Strip from startIdx to endIdx + lineEnd + 1
+	return prompt[:startIdx] + prompt[endIdx+lineEnd+1:]
+}
+
 // GetTasks retrieves all tasks for a project path. If projectPath is empty, retrieves all tasks.
 func GetTasks(projectPath string) ([]model.ScheduledTask, error) {
 	var tasks []model.ScheduledTask
@@ -400,9 +431,9 @@ func GetTasks(projectPath string) ([]model.ScheduledTask, error) {
 	var args []interface{}
 
 	if projectPath == "" {
-		query = "SELECT id, project_path, name, description, cron_expr, agent_id, prompt, session_id, status, repeat_mode, max_runs, last_run_at, next_run_at, run_count, created_at, updated_at FROM scheduled_tasks WHERE status != 'deleted' ORDER BY created_at DESC"
+		query = "SELECT id, project_path, name, cron_expr, agent_id, prompt, session_id, status, repeat_mode, max_runs, last_run_at, next_run_at, run_count, created_at, updated_at FROM scheduled_tasks WHERE status != 'deleted' ORDER BY created_at DESC"
 	} else {
-		query = "SELECT id, project_path, name, description, cron_expr, agent_id, prompt, session_id, status, repeat_mode, max_runs, last_run_at, next_run_at, run_count, created_at, updated_at FROM scheduled_tasks WHERE project_path = ? AND status != 'deleted' ORDER BY created_at DESC"
+		query = "SELECT id, project_path, name, cron_expr, agent_id, prompt, session_id, status, repeat_mode, max_runs, last_run_at, next_run_at, run_count, created_at, updated_at FROM scheduled_tasks WHERE project_path = ? AND status != 'deleted' ORDER BY created_at DESC"
 		args = []interface{}{projectPath}
 	}
 
@@ -415,7 +446,7 @@ func GetTasks(projectPath string) ([]model.ScheduledTask, error) {
 	for rows.Next() {
 		var t model.ScheduledTask
 		var lastRun, nextRun sql.NullTime
-		if err := rows.Scan(&t.ID, &t.ProjectPath, &t.Name, &t.Description, &t.CronExpr, &t.AgentID, &t.Prompt, &t.SessionID, &t.Status, &t.RepeatMode, &t.MaxRuns, &lastRun, &nextRun, &t.RunCount, &t.CreatedAt, &t.UpdatedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.ProjectPath, &t.Name, &t.CronExpr, &t.AgentID, &t.Prompt, &t.SessionID, &t.Status, &t.RepeatMode, &t.MaxRuns, &lastRun, &nextRun, &t.RunCount, &t.CreatedAt, &t.UpdatedAt); err != nil {
 			return nil, err
 		}
 		if lastRun.Valid {
@@ -434,9 +465,9 @@ func GetTaskByID(id string) (*model.ScheduledTask, error) {
 	var t model.ScheduledTask
 	var lastRun, nextRun sql.NullTime
 	err := DB.QueryRow(
-		"SELECT id, project_path, name, description, cron_expr, agent_id, prompt, session_id, status, repeat_mode, max_runs, last_run_at, next_run_at, run_count, created_at, updated_at FROM scheduled_tasks WHERE id = ?",
+		"SELECT id, project_path, name, cron_expr, agent_id, prompt, session_id, status, repeat_mode, max_runs, last_run_at, next_run_at, run_count, created_at, updated_at FROM scheduled_tasks WHERE id = ?",
 		id,
-	).Scan(&t.ID, &t.ProjectPath, &t.Name, &t.Description, &t.CronExpr, &t.AgentID, &t.Prompt, &t.SessionID, &t.Status, &t.RepeatMode, &t.MaxRuns, &lastRun, &nextRun, &t.RunCount, &t.CreatedAt, &t.UpdatedAt)
+	).Scan(&t.ID, &t.ProjectPath, &t.Name, &t.CronExpr, &t.AgentID, &t.Prompt, &t.SessionID, &t.Status, &t.RepeatMode, &t.MaxRuns, &lastRun, &nextRun, &t.RunCount, &t.CreatedAt, &t.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -452,11 +483,11 @@ func GetTaskByID(id string) (*model.ScheduledTask, error) {
 // saveTask inserts or updates a task in the database.
 func saveTask(task *model.ScheduledTask) error {
 	_, err := DB.Exec(
-		`INSERT INTO scheduled_tasks (id, project_path, name, description, cron_expr, agent_id, prompt, session_id, status, repeat_mode, max_runs, next_run_at, run_count, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		 ON CONFLICT(id) DO UPDATE SET name=?, description=?, cron_expr=?, agent_id=?, prompt=?, session_id=?, status=?, repeat_mode=?, max_runs=?, next_run_at=?, run_count=?, updated_at=CURRENT_TIMESTAMP`,
-		task.ID, task.ProjectPath, task.Name, task.Description, task.CronExpr, task.AgentID, task.Prompt, task.SessionID, task.Status, task.RepeatMode, task.MaxRuns, task.NextRunAt, task.RunCount, task.CreatedAt, task.UpdatedAt,
-		task.Name, task.Description, task.CronExpr, task.AgentID, task.Prompt, task.SessionID, task.Status, task.RepeatMode, task.MaxRuns, task.NextRunAt, task.RunCount,
+		`INSERT INTO scheduled_tasks (id, project_path, name, cron_expr, agent_id, prompt, session_id, status, repeat_mode, max_runs, next_run_at, run_count, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(id) DO UPDATE SET name=?, cron_expr=?, agent_id=?, prompt=?, session_id=?, status=?, repeat_mode=?, max_runs=?, next_run_at=?, run_count=?, updated_at=CURRENT_TIMESTAMP`,
+		task.ID, task.ProjectPath, task.Name, task.CronExpr, task.AgentID, task.Prompt, task.SessionID, task.Status, task.RepeatMode, task.MaxRuns, task.NextRunAt, task.RunCount, task.CreatedAt, task.UpdatedAt,
+		task.Name, task.CronExpr, task.AgentID, task.Prompt, task.SessionID, task.Status, task.RepeatMode, task.MaxRuns, task.NextRunAt, task.RunCount,
 	)
 	return err
 }

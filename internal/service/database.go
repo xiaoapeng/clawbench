@@ -81,7 +81,6 @@ func InitDB() error {
 			id TEXT PRIMARY KEY,
 			project_path TEXT NOT NULL,
 			name TEXT NOT NULL,
-			description TEXT,
 			cron_expr TEXT NOT NULL,
 			agent_id TEXT NOT NULL,
 			prompt TEXT NOT NULL,

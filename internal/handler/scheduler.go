@@ -45,11 +45,7 @@ func ServeTasks(w http.ResponseWriter, r *http.Request) {
 			model.WriteErrorf(w, http.StatusBadRequest, "name, cronExpr, agentId, and prompt are required")
 			return
 		}
-		if req.AgentID == "assistant" {
-			model.WriteErrorf(w, http.StatusBadRequest, "assistant agent cannot execute scheduled tasks, please choose a specialized agent")
-			return
-		}
-		if req.RepeatMode == "" {
+	if req.RepeatMode == "" {
 			req.RepeatMode = "unlimited"
 		}
 
@@ -113,14 +109,13 @@ func ServeTaskByID(w http.ResponseWriter, r *http.Request) {
 
 	case http.MethodPut:
 		var req struct {
-			Action      string `json:"action"`       // "pause", "resume", or "update"
-			Name        string `json:"name"`
-			CronExpr    string `json:"cron_expr"`
-			AgentID     string `json:"agent_id"`
-			Prompt      string `json:"prompt"`
-			Description string `json:"description"`
-			RepeatMode  string `json:"repeat_mode"`
-			MaxRuns     int    `json:"max_runs"`
+			Action     string `json:"action"`       // "pause", "resume", or "update"
+			Name       string `json:"name"`
+			CronExpr   string `json:"cron_expr"`
+			AgentID    string `json:"agent_id"`
+			Prompt     string `json:"prompt"`
+			RepeatMode string `json:"repeat_mode"`
+			MaxRuns    int    `json:"max_runs"`
 		}
 		if !decodeJSON(w, r, &req) {
 			return
@@ -156,24 +151,15 @@ func ServeTaskByID(w http.ResponseWriter, r *http.Request) {
 			task.CronExpr = req.CronExpr
 		}
 		if req.AgentID != "" {
-			if req.AgentID == "assistant" {
-				model.WriteErrorf(w, http.StatusBadRequest, "assistant agent cannot execute scheduled tasks")
-				return
-			}
 			task.AgentID = req.AgentID
 		}
 		if req.Prompt != "" {
 			task.Prompt = req.Prompt
 		}
-		if req.Description != "" {
-			task.Description = req.Description
-		}
 		if req.RepeatMode != "" {
 			task.RepeatMode = req.RepeatMode
 		}
-		if req.MaxRuns > 0 {
-			task.MaxRuns = req.MaxRuns
-		}
+		task.MaxRuns = req.MaxRuns
 
 		// Update task
 		if err := service.GlobalScheduler.UpdateTask(task); err != nil {

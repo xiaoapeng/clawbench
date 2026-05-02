@@ -64,24 +64,18 @@ export function useChatRender(options) {
   }
 
   function renderTextBlock(text, msgId, blockIdx) {
-    const proposalMatch = text.match(/<schedule-proposal(\s+confirmed)?>([\s\S]*?)<\/schedule-proposal>/)
+    const proposalMatch = text.match(/<schedule-proposal>([\s\S]*?)<\/schedule-proposal>/)
     if (proposalMatch) {
       const proposalKey = `${msgId}-${blockIdx}`
       if (!blockProposals[proposalKey]) {
         try {
-          const proposal = JSON.parse(proposalMatch[2].trim())
-          // Default to confirmed=true since backend handles task creation now
-          // Only show failed if explicitly marked with a failure indicator in the future
-          blockProposals[proposalKey] = {
-            proposal,
-            confirmed: true,
-            error: null
-          }
+          const proposal = JSON.parse(proposalMatch[1].trim())
+          blockProposals[proposalKey] = { proposal }
         } catch (e) {
           console.error('Failed to parse schedule proposal:', e)
         }
       }
-      const cleanText = text.replace(/<schedule-proposal(\s+confirmed)?>[\s\S]*?<\/schedule-proposal>/, '').trim()
+      const cleanText = text.replace(/<schedule-proposal>[\s\S]*?<\/schedule-proposal>/, '').trim()
       return cleanText ? renderMarkdown(cleanText) : ''
     }
     return renderMarkdown(text)
@@ -122,16 +116,11 @@ export function useChatRender(options) {
           if (block.type === 'text') {
             const proposalKey = `${msg.id}-${bi}`
             if (blockProposals[proposalKey]) continue
-            const proposalMatch = block.text.match(/<schedule-proposal(\s+confirmed)?>([\s\S]*?)<\/schedule-proposal>/)
+            const proposalMatch = block.text.match(/<schedule-proposal>([\s\S]*?)<\/schedule-proposal>/)
             if (proposalMatch) {
               try {
-                const proposal = JSON.parse(proposalMatch[2].trim())
-                // Default to confirmed=true since backend handles task creation now
-                blockProposals[proposalKey] = {
-                  proposal,
-                  confirmed: true,
-                  error: null
-                }
+                const proposal = JSON.parse(proposalMatch[1].trim())
+                blockProposals[proposalKey] = { proposal }
               } catch (e) {
                 console.error('Failed to parse schedule proposal:', e)
               }

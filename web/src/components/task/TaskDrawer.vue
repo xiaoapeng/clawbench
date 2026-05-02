@@ -5,13 +5,18 @@
         <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
       </svg>
       <span class="bs-header-title">定时任务</span>
+      <button class="create-btn" @click="openCreateDialog" title="新建定时任务">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+      </button>
     </template>
 
     <div class="task-list">
       <div v-if="loading" class="task-loading">加载中...</div>
       <div v-else-if="tasks.length === 0" class="task-empty">暂无定时任务</div>
       <div v-for="task in tasks" :key="task.id" class="task-item" :class="task.status">
-        <div class="task-item-main" @click="openTaskDetailDialog(task)">
+        <div class="task-item-main" @click="openEditDialog(task)">
           <div class="task-item-info">
             <div class="task-item-header">
               <span class="task-item-icon">{{ getAgentIcon(task.agentId) }}</span>
@@ -42,11 +47,12 @@
       </div>
     </div>
 
-    <TaskDetailDialog
-      :open="taskDetailOpen"
+    <TaskFormDialog
+      :open="formDialogOpen"
+      :mode="formMode"
       :task="selectedTask"
-      @close="taskDetailOpen = false"
-      @saved="() => { loadTasks(); taskDetailOpen = false }"
+      @close="formDialogOpen = false"
+      @saved="onFormSaved"
     />
   </BottomSheet>
 </template>
@@ -54,7 +60,7 @@
 <script setup>
 import { ref, watch } from 'vue'
 import BottomSheet from '@/components/common/BottomSheet.vue'
-import TaskDetailDialog from '@/components/task/TaskDetailDialog.vue'
+import TaskFormDialog from '@/components/task/TaskFormDialog.vue'
 import { useAgents } from '@/composables/useAgents.ts'
 import { humanizeCron, repeatLabel, statusLabel, formatDateTime } from '@/utils/helpers.ts'
 
@@ -67,7 +73,8 @@ const emit = defineEmits(['close'])
 const bottomSheetRef = ref(null)
 const tasks = ref([])
 const loading = ref(false)
-const taskDetailOpen = ref(false)
+const formDialogOpen = ref(false)
+const formMode = ref('create')
 const selectedTask = ref(null)
 const { agents, loadAgents, getAgentIcon } = useAgents()
 
@@ -86,9 +93,21 @@ async function loadTasks() {
   }
 }
 
-function openTaskDetailDialog(task) {
+function openCreateDialog() {
+  formMode.value = 'create'
+  selectedTask.value = null
+  formDialogOpen.value = true
+}
+
+function openEditDialog(task) {
+  formMode.value = 'edit'
   selectedTask.value = task
-  taskDetailOpen.value = true
+  formDialogOpen.value = true
+}
+
+function onFormSaved() {
+  formDialogOpen.value = false
+  loadTasks()
 }
 
 async function pauseTask(id) {
@@ -127,6 +146,25 @@ watch(() => props.open, async (val) => {
 </script>
 
 <style scoped>
+.create-btn {
+  margin-left: auto;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: none;
+  color: var(--accent-color, #0066cc);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+
+.create-btn:hover {
+  background: rgba(0, 102, 204, 0.1);
+}
+
 .task-list {
   display: flex;
   flex-direction: column;

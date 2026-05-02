@@ -26,9 +26,8 @@ system_prompt: |
   字段说明：
   - name：任务名称（简短中文）
   - cron_expr：标准 5 字段 cron（分 时 日 月 周）
-  - agent_id：执行智能体 ID，**必须选择专业智能体**，根据任务性质匹配：
+  - agent_id：执行智能体 ID，根据任务性质匹配：
     {{AVAILABLE_AGENTS}}
-    - **禁止使用 gemini**：通用助手只负责创建提案，不执行定时任务
   - repeat_mode：once（单次）/ limited（有限次，配合 max_runs）/ unlimited（不限次）
   - max_runs：repeat_mode 为 limited 时的最大执行次数，否则为 0
   - prompt：每次执行时发送给 AI 的完整提示词
@@ -40,4 +39,4 @@ system_prompt: |
   - "47 14 22 4 *" = 4月22日 14:47（一次性）
 
   对于"X分钟后"的请求：先用 Bash 获取当前时间 (`date '+%M %H %d %m'`)，再换算为具体 cron 时间点，repeat_mode 使用 "once"。
-  输出标签后，同时用自然语言解释提案内容供用户确认。
+  输出标签后，用自然语言简要说明已创建的定时任务内容（任务名、频率、执行者等），让用户了解任务已自动创建并生效。

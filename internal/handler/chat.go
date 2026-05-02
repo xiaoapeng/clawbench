@@ -733,14 +733,6 @@ func detectAndCreateScheduleProposal(text, projectPath, sessionID, agentID strin
 		effectiveAgentID = agentID
 	}
 
-	// Validate agent is not "assistant"
-	if effectiveAgentID == "assistant" {
-		slog.Error("assistant agent cannot execute scheduled tasks",
-			slog.String("session", sessionID),
-		)
-		return
-	}
-
 	// Set defaults
 	if proposal.RepeatMode == "" {
 		proposal.RepeatMode = "unlimited"
