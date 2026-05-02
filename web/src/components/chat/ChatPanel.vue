@@ -78,6 +78,7 @@
       @file-tag-click="handleFileTagClick"
       @toggle-auto-speech="autoSpeech.toggle"
       @create-session="handleCreateSession"
+      @show-agent-selector="handleShowAgentSelector"
       @delete-session="handleDeleteSession"
     />
 
@@ -317,6 +318,10 @@ function cleanupActiveStream() {
 async function handleCreateSession(agentId) {
   cleanupActiveStream()
   await session.createSession(agentId)
+}
+
+function handleShowAgentSelector() {
+  sessionDrawerRef.value?.openAgentSelector()
 }
 
 async function handleDeleteSession() {

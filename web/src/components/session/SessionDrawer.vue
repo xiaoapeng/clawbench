@@ -106,7 +106,11 @@ const sessionsWithStatus = computed(() => {
   }))
 })
 
-defineExpose({ loadSessions })
+defineExpose({ loadSessions, openAgentSelector })
+
+function openAgentSelector() {
+  showAgentSelector.value = true
+}
 
 async function loadSessions() {
   const isInitialLoad = sessions.value.length === 0

@@ -9,7 +9,13 @@
           </svg>
           <span class="chat-action-label">会话</span>
         </button>
-        <button class="chat-action-btn" @click="$emit('create-session')" title="新建会话">
+        <button class="chat-action-btn"
+          @click="handleCreateClick"
+          @touchstart.prevent="onCreateTouchStart"
+          @touchmove="onCreateTouchMove"
+          @touchend="onCreateTouchEnd"
+          @contextmenu.prevent="onCreateContextMenu"
+          title="新建会话（长按选择智能体）">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
             <path d="M12 5v14M5 12h14"/>
           </svg>
@@ -201,6 +207,7 @@ const emit = defineEmits([
   'file-tag-click',
   'toggle-auto-speech',
   'create-session',
+  'show-agent-selector',
   'delete-session',
 ])
 
@@ -262,6 +269,49 @@ const hasFileGroups = computed(() => {
   const hasCurrent = props.currentFile?.path && !props.attachedFiles.includes(props.currentFile.path)
   return hasCurrent || recentReferencedFiles.value.length > 0
 })
+
+// Long-press detection for create-session button
+let createPressTimer = null
+let createPressMoved = false
+const LONG_PRESS_MS = 400
+
+function onCreateTouchStart(e) {
+  createPressMoved = false
+  createPressTimer = setTimeout(() => {
+    createPressTimer = null
+    emit('show-agent-selector')
+  }, LONG_PRESS_MS)
+}
+
+function onCreateTouchMove() {
+  createPressMoved = true
+  if (createPressTimer) {
+    clearTimeout(createPressTimer)
+    createPressTimer = null
+  }
+}
+
+function onCreateTouchEnd() {
+  if (createPressTimer) {
+    clearTimeout(createPressTimer)
+    createPressTimer = null
+    // Short tap: emit create-session
+    emit('create-session')
+  }
+}
+
+function onCreateContextMenu(e) {
+  // Desktop: right-click = long press
+  e.preventDefault()
+  emit('show-agent-selector')
+}
+
+function handleCreateClick(e) {
+  // Only fires on desktop (click); on touch devices touchend handles it
+  // If contextmenu was triggered (right-click), skip this click
+  if (e.detail === 0) return
+  emit('create-session')
+}
 
 function handleDelete() {
   if (!props.currentSessionId) return
