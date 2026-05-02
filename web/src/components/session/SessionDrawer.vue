@@ -51,7 +51,13 @@
   </BottomSheet>
 
   <!-- Agent selector dialog -->
-  <ModalDialog :open="showAgentSelector" title="🤖 选择智能体" @close="showAgentSelector = false">
+  <ModalDialog :open="showAgentSelector" title="选择智能体" @close="showAgentSelector = false">
+    <template #header>
+      <svg class="modal-header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+        <rect x="3" y="4" width="18" height="12" rx="2"/><circle cx="9" cy="10" r="1" fill="currentColor"/><circle cx="15" cy="10" r="1" fill="currentColor"/><line x1="8" y1="16" x2="8" y2="19"/><line x1="16" y1="16" x2="16" y2="19"/>
+      </svg>
+      <span class="modal-title">选择智能体</span>
+    </template>
     <div class="agent-list">
       <button
         v-for="agent in agents"

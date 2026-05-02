@@ -1,5 +1,9 @@
 <template>
   <ModalDialog :open="open" :title="mode === 'create' ? '新建定时任务' : '编辑定时任务'" @close="$emit('close')">
+    <template #header>
+      <svg class="modal-header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      <span class="modal-title">{{ mode === 'create' ? '新建定时任务' : '编辑定时任务' }}</span>
+    </template>
     <!-- Tabs (edit mode only) -->
     <div v-if="mode === 'edit'" class="dialog-tabs-row">
       <div class="dialog-tabs">

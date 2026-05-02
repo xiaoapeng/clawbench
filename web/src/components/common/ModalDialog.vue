@@ -3,7 +3,9 @@
     <div v-show="open" class="modal-overlay" :style="{ zIndex }" @click.self="$emit('close')">
       <div class="modal-dialog" @click.stop>
         <div class="modal-header" @click="$emit('close')">
-          <span class="modal-title">{{ title }}</span>
+          <slot name="header">
+            <span class="modal-title">{{ title }}</span>
+          </slot>
         </div>
         <div class="modal-body">
           <slot />
@@ -52,11 +54,18 @@ defineEmits(['close'])
 .modal-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 6px;
   padding: 6px 10px;
   border-bottom: 1px solid var(--border-color, #e5e5e5);
   flex-shrink: 0;
   cursor: pointer;
+}
+
+.modal-header-icon {
+  flex-shrink: 0;
+  color: var(--text-primary, #1a1a1a);
+  display: flex;
+  align-items: center;
 }
 
 .modal-title {
