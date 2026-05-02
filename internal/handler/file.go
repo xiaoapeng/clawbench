@@ -67,7 +67,13 @@ func ListDir(w http.ResponseWriter, r *http.Request) {
 
 	entries, err := os.ReadDir(absPath)
 	if err != nil {
-		model.WriteError(w, model.Internal(fmt.Errorf("cannot read directory")))
+		if os.IsNotExist(err) {
+			model.WriteError(w, model.NotFound(nil, "Directory not found"))
+		} else if isNotDirError(err) {
+			model.WriteErrorf(w, http.StatusBadRequest, "Not a directory")
+		} else {
+			model.WriteError(w, model.Internal(fmt.Errorf("cannot read directory")))
+		}
 		return
 	}
 
@@ -318,7 +324,13 @@ func ServeProjects(w http.ResponseWriter, r *http.Request) {
 
 	entries, err := os.ReadDir(absPath)
 	if err != nil {
-		model.WriteError(w, model.Internal(fmt.Errorf("cannot read directory")))
+		if os.IsNotExist(err) {
+			model.WriteError(w, model.NotFound(nil, "Directory not found"))
+		} else if isNotDirError(err) {
+			model.WriteErrorf(w, http.StatusBadRequest, "Not a directory")
+		} else {
+			model.WriteError(w, model.Internal(fmt.Errorf("cannot read directory")))
+		}
 		return
 	}
 
@@ -369,6 +381,15 @@ type FileContent struct {
 }
 
 // buildDirEntries builds a sorted list of directory entries
+// isNotDirError returns true if the error indicates the path is not a directory
+// (e.g. it is a file). This handles syscall.ENOTDIR across platforms.
+func isNotDirError(err error) bool {
+	if pe, ok := err.(*os.PathError); ok {
+		return pe.Err.Error() == "not a directory"
+	}
+	return false
+}
+
 func buildDirEntries(entries []os.DirEntry) []DirEntry {
 	var items []DirEntry
 	for _, entry := range entries {
