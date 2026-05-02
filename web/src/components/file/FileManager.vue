@@ -356,7 +356,7 @@ async function doNewFolder() {
     }
 }
 
-const MAX_VISIBLE_ENTRIES = 200
+const MAX_VISIBLE_ENTRIES = 1000
 
 const filteredEntries = computed(() => {
     let entries = [...props.entries]
