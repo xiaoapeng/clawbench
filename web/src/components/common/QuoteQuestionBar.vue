@@ -280,11 +280,12 @@ function handleSend() {
   min-width: 0;
 }
 
-/* Collapsed inline variant — single row, no flex-start */
+/* Collapsed inline variant — single row, no flex-start, all corners rounded */
 .qq-quoted-snippet--inline {
   align-items: center;
   padding: 5px 8px;
   margin: 0;
+  border-radius: 8px;
 }
 
 .qq-quoted-icon {

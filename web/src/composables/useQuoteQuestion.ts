@@ -167,9 +167,8 @@ export function useQuoteQuestion() {
       toast.show('发送失败: ' + (err as Error).message, { icon: '⚠️', type: 'error' })
     }
 
-    // Don't close the bar — keep the preview visible for follow-up questions.
-    // Just unpin so selection changes can auto-hide the bar again.
-    unpinBar()
+    // Close the bar after sending — user expects the floating window to dismiss.
+    closeSheet()
   }
 
   return {
