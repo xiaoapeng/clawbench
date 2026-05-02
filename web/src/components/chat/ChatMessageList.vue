@@ -51,6 +51,7 @@
       @toggle-tool="$emit('toggle-tool', $event)"
       @show-metadata="$emit('show-metadata', $event)"
       @file-tag-click="$emit('file-tag-click', $event)"
+      @edit-task="$emit('edit-task', $event)"
       @expand="handleExpand"
     />
     </div>
@@ -76,7 +77,7 @@ const props = defineProps({
   totalMessages: { type: Number, default: 0 },
 })
 
-const emit = defineEmits(['toggle-tool', 'show-metadata', 'file-tag-click', 'file-open', 'load-more'])
+const emit = defineEmits(['toggle-tool', 'show-metadata', 'file-tag-click', 'file-open', 'load-more', 'edit-task'])
 
 const messagesRef = ref(null)
 const { handleDblClick } = useDoubleClickCopy()

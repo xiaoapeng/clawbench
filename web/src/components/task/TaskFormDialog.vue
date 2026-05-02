@@ -1,8 +1,8 @@
 <template>
-  <ModalDialog :open="open" :title="mode === 'create' ? '新建定时任务' : '编辑定时任务'" @close="$emit('close')">
+  <ModalDialog :open="open" :title="mode === 'create' ? '新建定时任务' : '定时任务详情'" @close="$emit('close')">
     <template #header>
       <svg class="modal-header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-      <span class="modal-title">{{ mode === 'create' ? '新建定时任务' : '编辑定时任务' }}</span>
+      <span class="modal-title">{{ mode === 'create' ? '新建定时任务' : '定时任务详情' }}</span>
     </template>
     <!-- Tabs (edit mode only) -->
     <div v-if="mode === 'edit'" class="dialog-tabs-row">
@@ -168,8 +168,8 @@
           <svg class="execution-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
             <polyline points="6 9 12 15 18 9"/>
           </svg>
-          <span class="execution-time">{{ chatRender.formatMessageTime(exec.createdAt) }}</span>
-          <span v-if="!execExpanded[idx]" class="execution-preview">{{ execPreview(exec) }}</span>
+          <span class="exec-absolute-time">{{ formatAbsoluteTime(exec.createdAt) }}</span>
+          <span class="exec-relative-time">{{ chatRender.formatMessageTime(exec.createdAt) }}</span>
         </div>
         <div v-if="execExpanded[idx]" class="chat-message assistant execution-body">
           <ContentBlocks
@@ -188,10 +188,10 @@
     </div>
 
     <template #footer>
-      <button class="btn btn-primary" :disabled="saving" @click="submit">
+      <button v-if="tab === 'details'" class="btn btn-primary" :disabled="saving" @click="submit">
         {{ mode === 'create' ? '创建' : '保存' }}
       </button>
-      <button class="btn btn-secondary" @click="$emit('close')">取消</button>
+      <button class="btn btn-secondary" @click="$emit('close')">{{ tab === 'executions' ? '关闭' : '取消' }}</button>
     </template>
   </ModalDialog>
 </template>
@@ -228,17 +228,15 @@ function toggleExecTool(key) {
   execExpandedTools.value = { ...execExpandedTools.value, [key]: !execExpandedTools.value[key] }
 }
 
-function execPreview(exec) {
-  const textBlock = (exec.blocks || []).find(b => b.type === 'text' && b.text?.trim())
-  if (textBlock) {
-    const text = textBlock.text.trim()
-    return text.length > 60 ? text.slice(0, 57) + '...' : text
-  }
-  const toolBlock = (exec.blocks || []).find(b => b.type === 'tool_use')
-  if (toolBlock) return `工具调用: ${toolBlock.name}`
-  const thinkBlock = (exec.blocks || []).find(b => b.type === 'thinking')
-  if (thinkBlock) return '思考中...'
-  return ''
+function formatAbsoluteTime(createdAt) {
+  const d = new Date(createdAt)
+  const y = d.getFullYear()
+  const mo = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  const h = String(d.getHours()).padStart(2, '0')
+  const mi = String(d.getMinutes()).padStart(2, '0')
+  const s = String(d.getSeconds()).padStart(2, '0')
+  return `${y}-${mo}-${day} ${h}:${mi}:${s}`
 }
 
 // Frequency preset
@@ -718,8 +716,8 @@ watch(() => props.open, (isOpen) => {
 .execution-header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 10px;
+  gap: 8px;
+  padding: 8px 12px;
   cursor: pointer;
   transition: background 0.15s;
 }
@@ -738,20 +736,17 @@ watch(() => props.open, (isOpen) => {
   transform: rotate(180deg);
 }
 
-.execution-time {
+.exec-absolute-time {
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   font-weight: 500;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-.execution-preview {
-  font-size: 12px;
+.exec-relative-time {
+  font-size: 11px;
   color: var(--text-muted, #999);
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 

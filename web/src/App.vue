@@ -154,7 +154,7 @@
           </button>
 
           <div class="dock-center">
-            <button class="dock-btn" :class="{ active: chatOpen, 'has-unread': store.state.chatUnread && !chatOpen, 'has-running': store.state.chatRunning && !chatOpen && !store.state.chatUnread }" @click.stop="openDrawer('chat')" title="会话">
+            <button class="dock-btn" :class="{ active: chatOpen, 'has-unread': (store.state.chatUnread || store.state.taskUnread) && !chatOpen, 'has-running': store.state.chatRunning && !chatOpen && !store.state.chatUnread && !store.state.taskUnread }" @click.stop="openDrawer('chat')" title="会话">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
               </svg>
@@ -325,6 +325,8 @@ function openDrawer(name, tab = null) {
 function ensureDrawerOpen(name) {
   // 清除聊天未读角标
   if (name === 'chat') store.state.chatUnread = false
+  // 清除定时任务未读角标（打开聊天面板时也清除，因为任务按钮在聊天面板内）
+  if (name === 'chat') store.state.taskUnread = false
   // 关闭其他抽屉
   Object.entries(drawerStates).forEach(([key, ref]) => {
     if (key !== name && ref.value) {
@@ -556,6 +558,16 @@ onMounted(async () => {
             const sd = await sr.json()
             if (sd.sessions?.some(s => s.unreadCount > 0)) {
                 store.state.chatUnread = true
+            }
+        }
+    } catch (_) {}
+    // Check unread task executions on startup
+    try {
+        const tr = await fetch('/api/tasks')
+        if (tr.ok) {
+            const td = await tr.json()
+            if (td.hasUnread) {
+                store.state.taskUnread = true
             }
         }
     } catch (_) {}

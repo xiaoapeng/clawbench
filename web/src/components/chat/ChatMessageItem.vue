@@ -27,19 +27,6 @@
         </template>
       </div>
 
-      <!-- Scheduled task trigger banner -->
-      <div v-if="msg.role === 'assistant' && msg.scheduledTask" class="chat-scheduled-banner">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-          <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-        </svg>
-        <span class="scheduled-label">定时触发</span>
-        <span class="scheduled-task-name">{{ msg.scheduledTask.taskName }}</span>
-        <span class="scheduled-sep">·</span>
-        <span class="scheduled-agent">{{ getAgentIcon(msg.scheduledTask.agentId) }} {{ getAgentName(msg.scheduledTask.agentId) }}</span>
-        <span class="scheduled-sep">·</span>
-        <span class="scheduled-cron">{{ msg.scheduledTask.cronExpr }}</span>
-      </div>
-
       <!-- Message content -->
       <template v-if="msg.role === 'assistant' && msg.blocks">
         <ContentBlocks
@@ -59,6 +46,7 @@
           :getAgentIcon="getAgentIcon"
           :getAgentName="getAgentName"
           @toggle-tool="$emit('toggle-tool', $event)"
+          @edit-task="$emit('edit-task', $event)"
         />
       </template>
       <!-- User message or legacy plain text (NOT for assistant messages with blocks parsed) -->
@@ -152,7 +140,7 @@ const props = defineProps({
   shouldCollapse: Boolean,
 })
 
-const emit = defineEmits(['toggle-tool', 'show-metadata', 'file-tag-click', 'expand'])
+const emit = defineEmits(['toggle-tool', 'show-metadata', 'file-tag-click', 'expand', 'edit-task'])
 
 const autoSpeech = inject('autoSpeech')
 const layoutRefreshKey = inject('layoutRefreshKey', ref(0))
@@ -407,46 +395,6 @@ function getFileName(path) {
 .chat-message .chat-img-thumbnail:hover {
   transform: scale(1.02);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-/* Scheduled Task Trigger Banner */
-.chat-scheduled-banner {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 8px;
-    margin-bottom: 6px;
-    border-radius: var(--radius-sm, 6px);
-    background: color-mix(in srgb, var(--accent-color, #0066cc) 8%, transparent);
-    border: 1px solid color-mix(in srgb, var(--accent-color, #0066cc) 15%, transparent);
-    font-size: 11px;
-    color: var(--accent-color, #0066cc);
-    flex-wrap: wrap;
-}
-
-.chat-scheduled-banner svg {
-    flex-shrink: 0;
-    opacity: 0.7;
-}
-
-.scheduled-label {
-    font-weight: 600;
-    white-space: nowrap;
-}
-
-.scheduled-task-name {
-    font-weight: 500;
-    opacity: 0.85;
-}
-
-.scheduled-sep {
-    opacity: 0.4;
-}
-
-.scheduled-agent,
-.scheduled-cron {
-    opacity: 0.7;
-    white-space: nowrap;
 }
 
 /* ── Collapse styles ── */

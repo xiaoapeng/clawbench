@@ -55,13 +55,14 @@ CREATE TABLE IF NOT EXISTS scheduled_tasks (
 	last_run_at DATETIME,
 	next_run_at DATETIME,
 	run_count INTEGER DEFAULT 0,
+	last_read_at DATETIME,
 	created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 	updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE IF NOT EXISTS task_executions (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	task_id TEXT NOT NULL,
-	message_id INTEGER NOT NULL REFERENCES chat_history(id),
+	content TEXT NOT NULL DEFAULT '',
 	created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_executions_task ON task_executions(task_id, created_at DESC);
@@ -591,14 +592,6 @@ func TestAddTaskExecution(t *testing.T) {
 	_, cleanup := setupScheduler(t)
 	defer cleanup()
 
-	// Insert a chat_history row to reference
-	res, err := service.DB.Exec(
-		"INSERT INTO chat_history (project_path, role, content, backend) VALUES (?, ?, ?, ?)",
-		"/proj", "user", "test message", "claude",
-	)
-	assert.NoError(t, err)
-	messageID, _ := res.LastInsertId()
-
 	// Insert a task
 	now := time.Now()
 	service.DB.Exec(
@@ -606,7 +599,8 @@ func TestAddTaskExecution(t *testing.T) {
 		"task-1", "/proj", "Task", "0 * * * *", "agent1", "p", "", "active", "unlimited", now, now,
 	)
 
-	err = service.AddTaskExecution("task-1", messageID)
+	content := `{"blocks":[{"type":"text","text":"execution result"}]}`
+	err := service.AddTaskExecution("task-1", content)
 	assert.NoError(t, err)
 
 	// Verify the execution was recorded
@@ -615,31 +609,19 @@ func TestAddTaskExecution(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 1, count)
 
-	var fetchedMsgID int64
-	err = service.DB.QueryRow("SELECT message_id FROM task_executions WHERE task_id = ?", "task-1").Scan(&fetchedMsgID)
+	var fetchedContent string
+	err = service.DB.QueryRow("SELECT content FROM task_executions WHERE task_id = ?", "task-1").Scan(&fetchedContent)
 	assert.NoError(t, err)
-	assert.Equal(t, messageID, fetchedMsgID)
+	assert.Equal(t, content, fetchedContent)
 }
 
 func TestAddTaskExecution_MultipleExecutions(t *testing.T) {
 	_, cleanup := setupScheduler(t)
 	defer cleanup()
 
-	res, _ := service.DB.Exec(
-		"INSERT INTO chat_history (project_path, role, content, backend) VALUES (?, ?, ?, ?)",
-		"/proj", "user", "msg1", "claude",
-	)
-	msgID1, _ := res.LastInsertId()
-
-	res, _ = service.DB.Exec(
-		"INSERT INTO chat_history (project_path, role, content, backend) VALUES (?, ?, ?, ?)",
-		"/proj", "assistant", "msg2", "claude",
-	)
-	msgID2, _ := res.LastInsertId()
-
-	err := service.AddTaskExecution("task-1", msgID1)
+	err := service.AddTaskExecution("task-1", `{"blocks":[{"type":"text","text":"result1"}]}`)
 	assert.NoError(t, err)
-	err = service.AddTaskExecution("task-1", msgID2)
+	err = service.AddTaskExecution("task-1", `{"blocks":[{"type":"text","text":"result2"}]}`)
 	assert.NoError(t, err)
 
 	var count int

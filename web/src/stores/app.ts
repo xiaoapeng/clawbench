@@ -47,6 +47,9 @@ interface AppState {
     // Chat running indicator (AI is generating)
     chatRunning: boolean
 
+    // Task unread badge (unread task executions)
+    taskUnread: boolean
+
     // File browser
     currentDir: string
     dirEntries: DirEntry[]
@@ -83,6 +86,7 @@ const state = reactive<AppState>({
     sessionMaxCount: 10,
     chatUnread: false,
     chatRunning: false,
+    taskUnread: false,
 
     // File browser
     currentDir: '',

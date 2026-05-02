@@ -327,27 +327,11 @@ func (s *Scheduler) executeTask(task *model.ScheduledTask, projectPath string) {
 	if responseMetadata != nil {
 		contentMap["metadata"] = responseMetadata
 	}
-	// Attach scheduled task info so the frontend can render a distinctive style
-	contentMap["scheduledTask"] = map[string]any{
-		"taskId":   task.ID,
-		"taskName": task.Name,
-		"cronExpr": task.CronExpr,
-		"agentId":  task.AgentID,
-	}
 	contentJSON, _ := json.Marshal(contentMap)
 
-	// Save assistant message and record execution
-	sessionID := task.SessionID
-	if sessionID == "" {
-		sessionID = "task-" + task.ID
-	}
-	messageID, err := AddChatMessage(projectPath, backendName, sessionID, "assistant", string(contentJSON), "", nil, false)
-	if err != nil {
-		slog.Error("failed to save assistant message for task", slog.String("err", err.Error()))
-	} else {
-		if err := AddTaskExecution(task.ID, messageID); err != nil {
-			slog.Error("failed to record task execution", slog.String("err", err.Error()))
-		}
+	// Record execution directly in task_executions (no longer writes to chat_history)
+	if err := AddTaskExecution(task.ID, string(contentJSON)); err != nil {
+		slog.Error("failed to record task execution", slog.String("err", err.Error()))
 	}
 
 	// Update task execution stats
@@ -431,9 +415,21 @@ func GetTasks(projectPath string) ([]model.ScheduledTask, error) {
 	var args []interface{}
 
 	if projectPath == "" {
-		query = "SELECT id, project_path, name, cron_expr, agent_id, prompt, session_id, status, repeat_mode, max_runs, last_run_at, next_run_at, run_count, created_at, updated_at FROM scheduled_tasks WHERE status != 'deleted' ORDER BY created_at DESC"
+		query = `SELECT s.id, s.project_path, s.name, s.cron_expr, s.agent_id, s.prompt, s.session_id,
+			s.status, s.repeat_mode, s.max_runs, s.last_run_at, s.next_run_at, s.run_count,
+			s.last_read_at, s.created_at, s.updated_at,
+			(SELECT COUNT(*) FROM task_executions e
+			 WHERE e.task_id = s.id
+			 AND (s.last_read_at IS NULL OR e.created_at > s.last_read_at)) AS unread_count
+			FROM scheduled_tasks s WHERE s.status != 'deleted' ORDER BY s.created_at DESC`
 	} else {
-		query = "SELECT id, project_path, name, cron_expr, agent_id, prompt, session_id, status, repeat_mode, max_runs, last_run_at, next_run_at, run_count, created_at, updated_at FROM scheduled_tasks WHERE project_path = ? AND status != 'deleted' ORDER BY created_at DESC"
+		query = `SELECT s.id, s.project_path, s.name, s.cron_expr, s.agent_id, s.prompt, s.session_id,
+			s.status, s.repeat_mode, s.max_runs, s.last_run_at, s.next_run_at, s.run_count,
+			s.last_read_at, s.created_at, s.updated_at,
+			(SELECT COUNT(*) FROM task_executions e
+			 WHERE e.task_id = s.id
+			 AND (s.last_read_at IS NULL OR e.created_at > s.last_read_at)) AS unread_count
+			FROM scheduled_tasks s WHERE s.project_path = ? AND s.status != 'deleted' ORDER BY s.created_at DESC`
 		args = []interface{}{projectPath}
 	}
 
@@ -445,8 +441,8 @@ func GetTasks(projectPath string) ([]model.ScheduledTask, error) {
 
 	for rows.Next() {
 		var t model.ScheduledTask
-		var lastRun, nextRun sql.NullTime
-		if err := rows.Scan(&t.ID, &t.ProjectPath, &t.Name, &t.CronExpr, &t.AgentID, &t.Prompt, &t.SessionID, &t.Status, &t.RepeatMode, &t.MaxRuns, &lastRun, &nextRun, &t.RunCount, &t.CreatedAt, &t.UpdatedAt); err != nil {
+		var lastRun, nextRun, lastRead sql.NullTime
+		if err := rows.Scan(&t.ID, &t.ProjectPath, &t.Name, &t.CronExpr, &t.AgentID, &t.Prompt, &t.SessionID, &t.Status, &t.RepeatMode, &t.MaxRuns, &lastRun, &nextRun, &t.RunCount, &lastRead, &t.CreatedAt, &t.UpdatedAt, &t.UnreadCount); err != nil {
 			return nil, err
 		}
 		if lastRun.Valid {
@@ -454,6 +450,9 @@ func GetTasks(projectPath string) ([]model.ScheduledTask, error) {
 		}
 		if nextRun.Valid {
 			t.NextRunAt = &nextRun.Time
+		}
+		if lastRead.Valid {
+			t.LastReadAt = &lastRead.Time
 		}
 		tasks = append(tasks, t)
 	}
@@ -463,11 +462,17 @@ func GetTasks(projectPath string) ([]model.ScheduledTask, error) {
 // GetTaskByID retrieves a single task by its ID.
 func GetTaskByID(id string) (*model.ScheduledTask, error) {
 	var t model.ScheduledTask
-	var lastRun, nextRun sql.NullTime
+	var lastRun, nextRun, lastRead sql.NullTime
 	err := DB.QueryRow(
-		"SELECT id, project_path, name, cron_expr, agent_id, prompt, session_id, status, repeat_mode, max_runs, last_run_at, next_run_at, run_count, created_at, updated_at FROM scheduled_tasks WHERE id = ?",
+		`SELECT s.id, s.project_path, s.name, s.cron_expr, s.agent_id, s.prompt, s.session_id,
+		s.status, s.repeat_mode, s.max_runs, s.last_run_at, s.next_run_at, s.run_count,
+		s.last_read_at, s.created_at, s.updated_at,
+		(SELECT COUNT(*) FROM task_executions e
+		 WHERE e.task_id = s.id
+		 AND (s.last_read_at IS NULL OR e.created_at > s.last_read_at)) AS unread_count
+		FROM scheduled_tasks s WHERE s.id = ?`,
 		id,
-	).Scan(&t.ID, &t.ProjectPath, &t.Name, &t.CronExpr, &t.AgentID, &t.Prompt, &t.SessionID, &t.Status, &t.RepeatMode, &t.MaxRuns, &lastRun, &nextRun, &t.RunCount, &t.CreatedAt, &t.UpdatedAt)
+	).Scan(&t.ID, &t.ProjectPath, &t.Name, &t.CronExpr, &t.AgentID, &t.Prompt, &t.SessionID, &t.Status, &t.RepeatMode, &t.MaxRuns, &lastRun, &nextRun, &t.RunCount, &lastRead, &t.CreatedAt, &t.UpdatedAt, &t.UnreadCount)
 	if err != nil {
 		return nil, err
 	}
@@ -476,6 +481,9 @@ func GetTaskByID(id string) (*model.ScheduledTask, error) {
 	}
 	if nextRun.Valid {
 		t.NextRunAt = &nextRun.Time
+	}
+	if lastRead.Valid {
+		t.LastReadAt = &lastRead.Time
 	}
 	return &t, nil
 }
@@ -492,13 +500,47 @@ func saveTask(task *model.ScheduledTask) error {
 	return err
 }
 
-// AddTaskExecution records that a chat_history message was produced by a scheduled task execution.
-func AddTaskExecution(taskID string, messageID int64) error {
+// AddTaskExecution records a task execution with its content directly in task_executions.
+func AddTaskExecution(taskID string, content string) error {
 	_, err := DB.Exec(
-		"INSERT INTO task_executions (task_id, message_id) VALUES (?, ?)",
-		taskID, messageID,
+		"INSERT INTO task_executions (task_id, content) VALUES (?, ?)",
+		taskID, content,
 	)
 	return err
+}
+
+// UpdateTaskLastRead updates the last_read_at timestamp for a task, clearing unread status.
+func UpdateTaskLastRead(taskID string) error {
+	_, err := DB.Exec(
+		"UPDATE scheduled_tasks SET last_read_at = CURRENT_TIMESTAMP WHERE id = ?",
+		taskID,
+	)
+	return err
+}
+
+// HasUnreadTasks checks if any task for the given project has unread executions.
+func HasUnreadTasks(projectPath string) (bool, error) {
+	var count int
+	var err error
+	if projectPath == "" {
+		err = DB.QueryRow(
+			`SELECT COUNT(*) FROM scheduled_tasks s
+			 WHERE s.status != 'deleted'
+			 AND (SELECT COUNT(*) FROM task_executions e
+			      WHERE e.task_id = s.id
+			      AND (s.last_read_at IS NULL OR e.created_at > s.last_read_at)) > 0`,
+		).Scan(&count)
+	} else {
+		err = DB.QueryRow(
+			`SELECT COUNT(*) FROM scheduled_tasks s
+			 WHERE s.project_path = ? AND s.status != 'deleted'
+			 AND (SELECT COUNT(*) FROM task_executions e
+			      WHERE e.task_id = s.id
+			      AND (s.last_read_at IS NULL OR e.created_at > s.last_read_at)) > 0`,
+			projectPath,
+		).Scan(&count)
+	}
+	return count > 0, err
 }
 
 // generateTaskID creates a unique ID for a scheduled task.

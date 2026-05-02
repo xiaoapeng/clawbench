@@ -64,6 +64,13 @@
         <div class="schedule-proposal-card">
           <div class="proposal-header">
             <span class="proposal-icon">⏰</span> 定时任务已创建
+            <button v-if="blockProposals[blockProposalsKey(bi)].proposal.task_id" class="proposal-edit-btn" @click.stop="$emit('edit-task', blockProposals[blockProposalsKey(bi)].proposal.task_id)" title="查看详情">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M12 16v-4"/>
+                <path d="M12 8h.01"/>
+              </svg>
+            </button>
           </div>
           <div class="proposal-body">
             <div class="proposal-row"><strong>任务：</strong>{{ blockProposals[blockProposalsKey(bi)].proposal.name }}</div>
@@ -139,7 +146,7 @@ const props = defineProps({
   getAgentName: { type: Function, default: () => '' },
 })
 
-defineEmits(['toggle-tool'])
+defineEmits(['toggle-tool', 'edit-task'])
 
 // Key helper: use msgId if available, otherwise msgIndex
 function key(bi) {
@@ -472,6 +479,8 @@ onUnmounted(() => {
 }
 
 .proposal-header {
+  display: flex;
+  align-items: center;
   background: color-mix(in srgb, var(--accent-color, #4a90d9) 12%, transparent);
   color: var(--accent-color, #4a90d9);
   padding: 8px 12px;
@@ -482,6 +491,31 @@ onUnmounted(() => {
 
 .proposal-icon {
   margin-right: 4px;
+}
+
+.proposal-edit-btn {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--accent-color, #4a90d9);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.proposal-edit-btn:hover {
+  background: color-mix(in srgb, var(--accent-color, #4a90d9) 20%, transparent);
+}
+
+.proposal-edit-btn svg {
+  flex-shrink: 0;
+  opacity: 0.8;
 }
 
 .proposal-body {

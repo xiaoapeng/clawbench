@@ -26,7 +26,9 @@ func ServeTasks(w http.ResponseWriter, r *http.Request) {
 		if tasks == nil {
 			tasks = []model.ScheduledTask{}
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"tasks": tasks})
+		// Check if any task has unread executions
+		hasUnread, _ := service.HasUnreadTasks(projectPath)
+		writeJSON(w, http.StatusOK, map[string]any{"tasks": tasks, "hasUnread": hasUnread})
 
 	case http.MethodPost:
 	var req struct {
@@ -135,6 +137,14 @@ func ServeTaskByID(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 			return
 		}
+		if req.Action == "read" {
+			if err := service.UpdateTaskLastRead(taskID); err != nil {
+				model.WriteError(w, model.Internal(err))
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+			return
+		}
 
 		// Full task update
 		task, err := service.GetTaskByID(taskID)
@@ -179,8 +189,7 @@ func ServeTaskByID(w http.ResponseWriter, r *http.Request) {
 }
 
 // serveTaskExecutions returns the execution history for a task.
-// It queries the task_executions association table to find only AI-triggered messages,
-// excluding any user messages from the same session.
+// It queries task_executions directly (content is stored inline, no chat_history dependency).
 func serveTaskExecutions(w http.ResponseWriter, r *http.Request, taskID string) {
 	_, err := service.GetTaskByID(taskID)
 	if err != nil {
@@ -188,16 +197,14 @@ func serveTaskExecutions(w http.ResponseWriter, r *http.Request, taskID string) 
 		return
 	}
 
-	// Query task_executions JOIN chat_history to get only scheduled-triggered messages
 	type Execution struct {
 		Content   string `json:"content"`
 		CreatedAt string `json:"createdAt"`
 	}
 
 	rows, err := service.DB.Query(`
-		SELECT ch.content, ch.created_at
+		SELECT te.content, te.created_at
 		FROM task_executions te
-		JOIN chat_history ch ON te.message_id = ch.id
 		WHERE te.task_id = ?
 		ORDER BY te.created_at DESC
 	`, taskID)

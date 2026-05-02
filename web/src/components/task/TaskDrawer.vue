@@ -21,6 +21,7 @@
             <div class="task-item-header">
               <span class="task-item-icon">{{ getAgentIcon(task.agentId) }}</span>
               <span class="task-item-name">{{ task.name }}</span>
+              <span v-if="task.unreadCount > 0" class="task-item-unread">{{ task.unreadCount }}</span>
               <span class="task-item-status" :class="task.status">{{ statusLabel(task.status) }}</span>
             </div>
             <div class="task-item-meta">
@@ -63,6 +64,7 @@ import BottomSheet from '@/components/common/BottomSheet.vue'
 import TaskFormDialog from '@/components/task/TaskFormDialog.vue'
 import { useAgents } from '@/composables/useAgents.ts'
 import { humanizeCron, repeatLabel, statusLabel, formatDateTime } from '@/utils/helpers.ts'
+import { store } from '@/stores/app.ts'
 
 const props = defineProps({
   open: Boolean,
@@ -91,6 +93,21 @@ async function loadTasks() {
   } finally {
     loading.value = false
   }
+}
+
+async function markAllTasksRead() {
+  // Mark all tasks with unread executions as read
+  const unreadTasks = tasks.value.filter(t => t.unreadCount > 0)
+  if (unreadTasks.length === 0) return
+  await Promise.all(unreadTasks.map(t =>
+    fetch(`/api/tasks/${t.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'read' }),
+    }).catch(() => {})
+  ))
+  // Clear the global unread indicator
+  store.state.taskUnread = false
 }
 
 function openCreateDialog() {
@@ -141,6 +158,7 @@ async function deleteTask(id) {
 watch(() => props.open, async (val) => {
   if (val) {
     await Promise.all([loadTasks(), loadAgents()])
+    markAllTasksRead()
   }
 })
 </script>
@@ -226,6 +244,18 @@ watch(() => props.open, async (val) => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.task-item-unread {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 8px;
+  font-weight: 600;
+  background: #ef4444;
+  color: #fff;
+  flex-shrink: 0;
+  min-width: 14px;
+  text-align: center;
 }
 
 .task-item-status {

@@ -109,13 +109,14 @@ func setupTestEnv(t *testing.T) (*testEnv, func()) {
 			last_run_at DATETIME,
 			next_run_at DATETIME,
 			run_count INTEGER DEFAULT 0,
+			last_read_at DATETIME,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		);
 		CREATE TABLE IF NOT EXISTS task_executions (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			task_id TEXT NOT NULL,
-			message_id INTEGER NOT NULL REFERENCES chat_history(id),
+			content TEXT NOT NULL DEFAULT '',
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		);
 		CREATE INDEX IF NOT EXISTS idx_executions_task ON task_executions(task_id, created_at DESC);

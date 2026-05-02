@@ -18,6 +18,8 @@ type ScheduledTask struct {
 	LastRunAt   *time.Time `json:"lastRunAt,omitempty"`
 	NextRunAt   *time.Time `json:"nextRunAt,omitempty"`
 	RunCount    int        `json:"runCount"`
+	LastReadAt  *time.Time `json:"lastReadAt,omitempty"`
+	UnreadCount int        `json:"unreadCount,omitempty"`
 	CreatedAt   time.Time  `json:"createdAt"`
 	UpdatedAt   time.Time  `json:"updatedAt"`
 }

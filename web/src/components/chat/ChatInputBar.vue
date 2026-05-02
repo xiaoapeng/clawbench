@@ -28,7 +28,7 @@
           <span class="chat-action-label">删除</span>
         </button>
       </div>
-      <button class="chat-action-btn" @click="$emit('open-session-tab', 'tasks')" title="定时任务">
+      <button class="chat-action-btn" :class="{ 'has-unread': taskUnread }" @click="$emit('open-session-tab', 'tasks')" title="定时任务">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
           <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
         </svg>
@@ -192,6 +192,7 @@ const props = defineProps({
   currentSessionId: String,
   chatUnread: Boolean,
   chatRunning: Boolean,
+  taskUnread: Boolean,
   quickSend: { type: Object, default: () => ({}) },
 })
 

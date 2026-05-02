@@ -86,7 +86,7 @@ export function useChatRender(options) {
   }
 
   function parseAssistantContent(content) {
-    if (!content) return { blocks: [], metadata: null, scheduledTask: null }
+    if (!content) return { blocks: [], metadata: null }
     try {
       const parsed = JSON.parse(content)
       if (parsed.blocks && Array.isArray(parsed.blocks)) {
@@ -100,12 +100,11 @@ export function useChatRender(options) {
             return b
           }),
           metadata: parsed.metadata || null,
-          cancelled: parsed.cancelled || false,
-          scheduledTask: parsed.scheduledTask || null
+          cancelled: parsed.cancelled || false
         }
       }
     } catch {}
-    return { blocks: [{ type: 'text', text: content }], metadata: null, scheduledTask: null }
+    return { blocks: [{ type: 'text', text: content }], metadata: null }
   }
 
   function extractScheduleProposals(msgs) {

@@ -537,12 +537,15 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 		// This must happen after all deltas are coalesced, because the tag
 		// spans multiple incremental content events and is never complete in
 		// any single delta.
-		for _, block := range blocks {
-			if block.Type == "text" && strings.Contains(block.Text, "<schedule-proposal") {
+		for i := range blocks {
+			if blocks[i].Type == "text" && strings.Contains(blocks[i].Text, "<schedule-proposal") {
 				slog.Info("detected schedule-proposal tag in accumulated text block",
 					slog.String("session", sessionID),
 				)
-				detectAndCreateScheduleProposal(block.Text, projectPath, sessionID, agentID)
+				if taskID := detectAndCreateScheduleProposal(blocks[i].Text, projectPath, sessionID, agentID); taskID != "" {
+					// Inject task_id into the proposal JSON so the frontend can link to the created task
+					blocks[i].Text = injectTaskIDIntoProposal(blocks[i].Text, taskID)
+				}
 			}
 		}
 
@@ -687,12 +690,13 @@ func min(a, b int) int {
 // detectAndCreateScheduleProposal detects <schedule-proposal> tags in text and automatically creates scheduled tasks.
 // It extracts the JSON content from the tag, validates it, and creates the task.
 // Errors are logged but don't interrupt the stream - the proposal tag is preserved for frontend display.
-func detectAndCreateScheduleProposal(text, projectPath, sessionID, agentID string) {
+// Returns the created task ID on success, or empty string on failure.
+func detectAndCreateScheduleProposal(text, projectPath, sessionID, agentID string) string {
 	// Extract the schedule-proposal tag content
 	re := regexp.MustCompile(`<schedule-proposal\b[^>]*>([\s\S]*?)</schedule-proposal>`)
 	matches := re.FindStringSubmatch(text)
 	if len(matches) < 2 {
-		return
+		return ""
 	}
 
 	jsonStr := strings.TrimSpace(matches[1])
@@ -712,7 +716,7 @@ func detectAndCreateScheduleProposal(text, projectPath, sessionID, agentID strin
 			slog.String("session", sessionID),
 			slog.String("error", err.Error()),
 		)
-		return
+		return ""
 	}
 
 	// Validate required fields
@@ -724,7 +728,7 @@ func detectAndCreateScheduleProposal(text, projectPath, sessionID, agentID strin
 			slog.String("agent_id", proposal.AgentID),
 			slog.String("prompt", proposal.Prompt),
 		)
-		return
+		return ""
 	}
 
 	// Use the agent from the proposal if specified, otherwise use the session's agent
@@ -756,7 +760,7 @@ func detectAndCreateScheduleProposal(text, projectPath, sessionID, agentID strin
 			slog.String("task_name", proposal.Name),
 			slog.String("error", err.Error()),
 		)
-		return
+		return ""
 	}
 
 	slog.Info("automatically created scheduled task from proposal",
@@ -765,6 +769,30 @@ func detectAndCreateScheduleProposal(text, projectPath, sessionID, agentID strin
 		slog.String("task_name", proposal.Name),
 		slog.String("cron_expr", proposal.CronExpr),
 	)
+	return task.ID
+}
+
+// injectTaskIDIntoProposal adds a "task_id" field to the JSON inside a <schedule-proposal> tag.
+// This allows the frontend to link the proposal card to the created task for editing.
+func injectTaskIDIntoProposal(text, taskID string) string {
+	re := regexp.MustCompile(`<schedule-proposal\b[^>]*>([\s\S]*?)</schedule-proposal>`)
+	matches := re.FindStringSubmatch(text)
+	if len(matches) < 2 {
+		return text
+	}
+
+	var proposal map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(matches[1])), &proposal); err != nil {
+		return text
+	}
+
+	proposal["task_id"] = taskID
+	updatedJSON, err := json.Marshal(proposal)
+	if err != nil {
+		return text
+	}
+
+	return re.ReplaceAllString(text, "<schedule-proposal>"+string(updatedJSON)+"</schedule-proposal>")
 }
 
 // accumulateBlock processes a single StreamEvent and updates the blocks slice.

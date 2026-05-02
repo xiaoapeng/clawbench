@@ -428,10 +428,8 @@ func TestServeTaskByID_Executions(t *testing.T) {
 	}
 	s.AddTask(task)
 
-	// Create a session and message for execution tracking
-	sid := createTestSession(t, env.ProjectDir)
-	msgID, _ := service.AddChatMessage(env.ProjectDir, "claude", sid, "assistant", "result", "", nil, false)
-	service.AddTaskExecution(task.ID, msgID)
+	// Create an execution record directly
+	service.AddTaskExecution(task.ID, `{"blocks":[{"type":"text","text":"result"}]}`)
 
 	// Get executions
 	req := newRequest(t, http.MethodGet, "/api/tasks/"+task.ID+"/executions", nil)

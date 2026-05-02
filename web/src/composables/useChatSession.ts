@@ -87,11 +87,10 @@ export function useChatSession(options: UseChatSessionOptions) {
   function parseMessages(rawMsgs) {
     return rawMsgs.map(msg => {
       if (msg.role === 'assistant') {
-        const { blocks, metadata, cancelled, scheduledTask } = onParseAssistantContent(msg.content)
+        const { blocks, metadata, cancelled } = onParseAssistantContent(msg.content)
         msg.blocks = blocks
         if (metadata) msg.metadata = metadata
         if (cancelled) msg.cancelled = cancelled
-        if (scheduledTask) msg.scheduledTask = scheduledTask
         if (msg.streaming) { msg.streaming = true; msg.fromDB = true }
       }
       return msg
@@ -351,6 +350,15 @@ export function useChatSession(options: UseChatSessionOptions) {
 
         // Track running sessions for dock/chat button indicator
         store.state.chatRunning = newRunning.size > 0
+
+        // Check for unread task executions
+        try {
+          const taskResp = await fetch('/api/tasks')
+          if (taskResp.ok) {
+            const taskData = await taskResp.json()
+            store.state.taskUnread = !!taskData.hasUnread
+          }
+        } catch (_) {}
 
         // Check for completed sessions
         const completedSessions: string[] = []

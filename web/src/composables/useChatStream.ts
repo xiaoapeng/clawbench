@@ -14,7 +14,7 @@ export interface UseChatStreamOptions {
   onOpen: () => void
   isOpen: Ref<boolean>
   createScheduledTask: (proposal: any) => void
-  onParseAssistantContent: (content: string) => { blocks: any[]; metadata?: any; cancelled?: boolean; scheduledTask?: any }
+  onParseAssistantContent: (content: string) => { blocks: any[]; metadata?: any; cancelled?: boolean }
   onToast: (msg: string, opts?: any) => void
   onNotification: (title: string, opts?: any) => void
   onStreamDone?: () => void
@@ -155,11 +155,10 @@ export function useChatStream(options: UseChatStreamOptions) {
           stopPolling()
           messages.value = (data.messages || []).map(msg => {
             if (msg.role === 'assistant') {
-              const { blocks, metadata, cancelled, scheduledTask } = onParseAssistantContent(msg.content)
+              const { blocks, metadata, cancelled } = onParseAssistantContent(msg.content)
               msg.blocks = blocks
               if (metadata) msg.metadata = metadata
               if (cancelled) msg.cancelled = cancelled
-              if (scheduledTask) msg.scheduledTask = scheduledTask
             }
             return msg
           })

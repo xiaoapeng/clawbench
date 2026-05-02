@@ -29,6 +29,7 @@
       @show-metadata="showMetadata"
       @file-tag-click="handleFileTagClick"
       @load-more="handleLoadMore"
+      @edit-task="openTaskEdit"
     />
 
     <!-- Session switching overlay — placed here to cover the entire message area -->
@@ -66,6 +67,7 @@
       :currentSessionId="identity.currentSessionId.value"
       :chatUnread="store.state.chatUnread"
       :chatRunning="store.state.chatRunning"
+      :taskUnread="store.state.taskUnread"
       :quickSend="store.state.chatQuickSend"
       @send="sendMessage"
       @cancel="stream.cancelStream"
@@ -114,6 +116,15 @@
     :open="session.taskDrawerOpen.value"
     @close="session.taskDrawerOpen.value = false"
   />
+
+  <!-- Task Edit Dialog (opened from schedule-proposal card) -->
+  <TaskFormDialog
+    :open="taskEditOpen"
+    mode="edit"
+    :task="taskEditData"
+    @close="taskEditOpen = false"
+    @saved="handleTaskEditSaved"
+  />
 </template>
 
 <script setup>
@@ -122,6 +133,7 @@ import BottomSheet from '@/components/common/BottomSheet.vue'
 import HeaderMarquee from '@/components/common/HeaderMarquee.vue'
 import SessionDrawer from '@/components/session/SessionDrawer.vue'
 import TaskDrawer from '@/components/task/TaskDrawer.vue'
+import TaskFormDialog from '@/components/task/TaskFormDialog.vue'
 import ChatMetadataModal from './ChatMetadataModal.vue'
 import ChatInputBar from './ChatInputBar.vue'
 import ChatMessageList from './ChatMessageList.vue'
@@ -177,6 +189,27 @@ const notification = useNotification()
 const autoSpeech = useAutoSpeech()
 const theme = inject('theme', ref('light'))
 const { openFilePath } = useFilePathAnnotation()
+
+// Task edit dialog (opened from schedule-proposal card)
+const taskEditOpen = ref(false)
+const taskEditData = ref(null)
+
+async function openTaskEdit(taskId) {
+  try {
+    const resp = await fetch(`/api/tasks/${taskId}`)
+    if (resp.ok) {
+      taskEditData.value = await resp.json()
+      taskEditOpen.value = true
+    }
+  } catch (err) {
+    console.error('Failed to load task for editing:', err)
+  }
+}
+
+function handleTaskEditSaved() {
+  taskEditOpen.value = false
+  taskDrawerRef.value?.loadTasks()
+}
 
 function handleFileTagClick(filePath) {
     if (filePath) {
