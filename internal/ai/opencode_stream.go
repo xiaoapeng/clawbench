@@ -198,13 +198,25 @@ func normalizeOpenCodeToolName(name string) string {
 		return "Grep"
 	case "ls":
 		return "LS"
+	case "webfetch":
+		return "WebFetch"
+	case "websearch":
+		return "WebSearch"
+	case "skill":
+		return "Skill"
+	case "task":
+		return "Agent" // OpenCode's task tool is a sub-agent
+	case "todowrite":
+		return "TodoWrite"
+	case "look_at":
+		return "Read" // media inspection → Read
 	default:
 		return name
 	}
 }
 
 // normalizeOpenCodeInput remaps OpenCode's camelCase input fields to canonical snake_case.
-// OpenCode uses filePath instead of file_path, etc.
+// OpenCode uses filePath instead of file_path, oldString instead of old_string, etc.
 func normalizeOpenCodeInput(toolName string, rawInput json.RawMessage) string {
 	var input map[string]any
 	if err := json.Unmarshal(rawInput, &input); err != nil {
@@ -215,6 +227,14 @@ func normalizeOpenCodeInput(toolName string, rawInput json.RawMessage) string {
 	if v, ok := input["filePath"]; ok {
 		delete(input, "filePath")
 		input["file_path"] = v
+	}
+	if v, ok := input["oldString"]; ok {
+		delete(input, "oldString")
+		input["old_string"] = v
+	}
+	if v, ok := input["newString"]; ok {
+		delete(input, "newString")
+		input["new_string"] = v
 	}
 
 	normalized, err := json.Marshal(input)

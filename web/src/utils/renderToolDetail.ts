@@ -233,6 +233,192 @@ function renderAskUserQuestion(input: Record<string, any>): string {
 }
 
 /**
+ * Render Grep tool input as a search view.
+ * Shows search pattern (highlighted) + search path + output_mode tag.
+ */
+function renderGrepSearch(input: Record<string, any>): string {
+  const pattern = input.pattern || ''
+  const path = input.path || ''
+  const outputMode = input.output_mode || ''
+
+  let html = '<div class="grep-search-view">'
+
+  // Pattern line
+  html += '<div class="grep-pattern-row">'
+  html += '<span class="grep-label">pattern</span>'
+  try {
+    html += `<span class="grep-pattern-text">${hljs.highlight(pattern, { language: 'bash', ignoreIllegals: true }).value}</span>`
+  } catch {
+    html += `<span class="grep-pattern-text">${escapeHtml(pattern)}</span>`
+  }
+  html += '</div>'
+
+  // Path line
+  if (path) {
+    const projectRoot = store.state.projectRoot || ''
+    const resolvedPath = resolveFilePath(path, projectRoot)
+    const displayPath = resolvedPath || path.replace(/^\.\//, '')
+    html += '<div class="grep-path-row">'
+    html += '<span class="grep-label">path</span>'
+    html += `<span class="grep-path-text">${escapeHtml(displayPath)}</span>`
+    if (resolvedPath) {
+      html += fileOpenButtonHtml(resolvedPath)
+    }
+    html += '</div>'
+  }
+
+  // Output mode tag
+  if (outputMode) {
+    html += `<span class="grep-mode-tag">${escapeHtml(outputMode)}</span>`
+  }
+
+  html += '</div>'
+  return html
+}
+
+/**
+ * Render Glob tool input as a file pattern view.
+ * Shows glob pattern + search directory.
+ */
+function renderGlobPattern(input: Record<string, any>): string {
+  const pattern = input.pattern || ''
+  const path = input.path || ''
+
+  let html = '<div class="glob-pattern-view">'
+
+  // Pattern line
+  html += '<div class="glob-pattern-row">'
+  html += '<span class="glob-label">pattern</span>'
+  html += `<span class="glob-pattern-text">${escapeHtml(pattern)}</span>`
+  html += '</div>'
+
+  // Path line
+  if (path) {
+    const projectRoot = store.state.projectRoot || ''
+    const resolvedPath = resolveFilePath(path, projectRoot)
+    const displayPath = resolvedPath || path.replace(/^\.\//, '')
+    html += '<div class="glob-path-row">'
+    html += '<span class="glob-label">path</span>'
+    html += `<span class="glob-path-text">${escapeHtml(displayPath)}</span>`
+    if (resolvedPath) {
+      html += fileOpenButtonHtml(resolvedPath)
+    }
+    html += '</div>'
+  }
+
+  html += '</div>'
+  return html
+}
+
+/**
+ * Render WebSearch tool input as a search query view.
+ * Shows the search query text.
+ */
+function renderWebSearch(input: Record<string, any>): string {
+  const query = input.query || ''
+
+  let html = '<div class="web-search-view">'
+  html += '<div class="web-search-query">'
+  html += '<span class="web-search-icon">🔍</span>'
+  html += `<span class="web-search-text">${escapeHtml(query)}</span>`
+  html += '</div>'
+  html += '</div>'
+  return html
+}
+
+/**
+ * Render WebFetch tool input as a URL fetch view.
+ * Shows the URL (clickable) and optional prompt.
+ */
+function renderWebFetch(input: Record<string, any>): string {
+  const url = input.url || input.prompt || ''
+
+  let html = '<div class="web-fetch-view">'
+
+  // URL line
+  if (url) {
+    html += '<div class="web-fetch-url-row">'
+    html += '<span class="web-fetch-label">URL</span>'
+    // Determine if it looks like a URL
+    const isUrl = /^https?:\/\//i.test(url)
+    if (isUrl) {
+      html += `<a class="web-fetch-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(url)}</a>`
+    } else {
+      html += `<span class="web-fetch-text">${escapeHtml(url)}</span>`
+    }
+    html += '</div>'
+  }
+
+  // Prompt (if present and different from url)
+  const prompt = input.prompt && input.url ? input.prompt : ''
+  if (prompt) {
+    html += `<div class="web-fetch-prompt">${escapeHtml(prompt)}</div>`
+  }
+
+  html += '</div>'
+  return html
+}
+
+/**
+ * Render Agent tool input as a sub-agent call view.
+ * Shows agent type badge + description + collapsed prompt.
+ */
+function renderAgentCall(input: Record<string, any>): string {
+  const description = input.description || ''
+  const prompt = input.prompt || ''
+  const subagentType = input.subagent_type || input.mode || ''
+
+  let html = '<div class="agent-call-view">'
+
+  // Type badge + description
+  html += '<div class="agent-call-header">'
+  if (subagentType) {
+    html += `<span class="agent-type-badge">${escapeHtml(subagentType)}</span>`
+  }
+  if (description) {
+    html += `<span class="agent-call-desc">${escapeHtml(description)}</span>`
+  }
+  html += '</div>'
+
+  // Prompt (truncated preview)
+  if (prompt) {
+    const maxLen = 200
+    const truncated = prompt.length > maxLen ? prompt.slice(0, maxLen) + '…' : prompt
+    html += `<div class="agent-call-prompt">${escapeHtml(truncated)}</div>`
+  }
+
+  html += '</div>'
+  return html
+}
+
+/**
+ * Render Skill tool input as a skill call view.
+ * Shows skill name + optional arguments.
+ */
+function renderSkillCall(input: Record<string, any>): string {
+  const skill = input.skill || input.command || ''
+  const args = input.args || input.arguments || ''
+
+  let html = '<div class="skill-call-view">'
+
+  // Skill name
+  html += '<div class="skill-call-header">'
+  html += '<span class="skill-call-icon">✨</span>'
+  html += `<span class="skill-call-name">${escapeHtml(skill)}</span>`
+  html += '</div>'
+
+  // Arguments (if present)
+  if (args) {
+    const argStr = typeof args === 'string' ? args : JSON.stringify(args, null, 2)
+    const truncated = argStr.length > 150 ? argStr.slice(0, 150) + '…' : argStr
+    html += `<div class="skill-call-args">${escapeHtml(truncated)}</div>`
+  }
+
+  html += '</div>'
+  return html
+}
+
+/**
  * Render input as JSON (the fallback for unregistered tools).
  */
 function renderJsonFallback(input: any): string {
@@ -330,6 +516,12 @@ registerToolRenderer('Bash', renderBashTerminal)
 registerToolRenderer('Read', renderReadPreview)
 registerToolRenderer('Write', renderWritePreview)
 registerToolRenderer('AskUserQuestion', renderAskUserQuestion)
+registerToolRenderer('Grep', renderGrepSearch)
+registerToolRenderer('Glob', renderGlobPattern)
+registerToolRenderer('WebSearch', renderWebSearch)
+registerToolRenderer('WebFetch', renderWebFetch)
+registerToolRenderer('Agent', renderAgentCall)
+registerToolRenderer('Skill', renderSkillCall)
 
 TOOL_AUTO_EXPAND.add('askuserquestion')
 

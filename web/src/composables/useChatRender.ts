@@ -202,8 +202,9 @@ export function useChatRender(options) {
 
   function toolCallSummary(block) {
     if (!block.input) return ''
+    const name = (block.name || '').toLowerCase()
     // AskUserQuestion: show first question header
-    if ((block.name || '').toLowerCase() === 'askuserquestion' && Array.isArray(block.input.questions) && block.input.questions.length > 0) {
+    if (name === 'askuserquestion' && Array.isArray(block.input.questions) && block.input.questions.length > 0) {
       const q = block.input.questions[0]
       const header = q.header || ''
       const question = q.question || ''
@@ -215,6 +216,16 @@ export function useChatRender(options) {
     const obj = block.input
     if (obj.file_path) return baseName(obj.file_path)
     if (obj.command) return obj.command.length > 60 ? obj.command.slice(0, 57) + '...' : obj.command
+    // Grep/Glob: show pattern
+    if (obj.pattern) return obj.pattern.length > 60 ? obj.pattern.slice(0, 57) + '...' : obj.pattern
+    // WebSearch: show query
+    if (obj.query) return obj.query.length > 60 ? obj.query.slice(0, 57) + '...' : obj.query
+    // WebFetch: show url
+    if (obj.url) return obj.url.length > 60 ? obj.url.slice(0, 57) + '...' : obj.url
+    // Skill: show skill name
+    if (obj.skill) return obj.skill
+    // Agent: show description or prompt summary (description already handled above)
+    if (obj.prompt && name === 'agent') return obj.prompt.length > 60 ? obj.prompt.slice(0, 57) + '...' : obj.prompt
     if (obj.path) return baseName(obj.path)
     if (obj.src_path && obj.dst_path) return `${baseName(obj.src_path)} → ${baseName(obj.dst_path)}`
     const firstVal = Object.values(obj)[0]

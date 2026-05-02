@@ -97,22 +97,43 @@ import { handleToolAction, shouldAutoExpandTool } from '@/utils/renderToolDetail
 
 // Tool display configuration: icon SVG paths + category for color
 const TOOL_DISPLAY = {
-  'Read':          { icon: 'M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z', category: 'file' },
-  'Write':         { icon: 'M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z', category: 'file' },
-  'Edit':          { icon: 'M12 3v18M3 12h18', category: 'file' },
-  'Bash':          { icon: 'M4 17l6-6-6-6M12 19h8', category: 'bash' },
-  'WebSearch':     { icon: 'M11 3a8 8 0 1 0 0 16 8 8 0 0 0 0-16zM21 21l-4.35-4.35', category: 'search' },
-  'WebFetch':      { icon: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z', category: 'search' },
-  'TaskCreate':    { icon: 'M12 5v14M5 12h14', category: 'task' },
-  'TaskUpdate':    { icon: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7 M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z', category: 'task' },
-  'TaskList':      { icon: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01', category: 'task' },
-  'TaskGet':       { icon: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12zM12 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4z', category: 'task' },
-  'EnterPlanMode': { icon: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM16.24 7.76l-2.12 6.36-6.36 2.12 2.12-6.36 6.36-2.12z', category: 'plan' },
-  'ExitPlanMode':  { icon: 'M22 11.08V12a10 10 0 1 1-5.93-9.14M22 4L12 14.01l-3-3', category: 'plan' },
-  'Agent':         { icon: 'M12 8V4H8 M12 8V4h4 M8 4a4 4 0 0 0-4 4v2 M16 4a4 4 0 0 1 4 4v2 M9 16h6 M10 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4z', category: 'agent' },
-  'SendMessage':   { icon: 'M22 2l-7 20-4-9-9-4 20-7z', category: 'agent' },
-  'Skill':         { icon: 'M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8z', category: 'skill' },
+  'Read':            { icon: 'M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z', category: 'file' },
+  'Write':           { icon: 'M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z', category: 'file' },
+  'Edit':            { icon: 'M12 3v18M3 12h18', category: 'file' },
+  'Bash':            { icon: 'M4 17l6-6-6-6M12 19h8', category: 'bash' },
+  'Grep':            { icon: 'M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.35-4.35', category: 'search' },
+  'Glob':            { icon: 'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z', category: 'search' },
+  'WebSearch':       { icon: 'M11 3a8 8 0 1 0 0 16 8 8 0 0 0 0-16zM21 21l-4.35-4.35', category: 'search' },
+  'WebFetch':        { icon: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z', category: 'search' },
+  'Agent':           { icon: 'M12 8V4H8 M12 8V4h4 M8 4a4 4 0 0 0-4 4v2 M16 4a4 4 0 0 1 4 4v2 M9 16h6 M10 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4z', category: 'agent' },
+  'Skill':           { icon: 'M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8z', category: 'skill' },
   'AskUserQuestion': { icon: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z M8 10h.01 M12 10h.01 M16 10h.01', category: 'ask' },
+  'TaskCreate':      { icon: 'M12 5v14M5 12h14', category: 'task' },
+  'TaskUpdate':      { icon: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7 M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z', category: 'task' },
+  'TaskList':        { icon: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01', category: 'task' },
+  'TaskGet':         { icon: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12zM12 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4z', category: 'task' },
+  'TaskStop':        { icon: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7', category: 'task' },
+  'TaskOutput':      { icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8', category: 'task' },
+  'EnterPlanMode':   { icon: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM16.24 7.76l-2.12 6.36-6.36 2.12 2.12-6.36 6.36-2.12z', category: 'plan' },
+  'ExitPlanMode':    { icon: 'M22 11.08V12a10 10 0 1 1-5.93-9.14M22 4L12 14.01l-3-3', category: 'plan' },
+  'LS':              { icon: 'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z', category: 'file' },
+  'PowerShell':      { icon: 'M4 17l6-6-6-6M12 19h8', category: 'bash' },
+  'SendMessage':     { icon: 'M22 2l-7 20-4-9-9-4 20-7z', category: 'agent' },
+  'NotebookEdit':    { icon: 'M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z', category: 'file' },
+  'TodoWrite':       { icon: 'M9 11l3 3L22 4 M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11', category: 'task' },
+  'LSP':             { icon: 'M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8z', category: 'skill' },
+  'ImageGen':        { icon: 'M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z M12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z', category: 'skill' },
+  'EnterWorktree':   { icon: 'M6 3v18M18 3v18M3 6h18M3 18h18', category: 'plan' },
+  'LeaveWorktree':   { icon: 'M6 3v18M18 3v18M3 6h18M3 18h18', category: 'plan' },
+  'ComputerUse':     { icon: 'M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2z', category: 'agent' },
+  'TeamCreate':      { icon: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75', category: 'agent' },
+  'TeamDelete':      { icon: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75', category: 'agent' },
+  'WeChatReply':     { icon: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z', category: 'agent' },
+  'WeComReply':      { icon: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z', category: 'agent' },
+  'save_memory':     { icon: 'M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z M17 21v-5.5a2.5 2.5 0 0 0-2.5-2.5h-5a2.5 2.5 0 0 0-2.5 2.5V21', category: 'skill' },
+  'StructuredOutput': { icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8', category: 'file' },
+  'SkillManage':     { icon: 'M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8z', category: 'skill' },
+  'Monitor':         { icon: 'M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2z', category: 'bash' },
 }
 const FALLBACK_TOOL_DISPLAY = { icon: 'M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z', category: 'fallback' }
 
@@ -902,5 +923,282 @@ onUnmounted(() => {
 
 :root[data-theme="dark"] .content-blocks .tool-detail .ask-question-view.ask-submitted .ask-question-submit {
   background: #22c55e;
+}
+
+/* ── Grep search view ── */
+.content-blocks .tool-detail .grep-search-view {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.content-blocks .tool-detail .grep-pattern-row,
+.content-blocks .tool-detail .grep-path-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.content-blocks .tool-detail .grep-label {
+  font-size: 9px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(139, 92, 246, 0.12);
+  color: #7c3aed;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+  line-height: 1.5;
+}
+
+:root[data-theme="dark"] .content-blocks .tool-detail .grep-label {
+  background: rgba(167, 139, 250, 0.15);
+  color: #a78bfa;
+}
+
+.content-blocks .tool-detail .grep-pattern-text,
+.content-blocks .tool-detail .grep-path-text {
+  font-family: 'SF Mono', 'Fira Code', Menlo, Monaco, monospace;
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-primary);
+}
+
+.content-blocks .tool-detail .grep-mode-tag {
+  font-size: 9px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(139, 92, 246, 0.08);
+  color: #8b5cf6;
+  font-weight: 500;
+  align-self: flex-start;
+}
+
+:root[data-theme="dark"] .content-blocks .tool-detail .grep-mode-tag {
+  background: rgba(167, 139, 250, 0.12);
+  color: #a78bfa;
+}
+
+/* ── Glob pattern view ── */
+.content-blocks .tool-detail .glob-pattern-view {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.content-blocks .tool-detail .glob-pattern-row,
+.content-blocks .tool-detail .glob-path-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.content-blocks .tool-detail .glob-label {
+  font-size: 9px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(139, 92, 246, 0.12);
+  color: #7c3aed;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+  line-height: 1.5;
+}
+
+:root[data-theme="dark"] .content-blocks .tool-detail .glob-label {
+  background: rgba(167, 139, 250, 0.15);
+  color: #a78bfa;
+}
+
+.content-blocks .tool-detail .glob-pattern-text,
+.content-blocks .tool-detail .glob-path-text {
+  font-family: 'SF Mono', 'Fira Code', Menlo, Monaco, monospace;
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-primary);
+}
+
+/* ── WebSearch view ── */
+.content-blocks .tool-detail .web-search-view {
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.content-blocks .tool-detail .web-search-query {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: var(--text-primary);
+}
+
+.content-blocks .tool-detail .web-search-icon {
+  flex-shrink: 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.content-blocks .tool-detail .web-search-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ── WebFetch view ── */
+.content-blocks .tool-detail .web-fetch-view {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.content-blocks .tool-detail .web-fetch-url-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.content-blocks .tool-detail .web-fetch-label {
+  font-size: 9px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(139, 92, 246, 0.12);
+  color: #7c3aed;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+  line-height: 1.5;
+}
+
+:root[data-theme="dark"] .content-blocks .tool-detail .web-fetch-label {
+  background: rgba(167, 139, 250, 0.15);
+  color: #a78bfa;
+}
+
+.content-blocks .tool-detail .web-fetch-link {
+  font-family: 'SF Mono', 'Fira Code', Menlo, Monaco, monospace;
+  font-size: 11px;
+  color: var(--accent-color);
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.content-blocks .tool-detail .web-fetch-link:hover {
+  text-decoration: underline;
+}
+
+.content-blocks .tool-detail .web-fetch-text {
+  font-family: 'SF Mono', 'Fira Code', Menlo, Monaco, monospace;
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-primary);
+}
+
+.content-blocks .tool-detail .web-fetch-prompt {
+  color: var(--text-secondary);
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ── Agent call view ── */
+.content-blocks .tool-detail .agent-call-view {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.content-blocks .tool-detail .agent-call-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.content-blocks .tool-detail .agent-type-badge {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(236, 72, 153, 0.12);
+  color: #db2777;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+:root[data-theme="dark"] .content-blocks .tool-detail .agent-type-badge {
+  background: rgba(244, 114, 182, 0.15);
+  color: #f472b6;
+}
+
+.content-blocks .tool-detail .agent-call-desc {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.content-blocks .tool-detail .agent-call-prompt {
+  color: var(--text-secondary);
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding: 4px 8px;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  font-family: inherit;
+  line-height: 1.5;
+  max-height: 80px;
+  overflow-y: auto;
+}
+
+/* ── Skill call view ── */
+.content-blocks .tool-detail .skill-call-view {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.content-blocks .tool-detail .skill-call-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.content-blocks .tool-detail .skill-call-icon {
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.content-blocks .tool-detail .skill-call-name {
+  font-weight: 600;
+  color: #0891b2;
+  font-family: 'SF Mono', 'Fira Code', Menlo, Monaco, monospace;
+  font-size: 11px;
+}
+
+:root[data-theme="dark"] .content-blocks .tool-detail .skill-call-name {
+  color: #22d3ee;
+}
+
+.content-blocks .tool-detail .skill-call-args {
+  color: var(--text-secondary);
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding: 4px 8px;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  font-family: 'SF Mono', 'Fira Code', Menlo, Monaco, monospace;
+  line-height: 1.5;
+  max-height: 80px;
+  overflow-y: auto;
 }
 </style>

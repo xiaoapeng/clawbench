@@ -188,21 +188,35 @@ func normalizeGeminiToolName(name string) string {
 		return "Read"
 	case "write_file":
 		return "Write"
-	case "edit_file":
+	case "edit_file", "replace":
 		return "Edit"
 	case "shell", "run_command":
 		return "Bash"
-	case "list_files":
+	case "list_files", "list_directory":
 		return "LS"
 	case "search_files":
 		return "Grep"
+	case "glob":
+		return "Glob"
+	case "web_fetch":
+		return "WebFetch"
+	case "google_web_search":
+		return "WebSearch"
+	case "invoke_agent":
+		return "Agent"
+	case "enter_plan_mode":
+		return "EnterPlanMode"
+	case "activate_skill":
+		return "Skill"
+	case "save_memory":
+		return "save_memory" // no canonical PascalCase equivalent
 	default:
 		return name
 	}
 }
 
 // normalizeGeminiInput remaps Gemini's camelCase input fields to canonical snake_case.
-// Gemini uses filePath instead of file_path, etc.
+// Gemini uses filePath instead of file_path, dirPath instead of path, etc.
 func normalizeGeminiInput(toolName string, rawInput json.RawMessage) string {
 	var input map[string]any
 	if err := json.Unmarshal(rawInput, &input); err != nil {
@@ -213,6 +227,10 @@ func normalizeGeminiInput(toolName string, rawInput json.RawMessage) string {
 	if v, ok := input["filePath"]; ok {
 		delete(input, "filePath")
 		input["file_path"] = v
+	}
+	if v, ok := input["dirPath"]; ok {
+		delete(input, "dirPath")
+		input["path"] = v
 	}
 
 	normalized, err := json.Marshal(input)

@@ -364,6 +364,228 @@ func TestBuildGeminiStreamArgs_NoResumeWithoutFlag(t *testing.T) {
 	}
 }
 
+func TestNormalizeGeminiToolName(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		// Existing mappings
+		{"read_file", "Read"},
+		{"write_file", "Write"},
+		{"edit_file", "Edit"},
+		{"shell", "Bash"},
+		{"run_command", "Bash"},
+		{"list_files", "LS"},
+		{"search_files", "Grep"},
+		// New mappings
+		{"replace", "Edit"},
+		{"list_directory", "LS"},
+		{"glob", "Glob"},
+		{"web_fetch", "WebFetch"},
+		{"google_web_search", "WebSearch"},
+		{"invoke_agent", "Agent"},
+		{"enter_plan_mode", "EnterPlanMode"},
+		{"activate_skill", "Skill"},
+		{"save_memory", "save_memory"},
+		// Unknown tool → passthrough
+		{"custom_tool", "custom_tool"},
+		{"", ""},
+	}
+	for _, tt := range tests {
+		got := normalizeGeminiToolName(tt.input)
+		if got != tt.expected {
+			t.Errorf("normalizeGeminiToolName(%q) = %q, want %q", tt.input, got, tt.expected)
+		}
+	}
+}
+
+func TestNormalizeGeminiInput_FieldRemapping(t *testing.T) {
+	// filePath → file_path
+	input1 := json.RawMessage(`{"filePath":"/tmp/test.go"}`)
+	result1 := normalizeGeminiInput("read_file", input1)
+	var parsed1 map[string]any
+	if err := json.Unmarshal([]byte(result1), &parsed1); err != nil {
+		t.Fatalf("failed to parse result: %v", err)
+	}
+	if _, exists := parsed1["filePath"]; exists {
+		t.Error("filePath should be removed")
+	}
+	if parsed1["file_path"] != "/tmp/test.go" {
+		t.Errorf("expected file_path=/tmp/test.go, got %v", parsed1["file_path"])
+	}
+
+	// dirPath → path
+	input2 := json.RawMessage(`{"dirPath":"./src"}`)
+	result2 := normalizeGeminiInput("list_directory", input2)
+	var parsed2 map[string]any
+	if err := json.Unmarshal([]byte(result2), &parsed2); err != nil {
+		t.Fatalf("failed to parse result: %v", err)
+	}
+	if _, exists := parsed2["dirPath"]; exists {
+		t.Error("dirPath should be removed")
+	}
+	if parsed2["path"] != "./src" {
+		t.Errorf("expected path=./src, got %v", parsed2["path"])
+	}
+
+	// Combined: filePath + dirPath
+	input3 := json.RawMessage(`{"filePath":"main.go","dirPath":"./src"}`)
+	result3 := normalizeGeminiInput("read_file", input3)
+	var parsed3 map[string]any
+	if err := json.Unmarshal([]byte(result3), &parsed3); err != nil {
+		t.Fatalf("failed to parse result: %v", err)
+	}
+	if parsed3["file_path"] != "main.go" {
+		t.Errorf("expected file_path=main.go, got %v", parsed3["file_path"])
+	}
+	if parsed3["path"] != "./src" {
+		t.Errorf("expected path=./src, got %v", parsed3["path"])
+	}
+}
+
+func TestNormalizeGeminiInput_UnparseableJSON(t *testing.T) {
+	bad := json.RawMessage(`not valid json`)
+	result := normalizeGeminiInput("read_file", bad)
+	if result != string(bad) {
+		t.Errorf("expected unparseable input returned as-is, got %q", result)
+	}
+}
+
+func TestNormalizeGeminiInput_AlreadyCanonical(t *testing.T) {
+	input := json.RawMessage(`{"file_path":"/tmp/test.go"}`)
+	result := normalizeGeminiInput("read_file", input)
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
+		t.Fatalf("failed to parse result: %v", err)
+	}
+	if parsed["file_path"] != "/tmp/test.go" {
+		t.Errorf("expected file_path=/tmp/test.go, got %v", parsed["file_path"])
+	}
+}
+
+func TestGeminiStream_ParseLine_ToolUse_NewTools(t *testing.T) {
+	tests := []struct {
+		name         string
+		line         string
+		expectedTool string
+		checkInput   func(t *testing.T, input map[string]any)
+	}{
+		{
+			name:         "glob",
+			line:         `{"type":"tool_use","timestamp":"2026-04-25T10:00:02.000Z","tool_name":"glob","tool_id":"call_glob","parameters":{"pattern":"**/*.go"}}`,
+			expectedTool: "Glob",
+			checkInput: func(t *testing.T, input map[string]any) {
+				if input["pattern"] != "**/*.go" {
+					t.Errorf("expected pattern='**/*.go', got %v", input["pattern"])
+				}
+			},
+		},
+		{
+			name:         "web_fetch",
+			line:         `{"type":"tool_use","timestamp":"2026-04-25T10:00:02.000Z","tool_name":"web_fetch","tool_id":"call_wf","parameters":{"url":"https://example.com"}}`,
+			expectedTool: "WebFetch",
+			checkInput: func(t *testing.T, input map[string]any) {
+				if input["url"] != "https://example.com" {
+					t.Errorf("expected url='https://example.com', got %v", input["url"])
+				}
+			},
+		},
+		{
+			name:         "google_web_search",
+			line:         `{"type":"tool_use","timestamp":"2026-04-25T10:00:02.000Z","tool_name":"google_web_search","tool_id":"call_ws","parameters":{"query":"golang testing"}}`,
+			expectedTool: "WebSearch",
+			checkInput: func(t *testing.T, input map[string]any) {
+				if input["query"] != "golang testing" {
+					t.Errorf("expected query='golang testing', got %v", input["query"])
+				}
+			},
+		},
+		{
+			name:         "invoke_agent",
+			line:         `{"type":"tool_use","timestamp":"2026-04-25T10:00:02.000Z","tool_name":"invoke_agent","tool_id":"call_agent","parameters":{"description":"research task"}}`,
+			expectedTool: "Agent",
+			checkInput: func(t *testing.T, input map[string]any) {
+				if input["description"] != "research task" {
+					t.Errorf("expected description='research task', got %v", input["description"])
+				}
+			},
+		},
+		{
+			name:         "enter_plan_mode",
+			line:         `{"type":"tool_use","timestamp":"2026-04-25T10:00:02.000Z","tool_name":"enter_plan_mode","tool_id":"call_plan","parameters":{}}`,
+			expectedTool: "EnterPlanMode",
+		},
+		{
+			name:         "activate_skill",
+			line:         `{"type":"tool_use","timestamp":"2026-04-25T10:00:02.000Z","tool_name":"activate_skill","tool_id":"call_skill","parameters":{"skill":"commit"}}`,
+			expectedTool: "Skill",
+			checkInput: func(t *testing.T, input map[string]any) {
+				if input["skill"] != "commit" {
+					t.Errorf("expected skill='commit', got %v", input["skill"])
+				}
+			},
+		},
+		{
+			name:         "save_memory",
+			line:         `{"type":"tool_use","timestamp":"2026-04-25T10:00:02.000Z","tool_name":"save_memory","tool_id":"call_mem","parameters":{"key":"test","value":"data"}}`,
+			expectedTool: "save_memory",
+			checkInput: func(t *testing.T, input map[string]any) {
+				if input["key"] != "test" {
+					t.Errorf("expected key='test', got %v", input["key"])
+				}
+			},
+		},
+		{
+			name:         "replace_as_edit",
+			line:         `{"type":"tool_use","timestamp":"2026-04-25T10:00:02.000Z","tool_name":"replace","tool_id":"call_replace","parameters":{"filePath":"main.go","oldString":"old","newString":"new"}}`,
+			expectedTool: "Edit",
+			checkInput: func(t *testing.T, input map[string]any) {
+				if input["file_path"] != "main.go" {
+					t.Errorf("expected file_path='main.go', got %v", input["file_path"])
+				}
+				if _, ok := input["filePath"]; ok {
+					t.Error("filePath should be normalized to file_path")
+				}
+			},
+		},
+		{
+			name:         "list_directory_as_ls",
+			line:         `{"type":"tool_use","timestamp":"2026-04-25T10:00:02.000Z","tool_name":"list_directory","tool_id":"call_ls","parameters":{"dirPath":"./src"}}`,
+			expectedTool: "LS",
+			checkInput: func(t *testing.T, input map[string]any) {
+				if input["path"] != "./src" {
+					t.Errorf("expected path='./src', got %v", input["path"])
+				}
+				if _, ok := input["dirPath"]; ok {
+					t.Error("dirPath should be normalized to path")
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			events := parseGeminiLine(tt.line)
+			if len(events) != 1 {
+				t.Fatalf("expected 1 event, got %d", len(events))
+			}
+			if events[0].Tool == nil {
+				t.Fatal("expected tool call, got nil")
+			}
+			if events[0].Tool.Name != tt.expectedTool {
+				t.Errorf("expected tool name %q, got %q", tt.expectedTool, events[0].Tool.Name)
+			}
+			if tt.checkInput != nil {
+				var input map[string]any
+				if err := json.Unmarshal([]byte(events[0].Tool.Input), &input); err != nil {
+					t.Fatalf("failed to parse tool input: %v", err)
+				}
+				tt.checkInput(t, input)
+			}
+		})
+	}
+}
+
 func TestBuildGeminiStreamArgs_Minimal(t *testing.T) {
 	req := ChatRequest{
 		Prompt: "hello",

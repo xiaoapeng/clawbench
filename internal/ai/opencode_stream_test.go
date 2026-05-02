@@ -326,6 +326,224 @@ func TestBuildOpenCodeStreamArgs_ResumeSession(t *testing.T) {
 	}
 }
 
+func TestNormalizeOpenCodeToolName(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		// Existing mappings
+		{"read", "Read"},
+		{"write", "Write"},
+		{"edit", "Edit"},
+		{"bash", "Bash"},
+		{"glob", "Glob"},
+		{"grep", "Grep"},
+		{"ls", "LS"},
+		// New mappings
+		{"webfetch", "WebFetch"},
+		{"websearch", "WebSearch"},
+		{"skill", "Skill"},
+		{"task", "Agent"},
+		{"todowrite", "TodoWrite"},
+		{"look_at", "Read"},
+		// Unknown tool → passthrough
+		{"custom_tool", "custom_tool"},
+		{"", ""},
+	}
+	for _, tt := range tests {
+		got := normalizeOpenCodeToolName(tt.input)
+		if got != tt.expected {
+			t.Errorf("normalizeOpenCodeToolName(%q) = %q, want %q", tt.input, got, tt.expected)
+		}
+	}
+}
+
+func TestNormalizeOpenCodeInput_FieldRemapping(t *testing.T) {
+	// filePath → file_path
+	input1 := json.RawMessage(`{"filePath":"/tmp/test.go"}`)
+	result1 := normalizeOpenCodeInput("read", input1)
+	var parsed1 map[string]any
+	if err := json.Unmarshal([]byte(result1), &parsed1); err != nil {
+		t.Fatalf("failed to parse result: %v", err)
+	}
+	if _, exists := parsed1["filePath"]; exists {
+		t.Error("filePath should be removed")
+	}
+	if parsed1["file_path"] != "/tmp/test.go" {
+		t.Errorf("expected file_path=/tmp/test.go, got %v", parsed1["file_path"])
+	}
+
+	// oldString → old_string
+	input2 := json.RawMessage(`{"oldString":"foo","newString":"bar"}`)
+	result2 := normalizeOpenCodeInput("edit", input2)
+	var parsed2 map[string]any
+	if err := json.Unmarshal([]byte(result2), &parsed2); err != nil {
+		t.Fatalf("failed to parse result: %v", err)
+	}
+	if _, exists := parsed2["oldString"]; exists {
+		t.Error("oldString should be removed")
+	}
+	if _, exists := parsed2["newString"]; exists {
+		t.Error("newString should be removed")
+	}
+	if parsed2["old_string"] != "foo" {
+		t.Errorf("expected old_string=foo, got %v", parsed2["old_string"])
+	}
+	if parsed2["new_string"] != "bar" {
+		t.Errorf("expected new_string=bar, got %v", parsed2["new_string"])
+	}
+
+	// Combined: filePath + oldString + newString
+	input3 := json.RawMessage(`{"filePath":"main.go","oldString":"hello","newString":"world","replace_all":true}`)
+	result3 := normalizeOpenCodeInput("edit", input3)
+	var parsed3 map[string]any
+	if err := json.Unmarshal([]byte(result3), &parsed3); err != nil {
+		t.Fatalf("failed to parse result: %v", err)
+	}
+	if parsed3["file_path"] != "main.go" {
+		t.Errorf("expected file_path=main.go, got %v", parsed3["file_path"])
+	}
+	if parsed3["old_string"] != "hello" {
+		t.Errorf("expected old_string=hello, got %v", parsed3["old_string"])
+	}
+	if parsed3["new_string"] != "world" {
+		t.Errorf("expected new_string=world, got %v", parsed3["new_string"])
+	}
+	if parsed3["replace_all"] != true {
+		t.Errorf("expected replace_all=true, got %v", parsed3["replace_all"])
+	}
+}
+
+func TestNormalizeOpenCodeInput_UnparseableJSON(t *testing.T) {
+	bad := json.RawMessage(`not valid json`)
+	result := normalizeOpenCodeInput("edit", bad)
+	if result != string(bad) {
+		t.Errorf("expected unparseable input returned as-is, got %q", result)
+	}
+}
+
+func TestNormalizeOpenCodeInput_AlreadyCanonical(t *testing.T) {
+	// If input already uses snake_case, no remapping needed
+	input := json.RawMessage(`{"file_path":"/tmp/test.go","old_string":"foo","new_string":"bar"}`)
+	result := normalizeOpenCodeInput("edit", input)
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
+		t.Fatalf("failed to parse result: %v", err)
+	}
+	if parsed["file_path"] != "/tmp/test.go" {
+		t.Errorf("expected file_path=/tmp/test.go, got %v", parsed["file_path"])
+	}
+	if parsed["old_string"] != "foo" {
+		t.Errorf("expected old_string=foo, got %v", parsed["old_string"])
+	}
+}
+
+func TestOpenCodeStream_ParseLine_ToolUse_NewTools(t *testing.T) {
+	tests := []struct {
+		name         string
+		line         string
+		expectedTool string
+		checkInput   func(t *testing.T, input map[string]any)
+	}{
+		{
+			name:         "websearch",
+			line:         `{"type":"tool_use","timestamp":1,"sessionID":"ses_abc","part":{"type":"tool","tool":"websearch","callID":"call_ws","state":{"status":"completed","input":{"query":"golang testing"},"output":"results"}}}`,
+			expectedTool: "WebSearch",
+			checkInput: func(t *testing.T, input map[string]any) {
+				if input["query"] != "golang testing" {
+					t.Errorf("expected query='golang testing', got %v", input["query"])
+				}
+			},
+		},
+		{
+			name:         "webfetch",
+			line:         `{"type":"tool_use","timestamp":1,"sessionID":"ses_abc","part":{"type":"tool","tool":"webfetch","callID":"call_wf","state":{"status":"completed","input":{"url":"https://example.com"},"output":"page content"}}}`,
+			expectedTool: "WebFetch",
+			checkInput: func(t *testing.T, input map[string]any) {
+				if input["url"] != "https://example.com" {
+					t.Errorf("expected url='https://example.com', got %v", input["url"])
+				}
+			},
+		},
+		{
+			name:         "skill",
+			line:         `{"type":"tool_use","timestamp":1,"sessionID":"ses_abc","part":{"type":"tool","tool":"skill","callID":"call_sk","state":{"status":"completed","input":{"skill":"commit"},"output":"done"}}}`,
+			expectedTool: "Skill",
+			checkInput: func(t *testing.T, input map[string]any) {
+				if input["skill"] != "commit" {
+					t.Errorf("expected skill='commit', got %v", input["skill"])
+				}
+			},
+		},
+		{
+			name:         "task_as_agent",
+			line:         `{"type":"tool_use","timestamp":1,"sessionID":"ses_abc","part":{"type":"tool","tool":"task","callID":"call_task","state":{"status":"completed","input":{"description":"research task"},"output":"result"}}}`,
+			expectedTool: "Agent",
+			checkInput: func(t *testing.T, input map[string]any) {
+				if input["description"] != "research task" {
+					t.Errorf("expected description='research task', got %v", input["description"])
+				}
+			},
+		},
+		{
+			name:         "grep_with_camelCase",
+			line:         `{"type":"tool_use","timestamp":1,"sessionID":"ses_abc","part":{"type":"tool","tool":"grep","callID":"call_grep","state":{"status":"completed","input":{"pattern":"TODO","path":"./src"},"output":"matches"}}}`,
+			expectedTool: "Grep",
+			checkInput: func(t *testing.T, input map[string]any) {
+				if input["pattern"] != "TODO" {
+					t.Errorf("expected pattern='TODO', got %v", input["pattern"])
+				}
+			},
+		},
+		{
+			name:         "edit_with_camelCase_fields",
+			line:         `{"type":"tool_use","timestamp":1,"sessionID":"ses_abc","part":{"type":"tool","tool":"edit","callID":"call_edit","state":{"status":"completed","input":{"filePath":"main.go","oldString":"old","newString":"new"},"output":"ok"}}}`,
+			expectedTool: "Edit",
+			checkInput: func(t *testing.T, input map[string]any) {
+				if input["file_path"] != "main.go" {
+					t.Errorf("expected file_path='main.go', got %v", input["file_path"])
+				}
+				if input["old_string"] != "old" {
+					t.Errorf("expected old_string='old', got %v", input["old_string"])
+				}
+				if input["new_string"] != "new" {
+					t.Errorf("expected new_string='new', got %v", input["new_string"])
+				}
+				// camelCase keys should not exist
+				if _, ok := input["filePath"]; ok {
+					t.Error("filePath should not exist after normalization")
+				}
+				if _, ok := input["oldString"]; ok {
+					t.Error("oldString should not exist after normalization")
+				}
+				if _, ok := input["newString"]; ok {
+					t.Error("newString should not exist after normalization")
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			events := parseOpenCodeLine(tt.line)
+			if len(events) != 1 {
+				t.Fatalf("expected 1 event, got %d", len(events))
+			}
+			if events[0].Tool == nil {
+				t.Fatal("expected tool call, got nil")
+			}
+			if events[0].Tool.Name != tt.expectedTool {
+				t.Errorf("expected tool name %q, got %q", tt.expectedTool, events[0].Tool.Name)
+			}
+			var input map[string]any
+			if err := json.Unmarshal([]byte(events[0].Tool.Input), &input); err != nil {
+				t.Fatalf("failed to parse tool input: %v", err)
+			}
+			tt.checkInput(t, input)
+		})
+	}
+}
+
 func TestBuildOpenCodeStreamArgs_Minimal(t *testing.T) {
 	req := ChatRequest{
 		Prompt: "hello",
