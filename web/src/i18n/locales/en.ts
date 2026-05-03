@@ -268,6 +268,8 @@ export default {
     sortByType: 'Sort by type',
     sortAsc: 'Ascending',
     sortDesc: 'Descending',
+    sortDefault: 'Default order',
+    sortClickToClear: 'Click again to clear sort',
     hideHiddenFiles: 'Hide hidden files',
     showHiddenFiles: 'Show hidden files',
     syncToCurrentDir: 'Sync to current file directory',

@@ -268,6 +268,8 @@ export default {
     sortByType: '按后缀排序',
     sortAsc: '升序',
     sortDesc: '降序',
+    sortDefault: '默认排序',
+    sortClickToClear: '再次点击取消排序',
     hideHiddenFiles: '隐藏隐藏文件',
     showHiddenFiles: '显示隐藏文件',
     syncToCurrentDir: '同步到当前文件目录',
