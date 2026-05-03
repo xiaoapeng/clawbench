@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"strings"
 	"sync"
 	"time"
 
@@ -278,60 +277,19 @@ func (s *Scheduler) executeTask(task *model.ScheduledTask, projectPath string, t
 
 	// Consume streaming events and build content blocks
 	var blocks []model.ContentBlock
-	var currentText strings.Builder
-	var currentThinking strings.Builder
 	var responseMetadata *ai.Metadata
 
 	for event := range eventCh {
 		switch event.Type {
-		case "content":
-			if currentThinking.Len() > 0 {
-				blocks = append(blocks, model.ContentBlock{Type: "thinking", Text: currentThinking.String()})
-				currentThinking.Reset()
-			}
-			currentText.WriteString(event.Content)
-		case "thinking":
-			if currentText.Len() > 0 {
-				blocks = append(blocks, model.ContentBlock{Type: "text", Text: currentText.String()})
-				currentText.Reset()
-			}
-			currentThinking.WriteString(event.Content)
-		case "tool_use":
-			if currentText.Len() > 0 {
-				blocks = append(blocks, model.ContentBlock{Type: "text", Text: currentText.String()})
-				currentText.Reset()
-			}
-			if currentThinking.Len() > 0 {
-				blocks = append(blocks, model.ContentBlock{Type: "thinking", Text: currentThinking.String()})
-				currentThinking.Reset()
-			}
-			if event.Tool != nil {
-				inputMap := make(map[string]any)
-				if event.Tool.Input != "" {
-					json.Unmarshal([]byte(event.Tool.Input), &inputMap)
-				}
-				blocks = append(blocks, model.ContentBlock{
-					Type:  "tool_use",
-					Name:  event.Tool.Name,
-					ID:    event.Tool.ID,
-					Input: inputMap,
-				})
-			}
 		case "metadata":
 			if event.Meta != nil {
 				responseMetadata = event.Meta
 			}
 		case "done", "error":
 			// Terminal events
+		default:
+			ai.AccumulateBlock(&blocks, event)
 		}
-	}
-
-	// Flush remaining text/thinking
-	if currentText.Len() > 0 {
-		blocks = append(blocks, model.ContentBlock{Type: "text", Text: currentText.String()})
-	}
-	if currentThinking.Len() > 0 {
-		blocks = append(blocks, model.ContentBlock{Type: "thinking", Text: currentThinking.String()})
 	}
 
 	// Build content JSON

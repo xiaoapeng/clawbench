@@ -600,7 +600,7 @@ func TestAddTaskExecution(t *testing.T) {
 	)
 
 	content := `{"blocks":[{"type":"text","text":"execution result"}]}`
-	err := service.AddTaskExecution("task-1", content)
+	err := service.AddTaskExecution("task-1", content, "cron")
 	assert.NoError(t, err)
 
 	// Verify the execution was recorded
@@ -619,9 +619,9 @@ func TestAddTaskExecution_MultipleExecutions(t *testing.T) {
 	_, cleanup := setupScheduler(t)
 	defer cleanup()
 
-	err := service.AddTaskExecution("task-1", `{"blocks":[{"type":"text","text":"result1"}]}`)
+	err := service.AddTaskExecution("task-1", `{"blocks":[{"type":"text","text":"result1"}]}`, "cron")
 	assert.NoError(t, err)
-	err = service.AddTaskExecution("task-1", `{"blocks":[{"type":"text","text":"result2"}]}`)
+	err = service.AddTaskExecution("task-1", `{"blocks":[{"type":"text","text":"result2"}]}`, "cron")
 	assert.NoError(t, err)
 
 	var count int

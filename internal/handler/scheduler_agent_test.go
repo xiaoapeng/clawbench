@@ -439,7 +439,7 @@ func TestServeTaskByID_Executions(t *testing.T) {
 	s.AddTask(task)
 
 	// Create an execution record directly
-	service.AddTaskExecution(task.ID, `{"blocks":[{"type":"text","text":"result"}]}`)
+	service.AddTaskExecution(task.ID, `{"blocks":[{"type":"text","text":"result"}]}`, "manual")
 
 	// Get executions
 	req := newRequest(t, http.MethodGet, "/api/tasks/"+task.ID+"/executions", nil)

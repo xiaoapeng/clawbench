@@ -17,12 +17,12 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// feedEvents processes a sequence of StreamEvents through accumulateBlock
+// feedEvents processes a sequence of StreamEvents through AccumulateBlock
 // and returns the resulting blocks.
 func feedEvents(events []ai.StreamEvent) []model.ContentBlock {
 	var blocks []model.ContentBlock
 	for _, event := range events {
-		accumulateBlock(&blocks, event, "", "", "")
+		ai.AccumulateBlock(&blocks, event)
 	}
 	return blocks
 }

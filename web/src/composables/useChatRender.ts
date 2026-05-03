@@ -90,15 +90,44 @@ export function useChatRender(options) {
     try {
       const parsed = JSON.parse(content)
       if (parsed.blocks && Array.isArray(parsed.blocks)) {
-        return {
-          blocks: parsed.blocks.map(b => {
-            if (b.type === 'tool_use') {
-              // DB-loaded blocks from finished sessions: if done is missing or false,
-              // the session ended without receiving the tool result — mark as incomplete
-              if (b.done === undefined || b.done === false) b.done = true
+        const mapped = parsed.blocks.map(b => {
+          if (b.type === 'tool_use') {
+            // DB-loaded blocks from finished sessions: if done is missing or false,
+            // the session ended without receiving the tool result — mark as incomplete
+            if (b.done === undefined || b.done === false) b.done = true
+          }
+          return b
+        })
+        // Deduplicate tool_use blocks by ID — old scheduled-task data could have
+        // two blocks with the same ID (one empty input from start event, one with
+        // content from stop event). Merge by keeping the richer version.
+        const result = []
+        const toolIndex = new Map() // id -> index in result
+        for (const b of mapped) {
+          if (b.type === 'tool_use' && b.id) {
+            const prevIdx = toolIndex.get(b.id)
+            if (prevIdx !== undefined) {
+              const prev = result[prevIdx]
+              const prevEmpty = !prev.input || Object.keys(prev.input).length === 0
+              const currEmpty = !b.input || Object.keys(b.input).length === 0
+              if (currEmpty && !prevEmpty) continue          // keep previous (has data)
+              if (!currEmpty && prevEmpty) {                  // replace with current
+                prev.input = b.input
+                prev.done = b.done
+                prev.name = b.name || prev.name
+                continue
+              }
+              // Both have data or both empty — merge: prefer done=true
+              if (b.done) prev.done = true
+              if (!currEmpty) prev.input = b.input
+              continue
             }
-            return b
-          }),
+            toolIndex.set(b.id, result.length)
+          }
+          result.push(b)
+        }
+        return {
+          blocks: result,
           metadata: parsed.metadata || null,
           cancelled: parsed.cancelled || false
         }
