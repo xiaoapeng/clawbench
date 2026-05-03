@@ -38,8 +38,8 @@ server
 docs/promo_rewritten.md
 
 # Private agent configs (use local CLI binaries, not for public repo)
-agents/codebuddy2.yaml
-agents/gpt54.yaml
+agents/codebuddy-gemini-3.1-pro.yaml
+agents/codebuddy-gpt-5.4.yaml
 
 # Android build output
 android/.gradle/
