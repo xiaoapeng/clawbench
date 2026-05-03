@@ -9,6 +9,7 @@
       :content="file.content"
       language="markdown"
       :file-path="file.path"
+      :word-wrap="wordWrap"
     />
   </div>
 </template>
@@ -26,6 +27,7 @@ import { dirName, splitPath } from '@/utils/helpers.ts'
 const props = defineProps({
     file: Object,
     viewMode: String,
+    wordWrap: Boolean,
 })
 
 const renderedHtml = ref('')

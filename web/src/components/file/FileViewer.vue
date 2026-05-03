@@ -7,6 +7,7 @@
       :view-mode="markdownViewMode"
       :toc-open="tocOpen"
       :search-open="searchOpen"
+      :word-wrap="wordWrap"
       @delete="emit('delete', file.path)"
       @toggle-view="emit('toggleView')"
       @show-details="emit('showDetails')"
@@ -14,6 +15,7 @@
       @toggle-toc="emit('toggleToc')"
       @toggle-search="emit('toggleSearch')"
       @open-as-text="handleOpenAsText"
+      @toggle-word-wrap="toggleWordWrap"
     />
 
     <div class="file-viewer-content" ref="contentRef">
@@ -84,6 +86,7 @@
         v-else-if="isMarkdown"
         :file="file"
         :view-mode="markdownViewMode"
+        :word-wrap="wordWrap"
         @delete="emit('delete', file.path)"
         @show-details="emit('showDetails')"
         @open-git-history="emit('openGitHistory')"
@@ -95,6 +98,7 @@
           :content="file.content"
           :language="rawFileLanguage"
           :file-path="file.path"
+          :word-wrap="wordWrap"
         />
       </div>
     </div>
@@ -131,6 +135,20 @@ const rawFileLanguage = computed(() => getFileType(props.file?.name)?.lang || 'p
 const isMarkdown = computed(() => fileType.value?.isMarkdown || false)
 const loading = ref(false)
 const contentRef = ref(null)
+
+// Word wrap preference persisted to localStorage
+const wordWrap = ref(false)
+try {
+    const saved = localStorage.getItem('clawbench-word-wrap')
+    if (saved !== null) wordWrap.value = saved === 'true'
+} catch { /* localStorage may be unavailable */ }
+
+function toggleWordWrap() {
+    wordWrap.value = !wordWrap.value
+    try {
+        localStorage.setItem('clawbench-word-wrap', String(wordWrap.value))
+    } catch { /* localStorage may be unavailable */ }
+}
 
 // Per-file scroll position cache
 const scrollPositions = new Map()

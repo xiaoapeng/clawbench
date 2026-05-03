@@ -1,5 +1,5 @@
 <template>
-  <pre class="raw-content-pre" ref="codeRef" :data-file-path="filePath" :data-language="language" @click="handleClick">
+  <pre class="raw-content-pre" :class="{ 'word-wrap': wordWrap }" ref="codeRef" :data-file-path="filePath" :data-language="language" @click="handleClick">
     <code v-html="codeHtml" />
   </pre>
 </template>
@@ -18,6 +18,8 @@ const props = defineProps({
     language: { type: String, default: 'plaintext' },
     /** File path for quote-question feature */
     filePath: { type: String, default: null },
+    /** Enable word wrap */
+    wordWrap: { type: Boolean, default: false },
 })
 
 const codeHtml = ref('')
@@ -125,6 +127,31 @@ pre :deep(code) {
 .raw-content-pre :deep(code .code-text) {
     white-space: pre;
     padding-left: 12px;
+}
+
+/* Word wrap mode */
+.raw-content-pre.word-wrap {
+    white-space: pre-wrap;
+    word-break: break-all;
+    overflow-wrap: break-word;
+}
+
+.raw-content-pre.word-wrap :deep(code) {
+    white-space: pre-wrap;
+    min-width: 0;
+    word-break: break-all;
+    overflow-wrap: break-word;
+}
+
+.raw-content-pre.word-wrap :deep(code .code-text) {
+    white-space: pre-wrap;
+    word-break: break-all;
+    overflow-wrap: break-word;
+}
+
+.raw-content-pre.word-wrap :deep(code .line-num) {
+    position: static;
+    border-right: 1px solid var(--border-color);
 }
 
 .raw-content-pre :deep(code .line-num:hover) {

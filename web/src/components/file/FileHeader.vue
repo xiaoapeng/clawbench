@@ -29,6 +29,11 @@
             <Code2 :size="14" />
             {{ viewMode === 'rendered' ? t('file.header.sourceView') : t('file.header.renderedView') }}
           </button>
+          <button v-if="!isMarkdownRendered" class="dropdown-item" @click="handleToggleWordWrap">
+            <TextWrap :size="14" />
+            {{ t('file.header.wordWrap') }}
+            <span v-if="wordWrap" class="wrap-check">✓</span>
+          </button>
           <a v-if="!isAppMode" class="dropdown-item" :href="'/api/local-file/' + encodeURIComponent(file.path)" :download="file.name" @click="menuOpen = false">
             <Download :size="14" />
             {{ t('common.download') }}
@@ -54,7 +59,7 @@
 <script setup>
 import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { List, Search, MoreVertical, Code2, Download, Trash2, GitBranch } from 'lucide-vue-next'
+import { List, Search, MoreVertical, Code2, Download, Trash2, GitBranch, TextWrap } from 'lucide-vue-next'
 import { getFileType } from '@/utils/helpers.ts'
 import { useAppMode } from '@/composables/useAppMode.ts'
 
@@ -63,8 +68,9 @@ const props = defineProps({
     viewMode: String,
     tocOpen: Boolean,
     searchOpen: Boolean,
+    wordWrap: Boolean,
 })
-const emit = defineEmits(['delete', 'toggleView', 'showDetails', 'openGitHistory', 'toggleToc', 'toggleSearch', 'openAsText'])
+const emit = defineEmits(['delete', 'toggleView', 'showDetails', 'openGitHistory', 'toggleToc', 'toggleSearch', 'openAsText', 'toggleWordWrap'])
 
 const { isAppMode } = useAppMode()
 const { t } = useI18n()
@@ -74,6 +80,7 @@ const dropdownRef = ref(null)
 
 const fileType = computed(() => props.file ? getFileType(props.file.name) : null)
 const isMarkdown = computed(() => fileType.value?.isMarkdown || false)
+const isMarkdownRendered = computed(() => isMarkdown.value && props.viewMode === 'rendered')
 const hasToc = computed(() => {
     if (!props.file || !props.file.content) return false
     const ft = fileType.value
@@ -102,6 +109,11 @@ const badgeStyle = computed(() => ({
 function handleToggleView() {
     menuOpen.value = false
     emit('toggleView')
+}
+
+function handleToggleWordWrap() {
+    menuOpen.value = false
+    emit('toggleWordWrap')
 }
 
 function handleOpenAsText() {
@@ -289,5 +301,12 @@ onBeforeUnmount(() => {
 }
 .dropdown-item svg {
     flex-shrink: 0;
+}
+
+.wrap-check {
+    margin-left: auto;
+    color: var(--accent-color);
+    font-size: 14px;
+    font-weight: 700;
 }
 </style>

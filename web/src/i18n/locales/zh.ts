@@ -325,6 +325,7 @@ export default {
       openAsText: '以文本打开',
       sourceView: '源码',
       renderedView: '渲染',
+      wordWrap: '自动换行',
       fileHistory: '文件历史',
       confirmDelete: '确定要删除"{name}"吗？',
     },

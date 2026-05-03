@@ -325,6 +325,7 @@ export default {
       openAsText: 'Open as text',
       sourceView: 'Source',
       renderedView: 'Rendered',
+      wordWrap: 'Word Wrap',
       fileHistory: 'File history',
       confirmDelete: 'Delete "{name}"?',
     },
