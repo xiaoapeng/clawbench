@@ -12,5 +12,12 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     css: true,
+    exclude: [
+      '**/.worktrees/**',
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/cypress/**',
+      '**/.{idea,git,cache,output,temp}/**',
+    ],
   },
 })
