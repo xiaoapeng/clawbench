@@ -173,11 +173,13 @@
                 <path d="M15 6a9 9 0 0 0-9 9V3"/>
               </svg>
             </button>
-            <button v-if="isAppMode" class="dock-btn" :class="{ active: proxyOpen }" @click.stop="openDrawer('proxy')" title="端口转发">
+            <button class="dock-btn" :class="{ active: proxyOpen, disabled: !isAppMode }" @click.stop="isAppMode ? openDrawer('proxy') : toast.show('端口转发仅在移动端APP支持', { type: 'info' })" title="端口转发">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-                <path d="M2 17l10 5 10-5"/>
-                <path d="M2 12l10 5 10-5"/>
+                <circle cx="18" cy="5" r="3"/>
+                <circle cx="6" cy="12" r="3"/>
+                <circle cx="18" cy="19" r="3"/>
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
               </svg>
             </button>
             <button class="dock-btn" @click.stop="handleRefresh" title="刷新">
@@ -711,7 +713,6 @@ onUnmounted(() => {
 .dock-btn.disabled {
     opacity: 0.3;
     cursor: default;
-    pointer-events: none;
 }
 
 /* Unread indicator — fast flash on dock button */
