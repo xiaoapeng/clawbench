@@ -170,7 +170,7 @@ function handleSend() {
   right: 8px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 20px;
+  border-radius: 0;
   box-shadow: var(--shadow-md);
   z-index: 2400;
   max-width: 400px;
@@ -197,7 +197,7 @@ function handleSend() {
   flex-shrink: 0;
   padding: 6px 14px;
   border: none;
-  border-radius: 8px;
+  border-radius: 0;
   background: var(--accent-color);
   color: #fff;
   font-size: 13px;
@@ -231,7 +231,7 @@ function handleSend() {
   gap: 4px;
   padding: 5px 8px;
   background: var(--bg-tertiary);
-  border-radius: 20px;
+  border-radius: 0;
   cursor: pointer;
   transition: background 0.15s;
   flex: 1;
@@ -270,7 +270,7 @@ function handleSend() {
   padding: 6px 8px;
   background: var(--bg-tertiary);
   border-left: 2px solid var(--accent-color);
-  border-radius: 0 4px 4px 0;
+  border-radius: 0;
   margin: 0 2px;
   flex: 1;
   min-width: 0;
@@ -281,7 +281,7 @@ function handleSend() {
   align-items: center;
   padding: 5px 8px;
   margin: 0;
-  border-radius: 8px;
+  border-radius: 0;
 }
 
 .qq-quoted-icon {
@@ -319,7 +319,7 @@ function handleSend() {
   flex-direction: column;
   background: var(--bg-tertiary);
   border: none;
-  border-radius: 20px;
+  border-radius: 0;
   overflow: hidden;
   transition: background 0.2s, box-shadow 0.2s;
 }
@@ -365,7 +365,7 @@ function handleSend() {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
+  border-radius: 0;
   transition: color 0.15s, background 0.15s;
   flex-shrink: 0;
   align-self: flex-end;
@@ -386,7 +386,7 @@ function handleSend() {
   background: var(--accent-color);
   color: #fff;
   border: none;
-  border-radius: 50%;
+  border-radius: 0;
   cursor: pointer;
   transition: background 0.15s, opacity 0.15s;
   flex-shrink: 0;
