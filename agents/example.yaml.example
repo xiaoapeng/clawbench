@@ -134,4 +134,4 @@ system_prompt: |
 #   command: /home/user/codebuddy2          # Use an alternate codebuddy binary / 使用另一个版本的 codebuddy
 #   command: codex --profile m27            # Pass profile argument / 传递 profile 参数
 #   command: /usr/local/bin/my-custom-cli   # Custom path / 自定义路径
-#command: /home/xulongzhe/codebuddy2
+#command: /home/user/codebuddy2

@@ -1,9 +1,0 @@
-id: codebuddy2
-name: Gemini
-icon: 🔵
-specialty: Gemini 3.1 Pro 驱动的通用助手
-backend: codebuddy
-model: gemini-3.1-pro
-command: /home/xulongzhe/codebuddy2
-system_prompt: |
-  你是一名全能助手，由 Gemini 3.1 Pro 提供支持，能够处理代码、文档、运维、科研等各类任务。

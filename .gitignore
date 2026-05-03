@@ -37,6 +37,10 @@ server
 # Docs - local only
 docs/promo_rewritten.md
 
+# Private agent configs (use local CLI binaries, not for public repo)
+agents/codebuddy2.yaml
+agents/gpt54.yaml
+
 # Android build output
 android/.gradle/
 android/build/

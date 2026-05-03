@@ -1,9 +1,0 @@
-id: gpt54
-name: GPT
-icon: 🟢
-specialty: GPT 5.4 驱动的通用助手
-backend: codebuddy
-model: gpt-5.4
-command: /home/xulongzhe/codebuddy2
-system_prompt: |
-  你是一名全能助手，由 GPT 5.4 提供支持，能够处理代码、文档、运维、科研等各类任务。
