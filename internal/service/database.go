@@ -106,6 +106,7 @@ func InitDB() error {
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			task_id TEXT NOT NULL,
 			content TEXT NOT NULL DEFAULT '',
+			trigger_type TEXT NOT NULL DEFAULT 'auto',
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		);
 

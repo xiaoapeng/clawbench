@@ -16,7 +16,7 @@
       <div v-if="loading" class="task-loading">加载中...</div>
       <div v-else-if="tasks.length === 0" class="task-empty">暂无定时任务</div>
       <div v-for="task in tasks" :key="task.id" class="task-item" :class="[task.status, { 'has-unread': task.unreadCount > 0 }]">
-        <div class="task-item-main">
+        <div class="task-item-main" @click="openExecDialog(task)">
           <div class="task-item-info">
             <div class="task-item-header">
               <span class="task-item-icon">{{ getAgentIcon(task.agentId) }}</span>
@@ -36,9 +36,6 @@
           <div class="task-item-actions">
             <button class="task-action-btn edit" @click.stop="openEditDialog(task)" title="编辑">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
-            </button>
-            <button class="task-action-btn exec" :class="{ 'has-unread': task.unreadCount > 0 }" @click.stop="openExecDialog(task)" title="执行记录">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
             </button>
             <button v-if="task.status === 'active'" class="task-action-btn pause" @click.stop="pauseTask(task.id)" title="暂停">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
@@ -140,7 +137,7 @@ function openExecDialog(task) {
   execDialogOpen.value = true
 }
 
-function onFormSaved() {
+async function onFormSaved() {
   formDialogOpen.value = false
   loadTasks()
 }
@@ -234,6 +231,7 @@ watch(() => props.open, async (val) => {
   align-items: center;
   justify-content: space-between;
   padding: 8px 10px;
+  cursor: pointer;
 }
 
 .task-item-info {

@@ -12,7 +12,7 @@
       </template>
       <!-- List view: icon + task name -->
       <template v-else>
-        <svg class="modal-header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        <svg class="modal-header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
         <span class="modal-title">{{ task?.name || '执行记录' }}</span>
       </template>
     </template>
@@ -29,8 +29,11 @@
               <span class="exec-relative-time">{{ chatRender.formatMessageTime(exec.createdAt) }}</span>
               <span v-if="exec.isUnread" class="exec-unread-dot"></span>
             </div>
-            <div v-if="exec.summary" class="exec-summary">{{ exec.summary }}</div>
-            <div v-else class="exec-summary empty">无文本输出</div>
+            <div class="exec-summary-row">
+              <div v-if="exec.summary" class="exec-summary">{{ exec.summary }}</div>
+              <div v-else class="exec-summary empty">无文本输出</div>
+              <span v-if="exec.triggerType === 'manual'" class="exec-trigger-type manual">手动</span>
+            </div>
           </div>
           <svg class="exec-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="9 18 15 12 9 6"/>
@@ -39,8 +42,8 @@
       </div>
     </div>
 
-    <!-- Detail view -->
-    <div v-if="view === 'detail' && selectedExec" class="detail-content">
+    <!-- Detail view: reuse chat-message.assistant for consistent markdown/inline styles -->
+    <div v-if="view === 'detail' && selectedExec" class="chat-message assistant detail-content">
       <ContentBlocks
         :blocks="selectedExec.blocks"
         msgId="exec-detail"
@@ -55,6 +58,9 @@
     </div>
 
     <template #footer>
+      <button class="btn btn-primary" @click="triggerTask" :disabled="triggering">
+        {{ triggering ? '执行中...' : '立即执行' }}
+      </button>
       <button class="btn btn-secondary" @click="handleClose">关闭</button>
     </template>
   </ModalDialog>
@@ -65,6 +71,7 @@ import { ref, watch, inject } from 'vue'
 import ModalDialog from '@/components/common/ModalDialog.vue'
 import ContentBlocks from '@/components/chat/ContentBlocks.vue'
 import { useChatRender } from '@/composables/useChatRender.ts'
+import { useToast } from '@/composables/useToast.ts'
 
 const props = defineProps({
   open: Boolean,
@@ -74,6 +81,7 @@ const props = defineProps({
 const emit = defineEmits(['close'])
 
 const loading = ref(false)
+const triggering = ref(false)
 const executions = ref([])
 const expandedTools = ref({})
 const view = ref('list')  // 'list' | 'detail'
@@ -82,6 +90,7 @@ const selectedExec = ref(null)
 // Create chatRender instance for rendering execution blocks
 const renderTheme = inject('theme', ref('light'))
 const chatRender = useChatRender({ messages: ref([]), theme: renderTheme, currentSessionId: ref('') })
+const toast = useToast()
 
 function toggleTool(key) {
   expandedTools.value = { ...expandedTools.value, [key]: !expandedTools.value[key] }
@@ -124,6 +133,25 @@ function handleClose() {
   view.value = 'list'
   selectedExec.value = null
   emit('close')
+}
+
+async function triggerTask() {
+  if (!props.task?.id || triggering.value) return
+  triggering.value = true
+  try {
+    const resp = await fetch(`/api/tasks/${props.task.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'trigger' }),
+    })
+    if (resp.ok) {
+      toast.show(`已触发「${props.task.name}」`, { type: 'success' })
+    }
+  } catch (err) {
+    console.error('Failed to trigger task:', err)
+  } finally {
+    triggering.value = false
+  }
 }
 
 async function loadExecutions() {
@@ -178,7 +206,10 @@ watch(() => props.open, (isOpen) => {
 .detail-content {
   flex: 1;
   overflow-y: auto;
-  padding: 6px;
+  /* Override .chat-message styles that conflict with modal context */
+  background: transparent !important;
+  border-radius: 0 !important;
+  align-self: stretch !important;
 }
 
 .execution-item {
@@ -239,9 +270,29 @@ watch(() => props.open, (isOpen) => {
   animation: exec-unread-pulse 1.2s ease-in-out infinite;
 }
 
+.exec-trigger-type {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-weight: 500;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.exec-trigger-type.manual {
+  background: rgba(59, 130, 246, 0.12);
+  color: #3b82f6;
+}
+
 @keyframes exec-unread-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.5; transform: scale(0.7); }
+}
+
+.exec-summary-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .exec-summary {
@@ -251,11 +302,27 @@ watch(() => props.open, (isOpen) => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 1;
+  min-width: 0;
 }
 
 .exec-summary.empty {
   color: var(--text-muted, #999);
   font-style: italic;
+}
+
+.exec-trigger-type {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-weight: 500;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.exec-trigger-type.manual {
+  background: rgba(59, 130, 246, 0.12);
+  color: #3b82f6;
 }
 
 .execution-item.unread .exec-absolute-time {
@@ -315,6 +382,14 @@ watch(() => props.open, (isOpen) => {
   cursor: pointer;
   transition: background 0.15s, opacity 0.15s;
 }
+
+.btn-primary {
+  background: var(--accent-color, #0066cc);
+  color: #fff;
+}
+
+.btn-primary:hover { background: #0055aa; }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .btn-secondary {
   background: var(--bg-tertiary, #f0f0f0);

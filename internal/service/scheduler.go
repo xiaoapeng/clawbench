@@ -136,6 +136,18 @@ func (s *Scheduler) ResumeTask(id string) error {
 }
 
 // UpdateTask updates an existing task's configuration and re-registers if needed.
+
+// TriggerTask runs a task immediately in a background goroutine, regardless of its status.
+func (s *Scheduler) TriggerTask(id string) error {
+	task, err := GetTaskByID(id)
+	if err != nil {
+		return fmt.Errorf("task not found: %w", err)
+	}
+	go s.executeTask(task, task.ProjectPath, "manual")
+	return nil
+}
+
+// UpdateTask updates an existing task's configuration and re-registers if needed.
 func (s *Scheduler) UpdateTask(task *model.ScheduledTask) error {
 	// Update timestamp
 	task.UpdatedAt = time.Now()
@@ -201,7 +213,7 @@ func (s *Scheduler) registerTaskLocked(task *model.ScheduledTask) error {
 		if err != nil || current.Status != "active" {
 			return
 		}
-		s.executeTask(current, projectPath)
+		s.executeTask(current, projectPath, "auto")
 	}))
 
 	// Lock is already held by caller
@@ -216,7 +228,7 @@ func (s *Scheduler) registerTaskLocked(task *model.ScheduledTask) error {
 
 // executeTask runs a scheduled task by invoking the AI backend and inserting
 // the result as an assistant message in the original session.
-func (s *Scheduler) executeTask(task *model.ScheduledTask, projectPath string) {
+func (s *Scheduler) executeTask(task *model.ScheduledTask, projectPath string, triggerType string) {
 	slog.Info("executing scheduled task",
 		slog.String("task_id", task.ID),
 		slog.String("name", task.Name),
@@ -330,7 +342,7 @@ func (s *Scheduler) executeTask(task *model.ScheduledTask, projectPath string) {
 	contentJSON, _ := json.Marshal(contentMap)
 
 	// Record execution directly in task_executions (no longer writes to chat_history)
-	if err := AddTaskExecution(task.ID, string(contentJSON)); err != nil {
+	if err := AddTaskExecution(task.ID, string(contentJSON), triggerType); err != nil {
 		slog.Error("failed to record task execution", slog.String("err", err.Error()))
 	}
 
@@ -472,10 +484,10 @@ func saveTask(task *model.ScheduledTask) error {
 }
 
 // AddTaskExecution records a task execution with its content directly in task_executions.
-func AddTaskExecution(taskID string, content string) error {
+func AddTaskExecution(taskID string, content string, triggerType string) error {
 	_, err := DB.Exec(
-		"INSERT INTO task_executions (task_id, content) VALUES (?, ?)",
-		taskID, content,
+		"INSERT INTO task_executions (task_id, content, trigger_type) VALUES (?, ?, ?)",
+		taskID, content, triggerType,
 	)
 	return err
 }

@@ -146,6 +146,14 @@ func ServeTaskByID(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 			return
 		}
+		if req.Action == "trigger" {
+			if err := service.GlobalScheduler.TriggerTask(taskID); err != nil {
+				model.WriteError(w, model.NotFound(nil, err.Error()))
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+			return
+		}
 
 		// Full task update
 		task, err := service.GetTaskByID(taskID)
@@ -199,13 +207,14 @@ func serveTaskExecutions(w http.ResponseWriter, r *http.Request, taskID string) 
 	}
 
 	type Execution struct {
-		Content   string `json:"content"`
-		CreatedAt string `json:"createdAt"`
-		IsUnread  bool   `json:"isUnread"`
+		Content     string `json:"content"`
+		TriggerType string `json:"triggerType"`
+		CreatedAt   string `json:"createdAt"`
+		IsUnread    bool   `json:"isUnread"`
 	}
 
 	rows, err := service.DB.Query(`
-		SELECT te.content, te.created_at
+		SELECT te.content, te.trigger_type, te.created_at
 		FROM task_executions te
 		WHERE te.task_id = ?
 		ORDER BY te.created_at DESC
@@ -219,7 +228,7 @@ func serveTaskExecutions(w http.ResponseWriter, r *http.Request, taskID string) 
 	var executions []Execution
 	for rows.Next() {
 		var exec Execution
-		if err := rows.Scan(&exec.Content, &exec.CreatedAt); err != nil {
+		if err := rows.Scan(&exec.Content, &exec.TriggerType, &exec.CreatedAt); err != nil {
 			model.WriteError(w, model.Internal(fmt.Errorf("failed to scan execution record")))
 			return
 		}
