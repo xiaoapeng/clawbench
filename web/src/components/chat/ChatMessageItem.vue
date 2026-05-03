@@ -265,119 +265,6 @@ function getFileName(path) {
   outline: none;
 }
 
-/* ── File attachment in messages ── */
-.chat-files {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin: 4px 0;
-}
-
-/* Common file tag styles - shared by both current file and uploaded attachments */
-.chat-file-tag,
-.chat-file-attachment {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  border-radius: 8px;
-  padding: 1px 6px;
-  margin-bottom: 4px;
-  font-size: 11px;
-  text-decoration: none;
-  cursor: pointer;
-  transition: opacity 0.15s;
-  white-space: nowrap;
-  max-width: 120px;
-}
-
-.chat-file-tag-icon,
-.chat-file-attachment svg {
-  flex-shrink: 0;
-}
-
-.chat-file-tag-path,
-.chat-file-name {
-  font-family: monospace;
-  flex: 1;
-  min-width: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  white-space: nowrap;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-
-.chat-file-tag-path::-webkit-scrollbar,
-.chat-file-name::-webkit-scrollbar {
-  display: none;
-}
-
-/* User message: common colors */
-.chat-message.user .chat-file-tag,
-.chat-message.user .chat-file-attachment {
-  color: rgba(255, 255, 255, 0.95);
-}
-
-.chat-message.user .chat-file-tag-path,
-.chat-message.user .chat-file-name {
-  color: rgba(255, 255, 255, 0.95);
-}
-
-.chat-message.user .chat-file-tag-icon,
-.chat-message.user .chat-file-attachment svg {
-  stroke: rgba(255, 255, 255, 0.95);
-}
-
-/* User message: uploaded - solid border */
-.chat-message.user .attachment-upload {
-  background: rgba(255, 255, 255, 0.15);
-  border: 1px solid rgba(255, 255, 255, 0.35);
-}
-
-/* User message: referenced - dashed border */
-.chat-message.user .attachment-ref {
-  background: rgba(255, 255, 255, 0.15);
-  border: 1px dashed rgba(255, 255, 255, 0.6);
-}
-
-.chat-message.user .attachment-ref:hover,
-.chat-message.user .chat-file-tag:hover {
-  background: rgba(255, 255, 255, 0.25);
-}
-
-/* Assistant message: common colors */
-.chat-message.assistant .chat-file-tag,
-.chat-message.assistant .chat-file-attachment {
-  color: var(--text-secondary);
-}
-
-.chat-message.assistant .chat-file-tag-path,
-.chat-message.assistant .chat-file-name {
-  color: var(--text-secondary);
-}
-
-.chat-message.assistant .chat-file-tag-icon,
-.chat-message.assistant .chat-file-attachment svg {
-  stroke: var(--text-secondary);
-}
-
-/* Assistant message: uploaded - solid border */
-.chat-message.assistant .attachment-upload {
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-}
-
-/* Assistant message: referenced - dashed border */
-.chat-message.assistant .attachment-ref {
-  background: color-mix(in srgb, var(--text-muted, #999) 8%, transparent);
-  border: 1px dashed var(--text-secondary);
-}
-
-.chat-message.assistant .attachment-ref:hover,
-.chat-message.assistant .chat-file-tag:hover {
-  background: var(--bg-secondary);
-}
-
 /* Image thumbnails in user messages */
 .chat-image-thumb {
   max-width: 80px;
@@ -577,6 +464,119 @@ function getFileName(path) {
     word-break: break-word;
     max-width: 100%;
     box-sizing: border-box;
+}
+
+/* ── File attachment in messages (global for reuse in PendingMessageItem) ── */
+.chat-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 4px 0;
+}
+
+/* Common file tag styles - shared by both current file and uploaded attachments */
+.chat-file-tag,
+.chat-file-attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border-radius: 8px;
+  padding: 1px 6px;
+  margin-bottom: 4px;
+  font-size: 11px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  white-space: nowrap;
+  max-width: 120px;
+}
+
+.chat-file-tag-icon,
+.chat-file-attachment svg {
+  flex-shrink: 0;
+}
+
+.chat-file-tag-path,
+.chat-file-name {
+  font-family: monospace;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.chat-file-tag-path::-webkit-scrollbar,
+.chat-file-name::-webkit-scrollbar {
+  display: none;
+}
+
+/* User message: common colors */
+.chat-message.user .chat-file-tag,
+.chat-message.user .chat-file-attachment {
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.chat-message.user .chat-file-tag-path,
+.chat-message.user .chat-file-name {
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.chat-message.user .chat-file-tag-icon,
+.chat-message.user .chat-file-attachment svg {
+  stroke: rgba(255, 255, 255, 0.95);
+}
+
+/* User message: uploaded - solid border */
+.chat-message.user .attachment-upload {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+}
+
+/* User message: referenced - dashed border */
+.chat-message.user .attachment-ref {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px dashed rgba(255, 255, 255, 0.6);
+}
+
+.chat-message.user .attachment-ref:hover,
+.chat-message.user .chat-file-tag:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* Assistant message: common colors */
+.chat-message.assistant .chat-file-tag,
+.chat-message.assistant .chat-file-attachment {
+  color: var(--text-secondary);
+}
+
+.chat-message.assistant .chat-file-tag-path,
+.chat-message.assistant .chat-file-name {
+  color: var(--text-secondary);
+}
+
+.chat-message.assistant .chat-file-tag-icon,
+.chat-message.assistant .chat-file-attachment svg {
+  stroke: var(--text-secondary);
+}
+
+/* Assistant message: uploaded - solid border */
+.chat-message.assistant .attachment-upload {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+}
+
+/* Assistant message: referenced - dashed border */
+.chat-message.assistant .attachment-ref {
+  background: color-mix(in srgb, var(--text-muted, #999) 8%, transparent);
+  border: 1px dashed var(--text-secondary);
+}
+
+.chat-message.assistant .attachment-ref:hover,
+.chat-message.assistant .chat-file-tag:hover {
+  background: var(--bg-secondary);
 }
 
 .chat-message.user {

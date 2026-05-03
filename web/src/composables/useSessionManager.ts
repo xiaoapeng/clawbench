@@ -193,6 +193,15 @@ export function useSessionManager(options: UseSessionManagerOptions) {
     }
   })
 
+  // When loading transitions from true → false while we still show pending messages,
+  // the backend may have finished draining the queue while SSE was disconnected
+  // (e.g. user left the page on mobile). Sync queue from backend to clear stale items.
+  watch(loading, async (newVal, oldVal) => {
+    if (oldVal && !newVal && pendingMessages.value.length > 0 && identity.currentSessionId.value) {
+      await fetchQueue(identity.currentSessionId.value)
+    }
+  })
+
   // ── Register identity actions ──
 
   /** Wire the identity singleton's proxy callbacks to our unified methods.

@@ -268,6 +268,9 @@ function onStreamEnd(reason) {
         }
       }
     }
+    // Sync queue from backend — when SSE was disconnected (e.g. user left the page),
+    // queue_consume/queue_update events were missed and pendingMessages may be stale.
+    manager.fetchQueue(identity.currentSessionId.value)
   } else if (reason === 'cancelled') {
     // Backend already cleared queue; clear locally for immediate UI response
     manager.pendingMessages.value = []
