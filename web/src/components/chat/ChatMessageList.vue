@@ -27,7 +27,7 @@
             <span class="agent-welcome-specialty">{{ currentAgent.specialty }}</span>
             <div class="agent-welcome-tags">
               <span class="agent-welcome-tag agent-welcome-backend">{{ currentAgent.backend }}</span>
-              <span class="agent-welcome-tag agent-welcome-model">{{ currentAgent.model }}</span>
+              <span v-if="currentAgent.model" class="agent-welcome-tag agent-welcome-model">{{ currentAgent.model }}</span>
             </div>
           </div>
         </div>

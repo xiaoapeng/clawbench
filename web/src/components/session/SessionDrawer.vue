@@ -66,7 +66,7 @@
           <span class="agent-option-specialty">{{ agent.specialty }}</span>
           <div class="agent-option-tags">
             <span class="agent-tag backend-tag">{{ agent.backend }}</span>
-            <span class="agent-tag model-tag">{{ agent.model }}</span>
+            <span v-if="agent.model" class="agent-tag model-tag">{{ agent.model }}</span>
           </div>
         </div>
       </button>

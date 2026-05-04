@@ -81,15 +81,17 @@ specialty: 配置示例与模板参考
 # 不同后端的 JSON 流式输出格式不同，系统会自动选择对应的 LineParser 解析。
 backend: codebuddy
 
-# model [string, required]
+# model [string, optional]
 # Model identifier passed to the backend CLI.
 # 传递给后端 CLI 的模型标识符。
+# When omitted, the CLI uses its built-in default model.
+# 省略时，CLI 使用其内置默认模型。
 # Available values depend on the backend type and CLI tool version.
 # 具体可用值取决于 backend 类型和 CLI 工具版本。
 # Common examples / 常见示例：
 #   backend=claude    → "claude-sonnet-4-6", "claude-opus-4"
 #   backend=codebuddy → "glm-5.1", "gpt-5.4", "gemini-3.1-pro", "kimi-k2.5"
-#   backend=opencode  → "opencode/minimax-m2.5-free"
+#   backend=opencode  → "opencode/minimax-m2.5-free", "minimax-cn/MiniMax-M2.7"
 #   backend=gemini    → "gemini-3-pro-preview"
 #   backend=codex     → "codex-MiniMax-M2.7"
 model: glm-5.1
