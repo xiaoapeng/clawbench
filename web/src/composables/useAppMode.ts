@@ -30,6 +30,10 @@ export function useAppMode() {
     } catch {
       // window.top access may throw in cross-origin iframe — treat as web mode
     }
+    // Mark <html> with data-app-mode for WebView-specific CSS overrides
+    if (isAppMode.value) {
+      document.documentElement.setAttribute('data-app-mode', '')
+    }
   }
   return { isAppMode }
 }

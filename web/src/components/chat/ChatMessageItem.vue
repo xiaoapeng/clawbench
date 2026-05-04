@@ -508,6 +508,34 @@ function getFileName(path) {
     contain: layout style;
 }
 
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   ⚠️  CRITICAL — Android WebView GPU Ghost Artifact Fix
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   DO NOT REMOVE this rule. It is the sole fix for a persistent Android
+   WebView rendering bug where layout reflow causes GPU compositing
+   cross-layer pixel pollution — phantom metadata text (e.g. model name,
+   timestamp) from one message appears overlaid on another message.
+
+   Root cause: WebView's GPU compositor incorrectly re-composites adjacent
+   layers when a layout reflow occurs (e.g. DOM insertion/removal, height
+   changes). This happens ~2s after opening a session when the "all loaded"
+   hint's <Transition> leave animation removes a DOM node from .chat-load-area.
+
+   Fix: `will-change: transform` forces each .chat-message into its own
+   independent GPU compositing layer. Reflows still happen, but they can no
+   longer cause cross-layer pixel contamination.
+
+   Previous attempt (v-if→v-show everywhere) was a whack-a-mole approach
+   that was incomplete and lost Transition animations. This single rule
+   makes ALL layout reflows harmless in WebView.
+
+   Scoped to [data-app-mode] (WebView only) to avoid unnecessary GPU
+   memory overhead on desktop browsers.
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+:root[data-app-mode] .chat-message {
+    will-change: transform;
+}
+
 /* ── File attachment in messages (global for reuse in PendingMessageItem) ── */
 .chat-files {
   display: flex;

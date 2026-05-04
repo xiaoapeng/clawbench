@@ -652,16 +652,27 @@ defineExpose({
     content: '';
     position: absolute;
     top: 0;
-    left: -100%;
+    left: 0;
     width: 60%;
     height: 100%;
+    transform: translateX(-160%);
     background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent);
     animation: sweep-light 2s ease-in-out infinite;
 }
 
 @keyframes sweep-light {
-    0% { left: -60%; }
-    100% { left: 100%; }
+    0% { transform: translateX(-60%); }
+    100% { transform: translateX(160%); }
+}
+
+/* WebView: disable continuous animations that cause GPU compositing ghost artifacts */
+:root[data-app-mode] .chat-action-btn.has-unread {
+    animation: none;
+    background: color-mix(in srgb, var(--accent-color, #0066cc) 16%, transparent);
+}
+:root[data-app-mode] .chat-action-btn.has-running::before {
+    animation: none;
+    opacity: 0.15;
 }
 
 .chat-action-btn svg {
