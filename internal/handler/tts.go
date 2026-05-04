@@ -29,7 +29,7 @@ const (
 )
 
 // speechProvider is the global speech provider instance.
-var speechProvider speech.SpeechProvider = speech.NewMiniMaxProvider()
+var speechProvider speech.SpeechProvider = speech.NewEdgeTTSProvider()
 
 // SetSpeechProvider replaces the global speech provider.
 // Must be called before the HTTP server starts; not goroutine-safe.
@@ -38,7 +38,7 @@ func SetSpeechProvider(p speech.SpeechProvider) {
 }
 
 // summarizer is the global text summarizer instance.
-var summarizer speech.Summarizer = speech.NewMMXSummarizer()
+var summarizer speech.Summarizer = speech.NewSimpleSummarizer()
 
 // SetSummarizer replaces the global text summarizer.
 // Must be called before the HTTP server starts; not goroutine-safe.

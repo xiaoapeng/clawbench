@@ -24,10 +24,10 @@ port: 20000
 
 # Project root directory — the base path that AI agents can access for file operations.
 # 项目监控目录（AI 可访问的文件根路径）
-# Linux example / Linux 示例：/home/your-username
-# macOS example / macOS 示例：/Users/your-username
-# Windows example / Windows 示例：C:\Users\your-username
-watch_dir: "/home/your-username"
+# Default: user home directory (Linux: /home/username, macOS: /Users/username, Windows: C:\Users\username)
+# 默认值：用户家目录（Linux: /home/用户名, macOS: /Users/用户名, Windows: C:\Users\用户名）
+# Uncomment to override / 取消注释以覆盖默认值
+# watch_dir: "/home/your-username"
 
 # Access password (optional; leave empty to disable authentication).
 # 访问密码（可选，留空则无需登录）
@@ -70,13 +70,8 @@ chat:
   # Value: the actual message text sent / Value: 实际发送的消息文本
   quick_send:
     "▶️ 继续": "继续"
-    "👌 OK": "OK"
-    "🔨 编译": "帮我编译当前项目，优先使用项目中已有的脚本。"
-    "🔄 重启调试": "帮我重启当前项目的调试版本服务，优先使用项目中已经有的脚本。"
-    "🚀 重启服务": "帮我重启当前项目的发布版本服务，优先使用项目中已经有的脚本。"
+    "🔧 调试": "我要做一下开发调试，帮我重启当前项目的开发版服务，优先使用项目中已有的脚本。如果有必要，请帮我重新编译项目。"
     "📦 提交": "提交"
-    "👀 浏览变更": "工作区改了什么"
-    "🗑️ 丢弃变更": "放弃工作区修改"
 
 # Session limit / 会话数量限制
 session:
@@ -85,14 +80,14 @@ session:
 
 # TTS (Text-to-Speech) configuration / 语音合成配置
 # Supported engines / 支持的引擎：
-#   minimax   — Cloud synthesis, best audio quality (default) / 云端合成，音质最佳（默认）
-#   edge      — Microsoft Edge TTS, free and unlimited / 微软 Edge TTS，免费无限制
+#   edge      — Microsoft Edge TTS, free and unlimited (default) / 微软 Edge TTS，免费无限制（默认）
+#   minimax   — Cloud synthesis, best audio quality / 云端合成，音质最佳
 #   piper     — Local offline, ultra-fast / 本地离线，极速
 #   kokoro    — Local offline, high-quality Chinese / 本地离线，高质量中文
 #   moss-nano — Local offline, multilingual, voice cloning / 本地离线，多语言，音色克隆
 # Full installation & deployment guide: docs/TTS.md / 完整安装部署指南：docs/TTS.md
 tts:
-  engine: "minimax"                                       # TTS engine / TTS引擎: "minimax" (default/默认), "edge", "piper", "kokoro", "moss-nano"
+  engine: "edge"                                          # TTS engine / TTS引擎: "edge" (default/默认), "minimax", "piper", "kokoro", "moss-nano"
 
   # --- Summarization backend (compresses AI replies into TTS-friendly summaries) ---
   # --- 总结后端（将AI回复压缩为适合朗读的摘要） ---

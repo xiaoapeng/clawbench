@@ -15,7 +15,6 @@ import (
 
 	"clawbench/internal/handler"
 	"clawbench/internal/model"
-	"clawbench/internal/platform"
 	"clawbench/internal/service"
 	"clawbench/internal/ssh"
 	"clawbench/internal/speech"
@@ -82,64 +81,51 @@ func main() {
 	absBinPath, _ := filepath.Abs(os.Args[0])
 	model.BinDir = filepath.Dir(absBinPath)
 
-	// Load configuration
+	// Load configuration — config.yaml is optional
+	var cfg model.Config
+	var presence map[string]bool
+
 	configPath := filepath.Join(model.BinDir, "config.yaml")
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		configPath = "config.yaml"
 	}
 
 	data, err := os.ReadFile(configPath)
-	if err != nil {
+	if err == nil {
+		// Parse into raw map first for presence detection (bool defaults)
+		var raw map[string]any
+		if err := yaml.Unmarshal(data, &raw); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to parse config.yaml: %v\n", err)
+			os.Exit(1)
+		}
+		presence = model.ParsePresenceMap(raw)
+
+		// Parse into typed config struct
+		if err := yaml.Unmarshal(data, &cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to parse config.yaml: %v\n", err)
+			os.Exit(1)
+		}
+	} else if !os.IsNotExist(err) {
+		// File exists but can't be read (permissions, etc.)
 		fmt.Fprintf(os.Stderr, "Failed to read config.yaml: %v\n", err)
 		os.Exit(1)
 	}
+	// If file doesn't exist: cfg stays zero-value, presence is nil → all defaults apply
 
-	var cfg model.Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to parse config.yaml: %v\n", err)
-		os.Exit(1)
-	}
+	// Apply all defaults (returns auto-generated password if created)
+	autoPassword := model.ApplyDefaults(&cfg, presence)
 
-	if cfg.WatchDir == "" {
-		cfg.WatchDir = filepath.Join(platform.TempDir(), "clawbench-default")
-	}
-	cfg.WatchDir = platform.ExpandTilde(cfg.WatchDir)
+	// Set global variables from config
 	model.WatchDir = cfg.WatchDir
-
-	// Set upload limits with defaults
-	if cfg.Upload.MaxSizeMB <= 0 {
-		cfg.Upload.MaxSizeMB = 100
-	}
-	if cfg.Upload.MaxFiles <= 0 {
-		cfg.Upload.MaxFiles = 20
-	}
 	model.UploadMaxSizeMB = cfg.Upload.MaxSizeMB
 	model.UploadMaxFiles = cfg.Upload.MaxFiles
-
-	// Set chat UI config with defaults
-	if cfg.Chat.InitialMessages <= 0 {
-		cfg.Chat.InitialMessages = 20
-	}
-	if cfg.Chat.PageSize <= 0 {
-		cfg.Chat.PageSize = 20
-	}
-	if cfg.Chat.CollapsedHeight <= 0 {
-		cfg.Chat.CollapsedHeight = 150
-	}
 	model.ChatInitialMessages = cfg.Chat.InitialMessages
 	model.ChatPageSize = cfg.Chat.PageSize
 	model.ChatCollapsedHeight = cfg.Chat.CollapsedHeight
-
-	// Set quick-send presets (no defaults — only active when configured)
 	model.ChatQuickSend = cfg.Chat.QuickSend
-
-	// Set session limits with defaults
-	if cfg.Session.MaxCount <= 0 {
-		cfg.Session.MaxCount = 10
-	}
 	model.SessionMaxCount = cfg.Session.MaxCount
 
-	// Apply TTS text processing config with defaults
+	// Apply TTS text processing config
 	if cfg.TTS.InlineCodeMaxLen > 0 {
 		speech.InlineCodeMaxLen = cfg.TTS.InlineCodeMaxLen
 	}
@@ -149,9 +135,6 @@ func main() {
 
 	// Initialize TTS summarizer from config
 	summarizeBackend := cfg.TTS.SummarizeBackend
-	if summarizeBackend == "" {
-		summarizeBackend = "simple"
-	}
 
 	var ttsSummarizer speech.Summarizer
 	if summarizeBackend == "simple" {
@@ -200,12 +183,9 @@ func main() {
 	}
 	handler.SetSummarizer(ttsSummarizer)
 
-	// Initialize TTS synthesis provider from config with defaults
+	// Initialize TTS synthesis provider from config
 	var ttsProvider speech.SpeechProvider
 	engine := cfg.TTS.Engine
-	if engine == "" {
-		engine = "minimax"
-	}
 
 	switch engine {
 	case "edge":
