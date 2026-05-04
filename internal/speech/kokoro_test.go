@@ -15,7 +15,6 @@ import (
 
 func TestNewKokoroProvider_Defaults(t *testing.T) {
 	p := NewKokoroProvider()
-	assert.Equal(t, "MiniMax-M2.7", p.SummarizeModel)
 	assert.Equal(t, "", p.ModelPath)  // Must be configured or resolved
 	assert.Equal(t, "", p.VoicesPath) // Must be configured or resolved
 	assert.Equal(t, "zf_001", p.Voice)
@@ -37,20 +36,20 @@ func TestResolveKokoroPaths_Explicit(t *testing.T) {
 	assert.Equal(t, "/custom/voices.bin", voices)
 }
 
-// --- Summarize short text bypass ---
+// --- Shared Summarizer: short text bypass (tests genericSummarizer) ---
 
-func TestKokoroSummarize_ShortText_BypassesLLM(t *testing.T) {
-	p := NewKokoroProvider()
+func TestGenericSummarizer_ShortText_BypassesLLM(t *testing.T) {
+	s := NewMMXSummarizer()
 	shortText := "这是一个简短的消息，不需要总结。"
-	result, err := p.Summarize(context.Background(), shortText)
+	result, err := s.Summarize(context.Background(), shortText)
 	assert.NoError(t, err)
 	assert.Contains(t, result, "简短的消息")
 }
 
-func TestKokoroSummarize_ShortTextWithMarkdown_StripsMarkdown(t *testing.T) {
-	p := NewKokoroProvider()
+func TestGenericSummarizer_ShortTextWithMarkdown_StripsMarkdown(t *testing.T) {
+	s := NewMMXSummarizer()
 	input := "Short **bold** and *italic* text."
-	result, err := p.Summarize(context.Background(), input)
+	result, err := s.Summarize(context.Background(), input)
 	assert.NoError(t, err)
 	assert.NotContains(t, result, "**")
 	assert.NotContains(t, result, "*")
@@ -58,35 +57,35 @@ func TestKokoroSummarize_ShortTextWithMarkdown_StripsMarkdown(t *testing.T) {
 	assert.Contains(t, result, "italic")
 }
 
-// --- Summarize long text (requires mmx CLI, skip if unavailable) ---
+// --- Shared Summarizer: long text (requires mmx CLI, skip if unavailable) ---
 
-func TestKokoroSummarize_LongText_WithCLI(t *testing.T) {
+func TestGenericSummarizer_LongText_WithCLI(t *testing.T) {
 	if _, err := exec.LookPath("mmx"); err != nil {
 		t.Skip("mmx CLI not available, skipping integration test")
 	}
 
-	p := NewKokoroProvider()
+	s := NewMMXSummarizer()
 	longText := strings.Repeat("这是一个较长的AI回复内容，包含了详细的技术分析和代码示例。", 10)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	result, err := p.Summarize(ctx, longText)
+	result, err := s.Summarize(ctx, longText)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, result)
 	assert.Less(t, len([]rune(result)), len([]rune(longText)))
 }
 
-// --- Summarize context cancellation ---
+// --- Shared Summarizer: context cancellation ---
 
-func TestKokoroSummarize_CancelledContext(t *testing.T) {
-	p := NewKokoroProvider()
+func TestGenericSummarizer_CancelledContext(t *testing.T) {
+	s := NewMMXSummarizer()
 	longText := strings.Repeat("这是需要被总结的长文本内容。", 50)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err := p.Summarize(ctx, longText)
+	_, err := s.Summarize(ctx, longText)
 	assert.Error(t, err)
 }
 

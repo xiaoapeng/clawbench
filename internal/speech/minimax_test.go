@@ -26,8 +26,26 @@ func TestStripMarkdown_InlineCode(t *testing.T) {
 	input := "Use the `fmt.Println` function to print."
 	result := StripMarkdown(input)
 	assert.NotContains(t, result, "`")
+	assert.Contains(t, result, "fmt.Println")
 	assert.Contains(t, result, "Use the")
 	assert.Contains(t, result, "function to print")
+}
+
+func TestStripMarkdown_InlineCode_Short(t *testing.T) {
+	input := "设置 `GOPATH` 环境变量，然后运行 `go build`。"
+	result := StripMarkdown(input)
+	assert.NotContains(t, result, "`")
+	assert.Contains(t, result, "GOPATH")
+	assert.Contains(t, result, "go build")
+}
+
+func TestStripMarkdown_InlineCode_Long(t *testing.T) {
+	longCode := "for i := 0; i < len(items); i++ { process(items[i]) }"
+	input := "代码如下 `" + longCode + "` 继续文本。"
+	result := StripMarkdown(input)
+	assert.NotContains(t, result, "`")
+	assert.NotContains(t, result, "process")
+	assert.Contains(t, result, "继续文本")
 }
 
 func TestStripMarkdown_Bold(t *testing.T) {

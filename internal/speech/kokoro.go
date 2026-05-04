@@ -22,12 +22,10 @@ const (
 )
 
 // KokoroProvider implements SpeechProvider using Kokoro-82M (local, ONNX-based TTS).
-// It uses mmx for summarization (same as other providers) and the kokoro-onnx
-// Python library for synthesis via a bridge script. Kokoro produces high-quality
-// Chinese speech and runs locally with ONNX Runtime (no GPU required).
+// It uses the shared summarizer (configured globally) and the kokoro-onnx Python
+// library for synthesis via a bridge script. Kokoro produces high-quality Chinese
+// speech and runs locally with ONNX Runtime (no GPU required).
 type KokoroProvider struct {
-	// SummarizeModel is the model ID for text chat (default: "MiniMax-M2.7").
-	SummarizeModel string
 	// ModelPath is the path to the Kokoro .onnx model file.
 	// If empty, defaults to .clawbench/kokoro-models/kokoro-v1.1-zh.onnx.
 	ModelPath string
@@ -40,80 +38,15 @@ type KokoroProvider struct {
 	Lang string
 	// Speed is the speech speed multiplier (default: 1.0).
 	Speed float64
-	// SummarizePrompt caches the loaded prompt (same logic as MiniMaxProvider).
-	SummarizePrompt string
 }
 
 // NewKokoroProvider creates a KokoroProvider with sensible defaults.
 func NewKokoroProvider() *KokoroProvider {
 	return &KokoroProvider{
-		SummarizeModel: "MiniMax-M2.7",
-		Voice:          "zf_001",
-		Lang:           "cmn",
-		Speed:          1.0,
+		Voice: "zf_001",
+		Lang:  "cmn",
+		Speed: 1.0,
 	}
-}
-
-// loadSummarizePrompt returns the system prompt for summarization.
-// Priority: p.SummarizePrompt > summarize_prompt.txt next to binary > defaultSummarizePrompt.
-func (p *KokoroProvider) loadSummarizePrompt() string {
-	if p.SummarizePrompt != "" {
-		return p.SummarizePrompt
-	}
-
-	exePath, err := os.Executable()
-	if err == nil {
-		promptPath := filepath.Join(filepath.Dir(exePath), "summarize_prompt.txt")
-		if data, err := os.ReadFile(promptPath); err == nil {
-			prompt := strings.TrimSpace(string(data))
-			if prompt != "" {
-				p.SummarizePrompt = prompt
-				slog.Info("kokoro: loaded summarize prompt from file", slog.String("path", promptPath))
-				return prompt
-			}
-		}
-	}
-
-	p.SummarizePrompt = defaultSummarizePrompt
-	return defaultSummarizePrompt
-}
-
-// Summarize condenses text for voice output using mmx text chat.
-// For short text (<300 chars), it strips markdown and returns the text as-is.
-func (p *KokoroProvider) Summarize(ctx context.Context, text string) (string, error) {
-	cleaned := StripMarkdown(text)
-
-	if len([]rune(cleaned)) < shortTextThreshold {
-		return cleaned, nil
-	}
-
-	messagesJSON := fmt.Sprintf(`[{"role":"user","content":%q}]`, cleaned)
-
-	args := []string{
-		"text", "chat",
-		"--system", p.loadSummarizePrompt(),
-		"--messages-file", "-",
-		"--model", p.SummarizeModel,
-		"--max-tokens", "1024",
-		"--quiet",
-	}
-
-	cmd := exec.CommandContext(ctx, "mmx", args...)
-	cmd.Stdin = strings.NewReader(messagesJSON)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("mmx text chat failed: %w (stderr: %s)", err, stderr.String())
-	}
-
-	result := strings.TrimSpace(stdout.String())
-	if result == "" {
-		return "", fmt.Errorf("mmx text chat returned empty output")
-	}
-
-	return result, nil
 }
 
 // Synthesize generates an audio file at outputPath using Kokoro via Python bridge.

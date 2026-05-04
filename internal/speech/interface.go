@@ -46,6 +46,11 @@ var (
 	reBareURL = regexp.MustCompile(`https?://\S+`)
 )
 
+// inlineCodeMaxLen is the maximum content length (in runes) for inline code
+// to be preserved (with backticks removed). Longer inline code is removed
+// entirely — it typically contains code snippets not suitable for TTS.
+const inlineCodeMaxLen = 30
+
 // StripMarkdown removes common markdown formatting from text.
 // Should be called on LLM output before passing to TTS synthesis.
 func StripMarkdown(text string) string {
@@ -66,7 +71,7 @@ func StripMarkdown(text string) string {
 	text = reOrderedList.ReplaceAllString(text, "")
 	text = reBlockquote.ReplaceAllString(text, "")
 	text = reStrikethrough.ReplaceAllString(text, "$1")
-	text = reInlineCode.ReplaceAllString(text, "")
+	text = stripInlineCode(text)
 	text = reBoldAsterisk.ReplaceAllString(text, "$1")
 	text = reBoldUnderscore.ReplaceAllString(text, "$1")
 	text = reItalicAsterisk.ReplaceAllString(text, "$1")
@@ -102,4 +107,19 @@ var reResidualMarkdown = regexp.MustCompile(`[\\#*~` + "`" + `|]`)
 
 func stripResidualMarkdown(text string) string {
 	return reResidualMarkdown.ReplaceAllString(text, "")
+}
+
+// stripInlineCode processes inline code spans (`xxx`).
+// Short content (≤ inlineCodeMaxLen runes) keeps its text — these are typically
+// variable names, command names, or short terms worth reading aloud.
+// Long content is removed entirely — these are typically code snippets.
+func stripInlineCode(text string) string {
+	return reInlineCode.ReplaceAllStringFunc(text, func(match string) string {
+		// match includes the backticks; content is match[1:len-1]
+		content := match[1 : len(match)-1]
+		if len([]rune(content)) <= inlineCodeMaxLen {
+			return content
+		}
+		return ""
+	})
 }

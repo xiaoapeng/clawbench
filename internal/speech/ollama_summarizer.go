@@ -19,6 +19,7 @@ type OllamaSummarizer struct {
 	BaseURL    string       // Ollama API base URL (e.g., "http://localhost:11434")
 	Model      string       // Model name (e.g., "gemma3:270m")
 	HTTPClient *http.Client // Shared HTTP client with timeout
+	gs         genericSummarizer
 }
 
 // NewOllamaSummarizer creates an OllamaSummarizer with the given configuration.
@@ -31,13 +32,18 @@ func NewOllamaSummarizer(baseURL, model string) *OllamaSummarizer {
 	if model == "" {
 		model = "gemma3:270m"
 	}
-	return &OllamaSummarizer{
+	s := &OllamaSummarizer{
 		BaseURL: strings.TrimRight(baseURL, "/"),
 		Model:   model,
 		HTTPClient: &http.Client{
 			Timeout: 120 * time.Second, // generous timeout for local inference
 		},
 	}
+	s.gs = genericSummarizer{
+		passFn: s.doSummarizePass,
+		prompt: loadSummarizePrompt(),
+	}
+	return s
 }
 
 // ollamaChatRequest is the request body for POST /api/chat.
@@ -66,37 +72,8 @@ type ollamaChatResponse struct {
 }
 
 // Summarize condenses text for voice output using the Ollama API.
-// It follows the same multi-pass pattern as MMXSummarizer:
-//  1. Short text (<300 chars) is returned as-is after markdown stripping
-//  2. First pass: send text with the summarization system prompt
-//  3. If the result exceeds 4000 bytes, a second pass re-summarizes
 func (s *OllamaSummarizer) Summarize(ctx context.Context, text string) (string, error) {
-	cleaned, needsSummarization := prepareTextForSummarization(text)
-	if !needsSummarization {
-		return cleaned, nil
-	}
-
-	result, err := s.doSummarizePass(ctx, cleaned, loadSummarizePrompt(), 1)
-	if err != nil {
-		return "", err
-	}
-
-	// If the result is still too long, do a second pass with the same prompt
-	if needsReSummarization(result, 1) {
-		slog.Info("tts summarize result too long, starting second pass",
-			slog.Int("result_bytes", len(result)),
-		)
-		second, err := s.doSummarizePass(ctx, result, loadSummarizePrompt(), 2)
-		if err != nil {
-			slog.Warn("tts second summarize pass failed, using first pass result",
-				slog.String("error", err.Error()),
-			)
-			return result, nil // return first pass result on second pass failure
-		}
-		result = second
-	}
-
-	return result, nil
+	return s.gs.Summarize(ctx, text)
 }
 
 // doSummarizePass performs a single summarization pass using the Ollama /api/chat endpoint.
