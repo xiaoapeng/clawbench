@@ -259,13 +259,9 @@ func (p *StreamParser) ParseLine(line string, ch chan<- StreamEvent) {
 					ch <- StreamEvent{Type: "content", Content: msg.Event.Delta.Text}
 				}
 			case "input_json_delta":
-				// Accumulate tool input JSON.
-				// Codebuddy/Claude CLI uses "partial_json" field; fall back to "text" for compatibility.
+				// Accumulate tool input JSON via partial_json field (canonical format).
 				if p.currentTool != nil {
-					delta := msg.Event.Delta.Text
-					if delta == "" && msg.Event.Delta.PartialJSON != "" {
-						delta = msg.Event.Delta.PartialJSON
-					}
+					delta := msg.Event.Delta.PartialJSON
 					if delta != "" {
 						p.currentTool.Input += delta
 					}

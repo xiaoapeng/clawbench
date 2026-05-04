@@ -70,7 +70,7 @@ import BottomSheet from '@/components/common/BottomSheet.vue'
 import TaskFormDialog from '@/components/task/TaskFormDialog.vue'
 import TaskExecDialog from '@/components/task/TaskExecDialog.vue'
 import { useAgents } from '@/composables/useAgents.ts'
-import { humanizeCron, repeatLabel, statusLabel, formatDateTime } from '@/utils/helpers.ts'
+import { humanizeCron, repeatLabel, statusLabel, formatDateTime } from '@/utils/format.ts'
 import { store } from '@/stores/app.ts'
 
 const { t } = useI18n()

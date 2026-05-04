@@ -62,13 +62,15 @@ func GetChatHistoryPaged(projectPath, backend, sessionID string, limit int, befo
 }
 
 // scanMessages scans rows into ChatMessage slice.
+// The file_path column is a legacy field — scanned into a throwaway variable.
 func scanMessages(rows *sql.Rows, sessionID string) ([]model.ChatMessage, error) {
 	messages := []model.ChatMessage{}
 	for rows.Next() {
 		var msg model.ChatMessage
 		var filesJSON sql.NullString
 		var streaming int
-		if err := rows.Scan(&msg.ID, &msg.Role, &msg.Content, &msg.FilePath, &filesJSON, &msg.Backend, &streaming, &msg.CreatedAt); err != nil {
+		var filePath string // legacy column, ignored after migration
+		if err := rows.Scan(&msg.ID, &msg.Role, &msg.Content, &filePath, &filesJSON, &msg.Backend, &streaming, &msg.CreatedAt); err != nil {
 			return nil, err
 		}
 		msg.Streaming = streaming != 0
@@ -89,7 +91,7 @@ func GetChatMessageCount(sessionID string) int {
 }
 
 // AddChatMessage adds a message to the chat history for a given project path, backend, and session.
-func AddChatMessage(projectPath, backend, sessionID, role, content, filePath string, files []string, streaming bool) (int64, error) {
+func AddChatMessage(projectPath, backend, sessionID, role, content string, files []string, streaming bool) (int64, error) {
 	var filesJSON string
 	if len(files) > 0 {
 		data, _ := json.Marshal(files)
@@ -109,8 +111,8 @@ func AddChatMessage(projectPath, backend, sessionID, role, content, filePath str
 	defer tx.Rollback()
 
 	result, err := tx.Exec(
-		"INSERT INTO chat_history (project_path, backend, session_id, role, content, file_path, files, streaming) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-		projectPath, backend, sessionID, role, content, filePath, filesJSON, streamingInt,
+		"INSERT INTO chat_history (project_path, backend, session_id, role, content, file_path, files, streaming) VALUES (?, ?, ?, ?, ?, '', ?, ?)",
+		projectPath, backend, sessionID, role, content, filesJSON, streamingInt,
 	)
 	if err != nil {
 		return 0, err

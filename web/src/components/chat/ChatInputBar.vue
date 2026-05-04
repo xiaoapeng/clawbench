@@ -147,7 +147,7 @@
 import { ref, computed, nextTick, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { MessageSquare, Plus, Trash2, Clock, Volume2, Upload, Paperclip, FileImage, FileText, XCircle, Inbox, Send, Square } from 'lucide-vue-next'
-import { baseName } from '@/utils/helpers.ts'
+import { baseName } from '@/utils/path.ts'
 
 const { t } = useI18n()
 

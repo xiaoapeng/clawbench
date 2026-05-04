@@ -134,7 +134,6 @@ func AIChatStream(w http.ResponseWriter, r *http.Request) {
 				if event.QueueEvent != nil {
 					data, _ := json.Marshal(map[string]any{
 						"text":      event.QueueEvent.Text,
-						"filePath":  event.QueueEvent.FilePath,
 						"filePaths": event.QueueEvent.FilePaths,
 						"files":     event.QueueEvent.Files,
 					})

@@ -28,7 +28,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { FileImage, FileText, Paperclip } from 'lucide-vue-next'
-import { baseName } from '@/utils/helpers.ts'
+import { baseName } from '@/utils/path.ts'
 
 const { t } = useI18n()
 

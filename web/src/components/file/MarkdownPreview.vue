@@ -22,7 +22,7 @@ import { useDoubleClickCopy } from '@/composables/useDoubleClickCopy.ts'
 import { useQuoteQuestion } from '@/composables/useQuoteQuestion.ts'
 import { useFilePathAnnotation } from '@/composables/useFilePathAnnotation.ts'
 import { store } from '@/stores/app.ts'
-import { dirName, splitPath } from '@/utils/helpers.ts'
+import { dirName, splitPath } from '@/utils/path.ts'
 
 const props = defineProps({
     file: Object,

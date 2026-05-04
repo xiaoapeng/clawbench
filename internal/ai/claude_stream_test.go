@@ -392,33 +392,6 @@ func TestStreamParser_InputJsonDeltaNoCurrentTool(t *testing.T) {
 	}
 }
 
-func TestStreamParser_ToolUseWithTextField(t *testing.T) {
-	// input_json_delta with "text" field (legacy format) should still work as fallback
-	lines := []string{
-		`{"type":"stream_event","event":{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_456","name":"Bash"}}}`,
-		`{"type":"stream_event","event":{"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","text":"{\"comma"}}}`,
-		`{"type":"stream_event","event":{"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","text":"nd\":\"ls\"}"}}}`,
-		`{"type":"stream_event","event":{"type":"content_block_stop","index":1}}`,
-	}
-
-	events := parseLines(lines)
-
-	// Find the stop event (Done=true)
-	var stopEvent *StreamEvent
-	for i := range events {
-		if events[i].Type == "tool_use" && events[i].Tool != nil && events[i].Tool.Done {
-			stopEvent = &events[i]
-			break
-		}
-	}
-	if stopEvent == nil {
-		t.Fatal("expected a tool_use stop event with Done=true")
-	}
-	if stopEvent.Tool.Input != `{"command":"ls"}` {
-		t.Errorf("expected accumulated input '{\"command\":\"ls\"}', got %q", stopEvent.Tool.Input)
-	}
-}
-
 func TestStreamParser_ConcurrentToolUse(t *testing.T) {
 	// When AI invokes multiple tools concurrently, Codebuddy/Claude CLI may
 	// emit content_block_start for the next tool before content_block_stop

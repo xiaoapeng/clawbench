@@ -27,7 +27,7 @@ import { useI18n } from 'vue-i18n'
 import { FileText, Copy } from 'lucide-vue-next'
 import BottomSheet from '@/components/common/BottomSheet.vue'
 import { store } from '@/stores/app.ts'
-import { getFileType, formatFileSize } from '@/utils/helpers.ts'
+import { getFileType, formatFileSize } from '@/utils/fileType.ts'
 
 const props = defineProps({
   file: Object,

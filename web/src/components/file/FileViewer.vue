@@ -115,7 +115,7 @@ import VideoPreview from '@/components/media/VideoPreview.vue'
 import MarkdownPreview from './MarkdownPreview.vue'
 import CodePreview from './CodePreview.vue'
 import FileHeader from './FileHeader.vue'
-import { getFileType, formatFileSize } from '@/utils/helpers.ts'
+import { getFileType, formatFileSize } from '@/utils/fileType.ts'
 import { store } from '@/stores/app.ts'
 import { useAppMode } from '@/composables/useAppMode.ts'
 

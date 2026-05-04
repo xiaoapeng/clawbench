@@ -1,7 +1,8 @@
 // Diff rendering utilities
 
 import { hljs } from './globals.ts'
-import { escapeHtml, getFileType } from './helpers.ts'
+import { escapeHtml } from './html.ts'
+import { getFileType } from './fileType.ts'
 
 export function detectLang(filePath: string): string {
     if (!filePath) return 'plaintext'

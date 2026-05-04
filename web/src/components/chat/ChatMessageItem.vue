@@ -40,8 +40,6 @@
         @edit-task="$emit('edit-task', $event)"
         @send-message="$emit('send-message', $event)"
       />
-      <!-- Legacy fallback: messages without blocks (shouldn't normally happen) -->
-      <div v-else v-html="renderedContent"></div>
     </div>
 
     <!-- Collapse overlay + expand button -->
@@ -108,7 +106,7 @@
 import { ref, inject, computed, watch, nextTick, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { FileImage, FileText, Paperclip, ChevronDown, ChevronUp, Clock, Pause, Volume2, Info } from 'lucide-vue-next'
-import { baseName } from '@/utils/helpers.ts'
+import { baseName } from '@/utils/path.ts'
 import { store } from '@/stores/app.ts'
 import ContentBlocks from './ContentBlocks.vue'
 
@@ -122,7 +120,6 @@ const props = defineProps({
   blockProposals: Object,
   blockAskQuestions: Object,
   agents: Array,
-  renderedContent: String,
   shouldCollapse: Boolean,
 })
 
@@ -178,10 +175,6 @@ function checkOverflow() {
 onMounted(() => nextTick(() => {
   checkOverflow()
   // Re-check after one more frame to catch async rendering (Mermaid, KaTeX)
-  requestAnimationFrame(checkOverflow)
-}))
-watch(() => props.renderedContent, () => nextTick(() => {
-  checkOverflow()
   requestAnimationFrame(checkOverflow)
 }))
 watch(() => props.msg?.blocks?.length, () => nextTick(() => {

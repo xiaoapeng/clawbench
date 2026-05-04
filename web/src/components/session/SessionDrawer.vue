@@ -84,7 +84,7 @@ import { ref, watch, computed } from 'vue'
 import BottomSheet from '@/components/common/BottomSheet.vue'
 import ModalDialog from '@/components/common/ModalDialog.vue'
 import { useAgents } from '@/composables/useAgents.ts'
-import { formatRelativeTime } from '@/utils/helpers.ts'
+import { formatRelativeTime } from '@/utils/format.ts'
 
 const { t } = useI18n()
 const props = defineProps({

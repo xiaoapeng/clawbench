@@ -11,7 +11,6 @@ export interface UseChatSessionOptions {
   messages: Ref<any[]>
   loading: Ref<boolean>
   inputDisabled: Ref<boolean>
-  renderedContents: Ref<string[]>
   blockProposals: Record<string, any>
   blockAskQuestions: Record<string, any>
   expandedTools: Ref<Record<string, boolean>>
@@ -35,7 +34,6 @@ export function useChatSession(options: UseChatSessionOptions) {
     messages,
     loading,
     inputDisabled,
-    renderedContents,
     blockProposals,
     blockAskQuestions,
     expandedTools,
@@ -285,7 +283,6 @@ export function useChatSession(options: UseChatSessionOptions) {
       currentBackend.value = data.backend || ''
       currentAgentId.value = data.agentId || agentId || ''
       messages.value = []
-      renderedContents.value = []
       totalMessages.value = 0
       lastMessageSnapshot = ''  // New session — no messages yet
       Object.keys(blockProposals).forEach(k => delete blockProposals[k])

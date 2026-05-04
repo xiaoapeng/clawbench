@@ -1,7 +1,3 @@
-// Utility helpers — re-export from dedicated modules for backward compatibility
-// New code should import directly from the specific module (e.g., @/utils/path.ts)
-
-// Shared copy utility
 export function copyText(text: string, onSuccess?: () => void, onError?: () => void): void {
     const fallbackCopy = (text: string): boolean => {
         const ta = document.createElement('textarea')
@@ -26,13 +22,3 @@ export function copyText(text: string, onSuccess?: () => void, onError?: () => v
         else onError?.()
     }
 }
-
-// Re-exports from dedicated modules
-export { splitPath, baseName, dirName } from './path.ts'
-export { escapeHtml } from './html.ts'
-export { getFileType, formatFileSize } from './fileType.ts'
-export type { FileType } from './fileType.ts'
-export { extractToc, slugify } from './toc.ts'
-export type { TocItem } from './toc.ts'
-export { formatRelativeTime, formatDateTime, humanizeCron, repeatLabel, statusLabel } from './format.ts'
-export { initMermaid, reRenderMermaid } from './mermaid.ts'

@@ -32,7 +32,8 @@
 import { ChevronLeft, ChevronRight } from 'lucide-vue-next'
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { store } from '@/stores/app.ts'
-import { baseName, getFileType } from '@/utils/helpers.ts'
+import { baseName } from '@/utils/path.ts'
+import { getFileType } from '@/utils/fileType.ts'
 
 const props = defineProps({
     file: Object,

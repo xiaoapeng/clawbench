@@ -58,7 +58,7 @@ import { useI18n } from 'vue-i18n'
 import ModalDialog from './common/ModalDialog.vue'
 import SearchInput from './common/SearchInput.vue'
 import DirBreadcrumb from './file/DirBreadcrumb.vue'
-import { baseName } from '@/utils/helpers.ts'
+import { baseName } from '@/utils/path.ts'
 
 const { t } = useI18n()
 

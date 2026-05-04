@@ -36,7 +36,6 @@ func handleQueueEnqueue(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		Message   string   `json:"message"`
-		FilePath  string   `json:"filePath"`
 		FilePaths []string `json:"filePaths"`
 		Files     []string `json:"files"`
 	}
@@ -50,21 +49,9 @@ func handleQueueEnqueue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Merge filePaths
-	allFilePaths := req.FilePaths
-	if req.FilePath != "" {
-		allFilePaths = append([]string{req.FilePath}, allFilePaths...)
-	}
-
-	legacyFilePath := ""
-	if len(allFilePaths) > 0 {
-		legacyFilePath = allFilePaths[0]
-	}
-
 	qMsg := model.QueuedMessage{
 		Text:      req.Message,
-		FilePath:  legacyFilePath,
-		FilePaths: allFilePaths,
+		FilePaths: req.FilePaths,
 		Files:     req.Files,
 		CreatedAt: time.Now().Format(time.RFC3339),
 	}

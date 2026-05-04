@@ -436,7 +436,7 @@ func TestServeChatHistory_Get_WithExistingSession(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Add a message to that session
-	_, err = service.AddChatMessage(env.ProjectDir, "codebuddy", sessionID, "user", "hello", "", nil, false)
+	_, err = service.AddChatMessage(env.ProjectDir, "codebuddy", sessionID, "user", "hello", nil, false)
 	assert.NoError(t, err)
 
 	req := newRequest(t, http.MethodGet, "/api/ai/history", nil)

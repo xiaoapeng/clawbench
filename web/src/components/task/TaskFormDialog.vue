@@ -166,7 +166,7 @@ import { useI18n } from 'vue-i18n'
 import { Clock } from 'lucide-vue-next'
 import ModalDialog from '@/components/common/ModalDialog.vue'
 import { useAgents } from '@/composables/useAgents.ts'
-import { humanizeCron } from '@/utils/helpers.ts'
+import { humanizeCron } from '@/utils/format.ts'
 
 const { t } = useI18n()
 

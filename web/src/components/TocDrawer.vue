@@ -31,7 +31,8 @@ import { useI18n } from 'vue-i18n'
 import BottomSheet from '@/components/common/BottomSheet.vue'
 import HeaderMarquee from '@/components/common/HeaderMarquee.vue'
 import SearchInput from '@/components/common/SearchInput.vue'
-import { extractToc, getFileType } from '@/utils/helpers.ts'
+import { extractToc } from '@/utils/toc.ts'
+import { getFileType } from '@/utils/fileType.ts'
 
 const { t } = useI18n()
 

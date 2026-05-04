@@ -51,7 +51,7 @@ import { Projector, ChevronDown, Search, Moon, Sun } from 'lucide-vue-next'
 import { ref, computed, onMounted, onUnmounted, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useLocale } from '@/composables/useLocale'
-import { baseName } from '@/utils/helpers.ts'
+import { baseName } from '@/utils/path.ts'
 
 const { t } = useI18n()
 const { currentLocale, toggleLocale, localeLabel } = useLocale()

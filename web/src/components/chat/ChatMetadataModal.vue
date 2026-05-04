@@ -20,9 +20,9 @@
             <span class="metadata-label">{{ t('chat.metadata.time') }}</span>
             <span class="metadata-value">{{ formatDetailTime(createdAt) }}</span>
           </div>
-          <div v-if="filePath" class="metadata-item">
+          <div v-if="relatedFile" class="metadata-item">
             <span class="metadata-label">{{ t('chat.metadata.relatedFile') }}</span>
-            <span class="metadata-value metadata-value-copyable" @click="copyValue(filePath, $event)">{{ filePath }}</span>
+            <span class="metadata-value metadata-value-copyable" @click="copyValue(relatedFile, $event)">{{ relatedFile }}</span>
           </div>
           <div v-if="backend" class="metadata-item">
             <span class="metadata-label">{{ t('chat.metadata.backend') }}</span>
@@ -83,7 +83,7 @@ const props = defineProps({
   data: { type: Object, default: () => ({}) },
   backend: String,
   createdAt: String,
-  filePath: String,
+  relatedFile: String,
   messageId: Number,
   formatDetailTime: Function,
 })

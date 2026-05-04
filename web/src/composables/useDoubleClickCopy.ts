@@ -1,5 +1,5 @@
 import { inject } from 'vue'
-import { copyText } from '@/utils/helpers.ts'
+import { copyText } from '@/utils/clipboard.ts'
 import { gt } from '@/composables/useLocale'
 
 const BLOCK_SELECTORS = 'p, h1, h2, h3, h4, h5, h6, li, pre, blockquote, table, .mermaid'

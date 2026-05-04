@@ -7,7 +7,6 @@ type ChatMessage struct {
 	ID        int64     `json:"id,omitempty"`
 	Role      string    `json:"role"`
 	Content   string    `json:"content"`
-	FilePath  string    `json:"filePath,omitempty"`
 	Files     []string  `json:"files,omitempty"`
 	SessionID string    `json:"sessionId,omitempty"`
 	Backend   string    `json:"backend,omitempty"`
@@ -34,7 +33,6 @@ type ChatSession struct {
 // Stored in-memory only (not persisted to DB).
 type QueuedMessage struct {
 	Text      string   `json:"text"`
-	FilePath  string   `json:"filePath,omitempty"`
 	FilePaths []string `json:"filePaths"`
 	Files     []string `json:"files"`
 	CreatedAt string   `json:"createdAt"`

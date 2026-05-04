@@ -395,8 +395,7 @@ export function useChatStream(options: UseChatStreamOptions) {
         role: 'user',
         content: userContent,
         blocks: userContent ? [{ type: 'text', text: userContent }] : [],
-        filePath: data.filePaths?.length > 0 ? data.filePaths[0] : '',
-        files: (data.files || []).map(p => ({ path: p })),
+        files: [...(data.filePaths || []).map(p => ({ path: p })), ...(data.files || []).map(p => ({ path: p }))],
         createdAt: new Date().toISOString(),
       })
 

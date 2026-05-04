@@ -2,7 +2,8 @@ import { createApp } from 'vue'
 import App from './App.vue'
 import i18n from './i18n'
 import { marked, hljs } from './utils/globals.ts'
-import { slugify, escapeHtml } from './utils/helpers.ts'
+import { slugify } from './utils/toc.ts'
+import { escapeHtml } from './utils/html.ts'
 
 // Configure marked (moved from inline script in index.html)
 marked.use({

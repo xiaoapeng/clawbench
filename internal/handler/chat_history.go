@@ -60,7 +60,6 @@ func ServeChatHistory(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			Role      string   `json:"role"`
 			Content   string   `json:"content"`
-			FilePath  string   `json:"file_path"`
 			Files     []string `json:"files"`
 			SessionID string   `json:"session_id"`
 		}
@@ -81,7 +80,7 @@ func ServeChatHistory(w http.ResponseWriter, r *http.Request) {
 			model.WriteErrorf(w, http.StatusBadRequest, "session not found")
 			return
 		}
-		if _, err := service.AddChatMessage(projectPath, backend, sessionID, req.Role, req.Content, req.FilePath, req.Files, false); err != nil {
+		if _, err := service.AddChatMessage(projectPath, backend, sessionID, req.Role, req.Content, req.Files, false); err != nil {
 			model.WriteError(w, model.Internal(fmt.Errorf("failed to save message")))
 			return
 		}

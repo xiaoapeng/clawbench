@@ -41,7 +41,8 @@ import { useI18n } from 'vue-i18n'
 import BottomSheet from './BottomSheet.vue'
 import HeaderMarquee from './HeaderMarquee.vue'
 import SearchInput from './SearchInput.vue'
-import { escapeHtml, getFileType } from '@/utils/helpers.ts'
+import { escapeHtml } from '@/utils/html.ts'
+import { getFileType } from '@/utils/fileType.ts'
 import { hljs } from '@/utils/globals.ts'
 
 const { t } = useI18n()

@@ -1,111 +1,176 @@
 package service
 
 import (
-	"sync"
 	"testing"
+	"time"
 
 	"clawbench/internal/model"
 
 	"github.com/stretchr/testify/assert"
 )
 
-func TestEnqueueDequeue(t *testing.T) {
-	// Clean up
-	sessionQueues = sync.Map{}
+func TestEnqueueMessage(t *testing.T) {
+	sessionID := "qtest-enqueue"
+	defer ClearQueue(sessionID)
 
-	msg1 := model.QueuedMessage{Text: "hello", CreatedAt: "2024-01-01T00:00:00Z"}
-	msg2 := model.QueuedMessage{Text: "world", CreatedAt: "2024-01-01T00:00:01Z"}
+	queue := EnqueueMessage(sessionID, model.QueuedMessage{
+		Text:      "msg1",
+		CreatedAt: time.Now().Format(time.RFC3339),
+	})
+	assert.Len(t, queue, 1)
+	assert.Equal(t, "msg1", queue[0].Text)
 
-	queue := EnqueueMessage("s1", msg1)
-	assert.Equal(t, 1, len(queue))
-	assert.Equal(t, "hello", queue[0].Text)
+	queue = EnqueueMessage(sessionID, model.QueuedMessage{
+		Text:      "msg2",
+		CreatedAt: time.Now().Format(time.RFC3339),
+	})
+	assert.Len(t, queue, 2)
+	assert.Equal(t, "msg1", queue[0].Text)
+	assert.Equal(t, "msg2", queue[1].Text)
+}
 
-	queue = EnqueueMessage("s1", msg2)
-	assert.Equal(t, 2, len(queue))
+func TestDequeueMessage(t *testing.T) {
+	sessionID := "qtest-dequeue"
+	defer ClearQueue(sessionID)
 
-	// FIFO
-	dequeued, ok := DequeueMessage("s1")
+	EnqueueMessage(sessionID, model.QueuedMessage{Text: "first", CreatedAt: time.Now().Format(time.RFC3339)})
+	EnqueueMessage(sessionID, model.QueuedMessage{Text: "second", CreatedAt: time.Now().Format(time.RFC3339)})
+
+	msg, ok := DequeueMessage(sessionID)
 	assert.True(t, ok)
-	assert.Equal(t, "hello", dequeued.Text)
+	assert.Equal(t, "first", msg.Text)
 
-	dequeued, ok = DequeueMessage("s1")
+	msg, ok = DequeueMessage(sessionID)
 	assert.True(t, ok)
-	assert.Equal(t, "world", dequeued.Text)
+	assert.Equal(t, "second", msg.Text)
+}
 
-	// Empty
-	_, ok = DequeueMessage("s1")
+func TestDequeueMessage_Empty(t *testing.T) {
+	sessionID := "qtest-dequeue-empty"
+	defer ClearQueue(sessionID)
+
+	// Enqueue then dequeue all
+	EnqueueMessage(sessionID, model.QueuedMessage{Text: "only", CreatedAt: time.Now().Format(time.RFC3339)})
+	DequeueMessage(sessionID)
+
+	_, ok := DequeueMessage(sessionID)
 	assert.False(t, ok)
 }
 
-func TestDequeueEmpty(t *testing.T) {
-	sessionQueues = sync.Map{}
-	_, ok := DequeueMessage("nonexistent")
+func TestDequeueMessage_NonexistentSession(t *testing.T) {
+	_, ok := DequeueMessage("qtest-nonexistent")
 	assert.False(t, ok)
 }
 
 func TestGetQueue(t *testing.T) {
-	sessionQueues = sync.Map{}
-	// Non-existent
-	queue := GetQueue("nonexistent")
-	assert.Nil(t, queue)
+	sessionID := "qtest-get"
+	defer ClearQueue(sessionID)
 
-	EnqueueMessage("s1", model.QueuedMessage{Text: "a"})
-	EnqueueMessage("s1", model.QueuedMessage{Text: "b"})
-	queue = GetQueue("s1")
-	assert.Equal(t, 2, len(queue))
+	EnqueueMessage(sessionID, model.QueuedMessage{Text: "a", CreatedAt: time.Now().Format(time.RFC3339)})
+	EnqueueMessage(sessionID, model.QueuedMessage{Text: "b", CreatedAt: time.Now().Format(time.RFC3339)})
+
+	queue := GetQueue(sessionID)
+	assert.Len(t, queue, 2)
 	assert.Equal(t, "a", queue[0].Text)
 	assert.Equal(t, "b", queue[1].Text)
 }
 
-func TestRemoveQueueItem(t *testing.T) {
-	sessionQueues = sync.Map{}
-	EnqueueMessage("s1", model.QueuedMessage{Text: "a"})
-	EnqueueMessage("s1", model.QueuedMessage{Text: "b"})
-	EnqueueMessage("s1", model.QueuedMessage{Text: "c"})
+func TestGetQueue_Empty(t *testing.T) {
+	sessionID := "qtest-get-empty"
+	defer ClearQueue(sessionID)
 
-	// Remove middle
-	queue := RemoveQueueItem("s1", 1)
-	assert.Equal(t, 2, len(queue))
+	// Enqueue then dequeue all → entry gets deleted
+	EnqueueMessage(sessionID, model.QueuedMessage{Text: "x", CreatedAt: time.Now().Format(time.RFC3339)})
+	DequeueMessage(sessionID)
+
+	queue := GetQueue(sessionID)
+	assert.Nil(t, queue)
+}
+
+func TestGetQueue_Nonexistent(t *testing.T) {
+	queue := GetQueue("qtest-nonexistent-get")
+	assert.Nil(t, queue)
+}
+
+func TestRemoveQueueItem(t *testing.T) {
+	sessionID := "qtest-remove"
+	defer ClearQueue(sessionID)
+
+	EnqueueMessage(sessionID, model.QueuedMessage{Text: "a", CreatedAt: time.Now().Format(time.RFC3339)})
+	EnqueueMessage(sessionID, model.QueuedMessage{Text: "b", CreatedAt: time.Now().Format(time.RFC3339)})
+	EnqueueMessage(sessionID, model.QueuedMessage{Text: "c", CreatedAt: time.Now().Format(time.RFC3339)})
+
+	queue := RemoveQueueItem(sessionID, 1)
+	assert.Len(t, queue, 2)
 	assert.Equal(t, "a", queue[0].Text)
 	assert.Equal(t, "c", queue[1].Text)
+}
 
-	// Remove first
-	queue = RemoveQueueItem("s1", 0)
-	assert.Equal(t, 1, len(queue))
-	assert.Equal(t, "c", queue[0].Text)
+func TestRemoveQueueItem_OutOfRange(t *testing.T) {
+	sessionID := "qtest-remove-oob"
+	defer ClearQueue(sessionID)
 
-	// Out of range - returns unchanged queue
-	queue = RemoveQueueItem("s1", 5)
-	assert.Equal(t, 1, len(queue))
+	EnqueueMessage(sessionID, model.QueuedMessage{Text: "a", CreatedAt: time.Now().Format(time.RFC3339)})
+
+	queue := RemoveQueueItem(sessionID, 5)
+	assert.Len(t, queue, 1)
+	assert.Equal(t, "a", queue[0].Text)
+
+	queue = RemoveQueueItem(sessionID, -1)
+	assert.Len(t, queue, 1)
+}
+
+func TestRemoveQueueItem_LastItem(t *testing.T) {
+	sessionID := "qtest-remove-last"
+	defer ClearQueue(sessionID)
+
+	EnqueueMessage(sessionID, model.QueuedMessage{Text: "only", CreatedAt: time.Now().Format(time.RFC3339)})
+
+	queue := RemoveQueueItem(sessionID, 0)
+	// Last item removed → entry deleted from map → nil
+	assert.Nil(t, queue)
 }
 
 func TestClearQueue(t *testing.T) {
-	sessionQueues = sync.Map{}
-	EnqueueMessage("s1", model.QueuedMessage{Text: "a"})
-	ClearQueue("s1")
-	assert.Equal(t, 0, QueueLength("s1"))
+	sessionID := "qtest-clear"
+	defer ClearQueue(sessionID)
 
-	// Clear non-existent is no-op
-	ClearQueue("nonexistent")
+	EnqueueMessage(sessionID, model.QueuedMessage{Text: "a", CreatedAt: time.Now().Format(time.RFC3339)})
+	EnqueueMessage(sessionID, model.QueuedMessage{Text: "b", CreatedAt: time.Now().Format(time.RFC3339)})
+
+	ClearQueue(sessionID)
+	assert.Nil(t, GetQueue(sessionID))
+	assert.Equal(t, 0, QueueLength(sessionID))
 }
 
 func TestQueueLength(t *testing.T) {
-	sessionQueues = sync.Map{}
-	assert.Equal(t, 0, QueueLength("s1"))
-	EnqueueMessage("s1", model.QueuedMessage{Text: "a"})
-	assert.Equal(t, 1, QueueLength("s1"))
+	sessionID := "qtest-length"
+	defer ClearQueue(sessionID)
+
+	assert.Equal(t, 0, QueueLength(sessionID))
+
+	EnqueueMessage(sessionID, model.QueuedMessage{Text: "a", CreatedAt: time.Now().Format(time.RFC3339)})
+	assert.Equal(t, 1, QueueLength(sessionID))
+
+	EnqueueMessage(sessionID, model.QueuedMessage{Text: "b", CreatedAt: time.Now().Format(time.RFC3339)})
+	assert.Equal(t, 2, QueueLength(sessionID))
 }
 
-func TestQueueConcurrentSafety(t *testing.T) {
-	sessionQueues = sync.Map{}
-	var wg sync.WaitGroup
-	for i := 0; i < 100; i++ {
-		wg.Add(1)
-		go func(n int) {
-			defer wg.Done()
-			EnqueueMessage("s1", model.QueuedMessage{Text: string(rune(n))})
-		}(i)
-	}
-	wg.Wait()
-	assert.Equal(t, 100, QueueLength("s1"))
+func TestQueueLength_Empty(t *testing.T) {
+	assert.Equal(t, 0, QueueLength("qtest-length-empty"))
+}
+
+func TestEnqueueReturnsCopy(t *testing.T) {
+	sessionID := "qtest-copy"
+	defer ClearQueue(sessionID)
+
+	queue := EnqueueMessage(sessionID, model.QueuedMessage{Text: "a", CreatedAt: time.Now().Format(time.RFC3339)})
+
+	// Modify the returned slice — should not affect internal state
+	queue[0].Text = "modified"
+
+	// Get a fresh snapshot
+	fresh := GetQueue(sessionID)
+	assert.Equal(t, "a", fresh[0].Text)
+	assert.Len(t, fresh, 1)
 }

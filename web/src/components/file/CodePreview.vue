@@ -7,7 +7,7 @@
 <script setup>
 import { ref, watch } from 'vue'
 import { hljs } from '@/utils/globals.ts'
-import { escapeHtml } from '@/utils/helpers.ts'
+import { escapeHtml } from '@/utils/html.ts'
 import { useDoubleClickCopy } from '@/composables/useDoubleClickCopy.ts'
 import { useQuoteQuestion } from '@/composables/useQuoteQuestion.ts'
 

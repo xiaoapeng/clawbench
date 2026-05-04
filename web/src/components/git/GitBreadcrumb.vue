@@ -29,7 +29,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { baseName } from '@/utils/helpers.ts'
+import { baseName } from '@/utils/path.ts'
 import { FILE_OPEN_ICON_SVG } from '@/composables/useFilePathAnnotation.ts'
 const { t } = useI18n()
 

@@ -45,7 +45,6 @@
       :blockProposals="blockProposals"
       :blockAskQuestions="blockAskQuestions"
       :agents="agents"
-      :renderedContent="renderedContents[i]"
       :shouldCollapse="isCollapsed(i, msg)"
       @toggle-tool="$emit('toggle-tool', $event)"
       @show-metadata="$emit('show-metadata', $event)"
@@ -89,7 +88,6 @@ const props = defineProps({
   agents: Array,
   currentAgent: Object,
   currentSessionId: String,
-  renderedContents: Array,
   hasMore: Boolean,
   loadingMore: Boolean,
   totalMessages: { type: Number, default: 0 },

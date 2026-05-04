@@ -186,8 +186,7 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 	// Decode request body BEFORE the running check so we can enqueue when busy
 	var req struct {
 		Message   string   `json:"message"`
-		FilePath  string   `json:"filePath"`  // legacy: single file path
-		FilePaths []string `json:"filePaths"` // new: multiple file paths
+		FilePaths []string `json:"filePaths"`
 		Files     []string `json:"files"`
 		AgentID   string   `json:"agentId"`
 	}
@@ -203,16 +202,8 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Merge legacy filePath into filePaths for unified handling
-	allFilePaths := make([]string, 0, len(req.FilePaths)+1)
-	if req.FilePath != "" {
-		allFilePaths = append(allFilePaths, req.FilePath)
-	}
-	for _, p := range req.FilePaths {
-		if p != req.FilePath { // dedup
-			allFilePaths = append(allFilePaths, p)
-		}
-	}
+	// Validate file paths
+	allFilePaths := req.FilePaths
 
 	basePath, _ := filepath.Abs(projectPath)
 	var fileDir string
@@ -266,15 +257,10 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 		prompt = fmt.Sprintf("[用户上传了 %d 个文件: %s]\n%s", len(fileAbsPaths), strings.Join(fileAbsPaths, ", "), prompt)
 	}
 
-	// For DB storage: use first filePath for legacy column, rest go into files
-	legacyFilePath := ""
-	if len(allFilePaths) > 0 {
-		legacyFilePath = allFilePaths[0]
-	}
-	// Merge remaining filePaths into files for storage
+	// Merge filePaths into files for DB storage
 	allFiles := req.Files
-	if len(allFilePaths) > 1 {
-		allFiles = append(allFiles, allFilePaths[1:]...)
+	if len(allFilePaths) > 0 {
+		allFiles = append(allFiles, allFilePaths...)
 	}
 
 	// Resolve agent config early (needed for both enqueue and execution paths)
@@ -288,7 +274,6 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 		// Session already running — enqueue the message
 		qMsg := model.QueuedMessage{
 			Text:      req.Message,
-			FilePath:  legacyFilePath,
 			FilePaths: allFilePaths,
 			Files:     allFiles,
 			CreatedAt: time.Now().Format(time.RFC3339),
@@ -296,7 +281,7 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 		queueState := service.EnqueueMessage(sessionID, qMsg)
 
 		// Persist user message to DB immediately
-		service.AddChatMessage(projectPath, backendName, sessionID, "user", req.Message, legacyFilePath, allFiles, false)
+		service.AddChatMessage(projectPath, backendName, sessionID, "user", req.Message, allFiles, false)
 
 		// Notify the running goroutine via SSE
 		service.SendSessionEvent(sessionID, ai.StreamEvent{
@@ -312,7 +297,7 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := service.AddChatMessage(projectPath, backendName, sessionID, "user", req.Message, legacyFilePath, allFiles, false); err != nil {
+	if _, err := service.AddChatMessage(projectPath, backendName, sessionID, "user", req.Message, allFiles, false); err != nil {
 		service.SetSessionRunning(sessionID, false)
 		model.WriteError(w, model.Internal(fmt.Errorf("failed to save message")))
 		return
@@ -402,11 +387,11 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 			// Notify frontend: a queued message is about to execute
 			sendEvent(ctx, streamCh, ai.StreamEvent{
 				Type:       "queue_consume",
-				QueueEvent: &ai.QueueEventData{Text: qMsg.Text, FilePath: qMsg.FilePath, FilePaths: qMsg.FilePaths, Files: qMsg.Files},
+				QueueEvent: &ai.QueueEventData{Text: qMsg.Text, FilePaths: qMsg.FilePaths, Files: qMsg.Files},
 			})
 
 			// Persist user message to DB
-			service.AddChatMessage(projectPath, backendName, sessionID, "user", qMsg.Text, qMsg.FilePath, qMsg.Files, false)
+			service.AddChatMessage(projectPath, backendName, sessionID, "user", qMsg.Text, qMsg.Files, false)
 
 			// Send updated queue state
 			remainingQueue := service.GetQueue(sessionID)
@@ -448,7 +433,7 @@ func executeStreamRun(
 		if !sendEvent(ctx, streamCh, ai.StreamEvent{Type: "error", Error: errMsg}) {
 			return streamRunResult{err: errMsg}
 		}
-		_, _ = service.AddChatMessage(projectPath, backendName, sessionID, "assistant", errMsg, "", nil, false)
+		_, _ = service.AddChatMessage(projectPath, backendName, sessionID, "assistant", errMsg, nil, false)
 		return streamRunResult{err: errMsg}
 	}
 
@@ -459,13 +444,13 @@ func executeStreamRun(
 		if !sendEvent(ctx, streamCh, ai.StreamEvent{Type: "error", Error: errMsg}) {
 			return streamRunResult{err: errMsg}
 		}
-		_, _ = service.AddChatMessage(projectPath, backendName, sessionID, "assistant", errMsg, "", nil, false)
+		_, _ = service.AddChatMessage(projectPath, backendName, sessionID, "assistant", errMsg, nil, false)
 		return streamRunResult{err: errMsg}
 	}
 
 	// Create streaming placeholder message in DB
 	emptyContent, _ := json.Marshal(map[string]any{"blocks": []any{}})
-	_, _ = service.AddChatMessage(projectPath, backendName, sessionID, "assistant", string(emptyContent), "", nil, true)
+	_, _ = service.AddChatMessage(projectPath, backendName, sessionID, "assistant", string(emptyContent), nil, true)
 
 	var blocks []model.ContentBlock
 	var responseMetadata *ai.Metadata
@@ -562,7 +547,7 @@ func executeStreamRun(
 
 				// Create new streaming assistant placeholder
 				emptyContent, _ = json.Marshal(map[string]any{"blocks": []any{}})
-				if _, err := service.AddChatMessage(projectPath, backendName, sessionID, "assistant", string(emptyContent), "", nil, true); err != nil {
+				if _, err := service.AddChatMessage(projectPath, backendName, sessionID, "assistant", string(emptyContent), nil, true); err != nil {
 					slog.Error("failed to create resume streaming message",
 						slog.String("session", sessionID),
 						slog.String("err", err.Error()))

@@ -60,7 +60,7 @@
 import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { List, Search, MoreVertical, Code2, Download, Trash2, GitBranch, TextWrap } from 'lucide-vue-next'
-import { getFileType } from '@/utils/helpers.ts'
+import { getFileType } from '@/utils/fileType.ts'
 import { useAppMode } from '@/composables/useAppMode.ts'
 
 const props = defineProps({

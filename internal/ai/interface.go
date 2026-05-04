@@ -74,7 +74,6 @@ type ToolCall struct {
 // QueueEventData carries data for queue_consume and queue_update SSE events.
 type QueueEventData struct {
 	Text      string                `json:"text,omitempty"`
-	FilePath  string                `json:"filePath,omitempty"`
 	FilePaths []string              `json:"filePaths,omitempty"`
 	Files     []string              `json:"files,omitempty"`
 	Queue     []model.QueuedMessage `json:"queue,omitempty"`

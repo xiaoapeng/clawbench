@@ -220,6 +220,71 @@ func InitDB() error {
 		slog.Info("cleaned up orphaned streaming messages", slog.Int("count", len(orphans)))
 	}
 
+	// Migrate legacy file_path column data into files JSON array.
+	// The file_path column is retained in the table but no longer read or written.
+	if err := migrateFilePathToFiles(DB); err != nil {
+		slog.Error("failed to migrate file_path to files", slog.String("err", err.Error()))
+		// Non-fatal: the column is still there, old data is still accessible
+	}
+
+	return nil
+}
+
+// migrateFilePathToFiles merges legacy file_path column data into the files JSON array.
+// For rows where file_path is non-empty and not already in files, it prepends it.
+// The file_path column is kept (SQLite ALTER TABLE support varies) but ignored after migration.
+func migrateFilePathToFiles(db *sql.DB) error {
+	var count int
+	err := db.QueryRow("SELECT COUNT(*) FROM chat_history WHERE file_path != '' AND file_path IS NOT NULL").Scan(&count)
+	if err != nil || count == 0 {
+		return nil // Nothing to migrate
+	}
+
+	slog.Info("migrating legacy file_path data into files array", slog.Int("rows", count))
+
+	rows, err := db.Query("SELECT id, file_path, files FROM chat_history WHERE file_path != '' AND file_path IS NOT NULL")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	migrated := 0
+	for rows.Next() {
+		var id int64
+		var filePath string
+		var filesJSON sql.NullString
+		if err := rows.Scan(&id, &filePath, &filesJSON); err != nil {
+			continue
+		}
+
+		var files []string
+		if filesJSON.Valid && filesJSON.String != "" {
+			json.Unmarshal([]byte(filesJSON.String), &files)
+		}
+
+		// Check if filePath is already in files
+		found := false
+		for _, f := range files {
+			if f == filePath {
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			// Prepend filePath to files array
+			files = append([]string{filePath}, files...)
+		}
+
+		newFilesJSON, _ := json.Marshal(files)
+		if _, err := db.Exec("UPDATE chat_history SET files = ? WHERE id = ?", string(newFilesJSON), id); err == nil {
+			migrated++
+		}
+	}
+
+	if migrated > 0 {
+		slog.Info("file_path migration complete", slog.Int("migrated", migrated))
+	}
 	return nil
 }
 
@@ -240,7 +305,12 @@ func GetTTSSummary(cacheKey string) (string, bool, bool) {
 	}
 	// Expire stale failed entries so summarization is retried
 	if summarizeFailed {
+		// Try both datetime formats: SQLite's "YYYY-MM-DD HH:MM:SS" and
+		// the RFC3339 format that modernc.org/sqlite may return ("YYYY-MM-DDTHH:MM:SSZ")
 		t, err := time.Parse("2006-01-02 15:04:05", createdAt)
+		if err != nil {
+			t, err = time.Parse(time.RFC3339, createdAt)
+		}
 		if err == nil && time.Since(t) > ttsFailedCacheTTL {
 			slog.Info("tts summary cache expired for failed entry, will retry",
 				slog.String("cache_key", cacheKey),

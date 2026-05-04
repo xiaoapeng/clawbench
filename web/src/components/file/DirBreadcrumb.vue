@@ -17,7 +17,7 @@
 <script setup>
 import { computed } from 'vue'
 import { CircleDot } from 'lucide-vue-next'
-import { splitPath } from '@/utils/helpers.ts'
+import { splitPath } from '@/utils/path.ts'
 
 const props = defineProps({
   path: { type: String, default: '' },

@@ -18,7 +18,6 @@
       :agents="agentsList"
       :currentAgent="currentAgent"
       :currentSessionId="identity.currentSessionId.value"
-      :renderedContents="render.renderedContents.value"
       :hasMore="session.hasMore.value"
       :loadingMore="session.loadingMore.value"
       :totalMessages="session.totalMessages.value"
@@ -100,7 +99,7 @@
     :data="metadataModal.data"
     :backend="metadataModal.backend"
     :createdAt="metadataModal.createdAt"
-    :filePath="metadataModal.filePath"
+    :relatedFile="metadataModal.relatedFile"
     :messageId="metadataModal.messageId"
     :formatDetailTime="render.formatDetailTime"
     @close="metadataModal.show = false"
@@ -194,7 +193,7 @@ const metadataModal = ref({
   data: {},
   backend: '',
   createdAt: '',
-  filePath: '',
+  relatedFile: '',
   messageId: null
 })
 const toast = useToast()
@@ -238,7 +237,6 @@ const session = useChatSession({
   messages,
   loading,
   inputDisabled,
-  renderedContents: render.renderedContents,
   blockProposals: render.blockProposals,
   blockAskQuestions: render.blockAskQuestions,
   expandedTools: render.expandedTools,
@@ -497,7 +495,7 @@ function showMetadata(msg) {
     metadataModal.value.data = msg.metadata || {}
     metadataModal.value.backend = msg.backend || ''
     metadataModal.value.createdAt = msg.createdAt || ''
-    metadataModal.value.filePath = msg.filePath || ''
+    metadataModal.value.relatedFile = (msg.files && msg.files.length > 0) ? msg.files[0] : ''
     metadataModal.value.messageId = msg.id || null
     metadataModal.value.show = true
 }

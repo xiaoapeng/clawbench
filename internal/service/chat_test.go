@@ -114,10 +114,10 @@ func TestAddChatMessageAndGetHistory(t *testing.T) {
 
 	sid := helperCreateSession(t, "/project", "claude", "Test Session")
 
-	_, err := service.AddChatMessage("/project", "claude", sid, "user", "Hello", "", nil, false)
+	_, err := service.AddChatMessage("/project", "claude", sid, "user", "Hello", nil, false)
 	assert.NoError(t, err)
 
-	_, err = service.AddChatMessage("/project", "claude", sid, "assistant", "Hi there", "", nil, false)
+	_, err = service.AddChatMessage("/project", "claude", sid, "assistant", "Hi there", nil, false)
 	assert.NoError(t, err)
 
 	msgs, err := service.GetChatHistory("/project", "claude", sid)
@@ -150,7 +150,7 @@ func TestAddChatMessage_AutoTitle(t *testing.T) {
 	sid := helperCreateSession(t, "/project", "claude", "New Session")
 
 	// First user message should auto-title the session
-	_, err := service.AddChatMessage("/project", "claude", sid, "user", "This is my question about Go testing", "", nil, false)
+	_, err := service.AddChatMessage("/project", "claude", sid, "user", "This is my question about Go testing", nil, false)
 	assert.NoError(t, err)
 
 	title, err := service.GetSessionTitle(sid)
@@ -164,7 +164,7 @@ func TestAddChatMessage_AutoTitleTruncated(t *testing.T) {
 	sid := helperCreateSession(t, "/project", "claude", "New Session")
 
 	longContent := strings.Repeat("啊", 60) // 60 runes, each is a multi-byte character
-	_, err := service.AddChatMessage("/project", "claude", sid, "user", longContent, "", nil, false)
+	_, err := service.AddChatMessage("/project", "claude", sid, "user", longContent, nil, false)
 	assert.NoError(t, err)
 
 	title, err := service.GetSessionTitle(sid)
@@ -180,10 +180,10 @@ func TestAddChatMessage_AutoTitleOnlyFirstUserMessage(t *testing.T) {
 
 	sid := helperCreateSession(t, "/project", "claude", "New Session")
 
-	_, err := service.AddChatMessage("/project", "claude", sid, "user", "First message", "", nil, false)
+	_, err := service.AddChatMessage("/project", "claude", sid, "user", "First message", nil, false)
 	assert.NoError(t, err)
 
-	_, err = service.AddChatMessage("/project", "claude", sid, "user", "Second message", "", nil, false)
+	_, err = service.AddChatMessage("/project", "claude", sid, "user", "Second message", nil, false)
 	assert.NoError(t, err)
 
 	title, err := service.GetSessionTitle(sid)
@@ -196,7 +196,7 @@ func TestAddChatMessage_AutoTitleEmptyContentWithFiles(t *testing.T) {
 
 	sid := helperCreateSession(t, "/project", "claude", "New Session")
 
-	_, err := service.AddChatMessage("/project", "claude", sid, "user", "", "", []string{"file1.txt"}, false)
+	_, err := service.AddChatMessage("/project", "claude", sid, "user", "", []string{"file1.txt"}, false)
 	assert.NoError(t, err)
 
 	title, err := service.GetSessionTitle(sid)
@@ -209,7 +209,7 @@ func TestAddChatMessage_AutoTitleEmptyContentNoFiles(t *testing.T) {
 
 	sid := helperCreateSession(t, "/project", "claude", "New Session")
 
-	_, err := service.AddChatMessage("/project", "claude", sid, "user", "", "", nil, false)
+	_, err := service.AddChatMessage("/project", "claude", sid, "user", "", nil, false)
 	assert.NoError(t, err)
 
 	title, err := service.GetSessionTitle(sid)
@@ -222,15 +222,15 @@ func TestAddChatMessage_WithFiles(t *testing.T) {
 
 	sid := helperCreateSession(t, "/project", "claude", "File Test")
 
-	files := []string{"image.png", "doc.pdf"}
-	_, err := service.AddChatMessage("/project", "claude", sid, "user", "Check these", "/path/file", files, false)
+	files := []string{"/path/file", "image.png", "doc.pdf"}
+	_, err := service.AddChatMessage("/project", "claude", sid, "user", "Check these", files, false)
 	assert.NoError(t, err)
 
 	msgs, err := service.GetChatHistory("/project", "claude", sid)
 	assert.NoError(t, err)
 	assert.Len(t, msgs, 1)
 	assert.Equal(t, files, msgs[0].Files)
-	assert.Equal(t, "/path/file", msgs[0].FilePath)
+	assert.Equal(t, "/path/file", msgs[0].Files[0])
 }
 
 func TestAddChatMessage_Streaming(t *testing.T) {
@@ -238,7 +238,7 @@ func TestAddChatMessage_Streaming(t *testing.T) {
 
 	sid := helperCreateSession(t, "/project", "claude", "Stream Test")
 
-	_, err := service.AddChatMessage("/project", "claude", sid, "assistant", "partial...", "", nil, true)
+	_, err := service.AddChatMessage("/project", "claude", sid, "assistant", "partial...", nil, true)
 	assert.NoError(t, err)
 
 	msgs, err := service.GetChatHistory("/project", "claude", sid)
@@ -252,7 +252,7 @@ func TestAddChatMessage_AssistantDoesNotAutoTitle(t *testing.T) {
 
 	sid := helperCreateSession(t, "/project", "claude", "Original Title")
 
-	_, err := service.AddChatMessage("/project", "claude", sid, "assistant", "AI response", "", nil, false)
+	_, err := service.AddChatMessage("/project", "claude", sid, "assistant", "AI response", nil, false)
 	assert.NoError(t, err)
 
 	title, err := service.GetSessionTitle(sid)
@@ -295,7 +295,7 @@ func TestDeleteSession(t *testing.T) {
 	setupDB(t)
 
 	sid := helperCreateSession(t, "/project", "claude", "To Delete")
-	_, err := service.AddChatMessage("/project", "claude", sid, "user", "msg", "", nil, false)
+	_, err := service.AddChatMessage("/project", "claude", sid, "user", "msg", nil, false)
 	assert.NoError(t, err)
 
 	err = service.DeleteSession("/project", "claude", sid)
@@ -416,12 +416,12 @@ func TestSessionHasAssistant(t *testing.T) {
 	assert.False(t, service.SessionHasAssistant(sid))
 
 	// Add a streaming assistant message - should NOT count
-	_, err := service.AddChatMessage("/project", "claude", sid, "assistant", "partial", "", nil, true)
+	_, err := service.AddChatMessage("/project", "claude", sid, "assistant", "partial", nil, true)
 	assert.NoError(t, err)
 	assert.False(t, service.SessionHasAssistant(sid))
 
 	// Add a finalized assistant message - should count
-	_, err = service.AddChatMessage("/project", "claude", sid, "assistant", "final", "", nil, false)
+	_, err = service.AddChatMessage("/project", "claude", sid, "assistant", "final", nil, false)
 	assert.NoError(t, err)
 	assert.True(t, service.SessionHasAssistant(sid))
 }
@@ -433,7 +433,7 @@ func TestUpdateStreamingMessage(t *testing.T) {
 
 	sid := helperCreateSession(t, "/project", "claude", "Stream")
 
-	_, err := service.AddChatMessage("/project", "claude", sid, "assistant", "initial", "", nil, true)
+	_, err := service.AddChatMessage("/project", "claude", sid, "assistant", "initial", nil, true)
 	assert.NoError(t, err)
 
 	err = service.UpdateStreamingMessage("/project", "claude", sid, "updated content")
@@ -451,7 +451,7 @@ func TestFinalizeStreamingMessage(t *testing.T) {
 
 	sid := helperCreateSession(t, "/project", "claude", "Stream")
 
-	_, err := service.AddChatMessage("/project", "claude", sid, "assistant", "streaming...", "", nil, true)
+	_, err := service.AddChatMessage("/project", "claude", sid, "assistant", "streaming...", nil, true)
 	assert.NoError(t, err)
 
 	err = service.FinalizeStreamingMessage("/project", "claude", sid, "final content")
@@ -567,8 +567,8 @@ func TestAddChatMessage_MultipleSessionsIsolated(t *testing.T) {
 	sid1 := helperCreateSession(t, "/project", "claude", "Session 1")
 	sid2 := helperCreateSession(t, "/project", "claude", "Session 2")
 
-	_, _ = service.AddChatMessage("/project", "claude", sid1, "user", "Msg in session 1", "", nil, false)
-	_, _ = service.AddChatMessage("/project", "claude", sid2, "user", "Msg in session 2", "", nil, false)
+	_, _ = service.AddChatMessage("/project", "claude", sid1, "user", "Msg in session 1", nil, false)
+	_, _ = service.AddChatMessage("/project", "claude", sid2, "user", "Msg in session 2", nil, false)
 
 	msgs1, err := service.GetChatHistory("/project", "claude", sid1)
 	assert.NoError(t, err)
@@ -588,7 +588,7 @@ func TestAddChatMessage_AutoTitleExactly50Runes(t *testing.T) {
 
 	// Exactly 50 runes - should NOT be truncated
 	content := strings.Repeat("x", 50)
-	_, err := service.AddChatMessage("/project", "claude", sid, "user", content, "", nil, false)
+	_, err := service.AddChatMessage("/project", "claude", sid, "user", content, nil, false)
 	assert.NoError(t, err)
 
 	title, err := service.GetSessionTitle(sid)
@@ -603,7 +603,7 @@ func TestAddChatMessage_AutoTitle51Runes(t *testing.T) {
 
 	// 51 runes - should be truncated to 50 + "..."
 	content := strings.Repeat("x", 51)
-	_, err := service.AddChatMessage("/project", "claude", sid, "user", content, "", nil, false)
+	_, err := service.AddChatMessage("/project", "claude", sid, "user", content, nil, false)
 	assert.NoError(t, err)
 
 	title, err := service.GetSessionTitle(sid)
@@ -616,13 +616,13 @@ func TestAddChatMessage_WithFilePath(t *testing.T) {
 
 	sid := helperCreateSession(t, "/project", "claude", "FP Test")
 
-	_, err := service.AddChatMessage("/project", "claude", sid, "user", "look at this", "/src/main.go", nil, false)
+	_, err := service.AddChatMessage("/project", "claude", sid, "user", "look at this", []string{"/src/main.go"}, false)
 	assert.NoError(t, err)
 
 	msgs, err := service.GetChatHistory("/project", "claude", sid)
 	assert.NoError(t, err)
 	assert.Len(t, msgs, 1)
-	assert.Equal(t, "/src/main.go", msgs[0].FilePath)
+	assert.Equal(t, []string{"/src/main.go"}, msgs[0].Files)
 }
 
 func TestGetSessions_OrderedByUpdatedDesc(t *testing.T) {
@@ -633,7 +633,7 @@ func TestGetSessions_OrderedByUpdatedDesc(t *testing.T) {
 	sid2 := helperCreateSession(t, "/project", "claude", "Second")
 
 	// Add a message to sid1 to bump its updated_at
-	_, _ = service.AddChatMessage("/project", "claude", sid1, "user", "bump", "", nil, false)
+	_, _ = service.AddChatMessage("/project", "claude", sid1, "user", "bump", nil, false)
 
 	sessions, err := service.GetSessions("/project", "claude")
 	assert.NoError(t, err)
@@ -694,7 +694,7 @@ func TestAddChatMessage_AutoTitleWithFilePathAndContent(t *testing.T) {
 	sid := helperCreateSession(t, "/project", "claude", "New")
 
 	// When content is non-empty, title comes from content (not files)
-	_, err := service.AddChatMessage("/project", "claude", sid, "user", "Hello world", "/some/file.go", []string{"file.go"}, false)
+	_, err := service.AddChatMessage("/project", "claude", sid, "user", "Hello world", []string{"/some/file.go", "file.go"}, false)
 	assert.NoError(t, err)
 
 	title, err := service.GetSessionTitle(sid)
@@ -708,8 +708,8 @@ func TestGetChatHistory_DifferentBackendsIsolated(t *testing.T) {
 	sidC := helperCreateSession(t, "/project", "claude", "Claude")
 	sidCB := helperCreateSession(t, "/project", "codebuddy", "CodeBuddy")
 
-	_, _ = service.AddChatMessage("/project", "claude", sidC, "user", "claude msg", "", nil, false)
-	_, _ = service.AddChatMessage("/project", "codebuddy", sidCB, "user", "codebuddy msg", "", nil, false)
+	_, _ = service.AddChatMessage("/project", "claude", sidC, "user", "claude msg", nil, false)
+	_, _ = service.AddChatMessage("/project", "codebuddy", sidCB, "user", "codebuddy msg", nil, false)
 
 	msgsC, err := service.GetChatHistory("/project", "claude", sidC)
 	assert.NoError(t, err)
@@ -736,7 +736,7 @@ func TestAddChatMessage_StreamingFalse(t *testing.T) {
 
 	sid := helperCreateSession(t, "/project", "claude", "No Stream")
 
-	_, err := service.AddChatMessage("/project", "claude", sid, "assistant", "final response", "", nil, false)
+	_, err := service.AddChatMessage("/project", "claude", sid, "assistant", "final response", nil, false)
 	assert.NoError(t, err)
 
 	msgs, err := service.GetChatHistory("/project", "claude", sid)
@@ -751,7 +751,7 @@ func TestUpdateThenFinalizeStreaming(t *testing.T) {
 	sid := helperCreateSession(t, "/project", "claude", "Full Stream")
 
 	// Start streaming
-	_, _ = service.AddChatMessage("/project", "claude", sid, "assistant", "start", "", nil, true)
+	_, _ = service.AddChatMessage("/project", "claude", sid, "assistant", "start", nil, true)
 
 	// Update content multiple times
 	service.UpdateStreamingMessage("/project", "claude", sid, "start + more")
@@ -792,8 +792,8 @@ func TestGetChatMessageCount(t *testing.T) {
 	// Initially 0
 	assert.Equal(t, 0, service.GetChatMessageCount(sid))
 	// Add messages
-	service.AddChatMessage("/project", "claude", sid, "user", "Hello", "", nil, false)
-	service.AddChatMessage("/project", "claude", sid, "assistant", "Hi", "", nil, false)
+	service.AddChatMessage("/project", "claude", sid, "user", "Hello", nil, false)
+	service.AddChatMessage("/project", "claude", sid, "assistant", "Hi", nil, false)
 	assert.Equal(t, 2, service.GetChatMessageCount(sid))
 }
 
@@ -935,7 +935,7 @@ func TestUpdateMessageContent(t *testing.T) {
 	setupDB(t)
 	sid := helperCreateSession(t, "/project", "claude", "Test")
 
-	msgID, err := service.AddChatMessage("/project", "claude", sid, "user", "original", "", nil, false)
+	msgID, err := service.AddChatMessage("/project", "claude", sid, "user", "original", nil, false)
 	assert.NoError(t, err)
 
 	err = service.UpdateMessageContent(int(msgID), "updated content")

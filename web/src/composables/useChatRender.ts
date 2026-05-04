@@ -1,4 +1,4 @@
-import { ref, reactive, nextTick, watch } from 'vue'
+import { reactive, nextTick, watch } from 'vue'
 import { baseName } from '@/utils/path.ts'
 import { marked, DOMPurify, mermaid } from '@/utils/globals.ts'
 import { formatToolInput } from '@/utils/renderToolDetail.ts'
@@ -11,10 +11,10 @@ export function useChatRender(options) {
   const { messages, theme, currentSessionId } = options
   const { annotateFilePaths, verifyFilePaths } = useFilePathAnnotation()
 
-  const renderedContents = ref([])
   const blockProposals = reactive({})
   const blockAskQuestions = reactive({})
   const expandedTools = ref({})
+  let lastRenderedCount = 0
 
   // Re-render when theme changes
   watch(theme, () => {
@@ -176,31 +176,24 @@ export function useChatRender(options) {
   }
 
   function updateRenderedContents(forceFullRender = false) {
-    // Defensive: if arrays diverged (e.g. loadHistory replaced messages
-    // but renderedContents wasn't rebuilt yet), force a full rebuild.
-    if (!forceFullRender && renderedContents.value.length > messages.value.length) {
+    // Defensive: if count diverged (e.g. loadHistory replaced messages),
+    // force a full rebuild.
+    if (!forceFullRender && lastRenderedCount > messages.value.length) {
       forceFullRender = true
     }
     if (forceFullRender) {
-      renderedContents.value = messages.value.map(msg => {
-        // Both user and assistant messages now render via ContentBlocks
-        // (msg.blocks). Return empty string — renderedContent is only
-        // used as a legacy fallback for messages without blocks.
-        return ''
-      })
+      lastRenderedCount = messages.value.length
       nextTick(() => {
         const el = document.getElementById('aiChatMessages')
         if (el) renderMermaidInElement(el, 'chat-mermaid')
       })
     } else {
-      const startIdx = renderedContents.value.length
-      const newMsgs = messages.value.slice(startIdx)
+      const startIdx = lastRenderedCount
+      const newMsgCount = messages.value.length - startIdx
 
-      if (newMsgs.length === 0) return
+      if (newMsgCount <= 0) return
 
-      const newContents = newMsgs.map(() => '')
-
-      renderedContents.value = [...renderedContents.value, ...newContents]
+      lastRenderedCount = messages.value.length
 
       nextTick(() => {
         const el = document.getElementById('aiChatMessages')
@@ -312,7 +305,6 @@ export function useChatRender(options) {
   }
 
   return {
-    renderedContents,
     blockProposals,
     blockAskQuestions,
     expandedTools,
