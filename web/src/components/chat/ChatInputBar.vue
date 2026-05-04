@@ -610,11 +610,11 @@ defineExpose({
   cursor: not-allowed;
 }
 
-/* Unread session indicator — fast flash on the button */
+/* Unread session indicator — fast flash on the button (GPU-safe: opacity + box-shadow) */
 .chat-action-btn.has-unread {
     position: relative;
     color: var(--accent-color, #0066cc);
-    background: color-mix(in srgb, var(--accent-color, #0066cc) 8%, transparent);
+    background: color-mix(in srgb, var(--accent-color, #0066cc) 16%, transparent);
     animation: unread-flash 0.8s ease-in-out infinite;
 }
 
@@ -626,11 +626,11 @@ defineExpose({
 
 @keyframes unread-flash {
     0%, 100% {
-        background: color-mix(in srgb, var(--accent-color, #0066cc) 8%, transparent);
+        opacity: 0.6;
         box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-color, #0066cc) 0%, transparent);
     }
     50% {
-        background: color-mix(in srgb, var(--accent-color, #0066cc) 24%, transparent);
+        opacity: 1;
         box-shadow: 0 0 10px 2px color-mix(in srgb, var(--accent-color, #0066cc) 25%, transparent);
     }
 }
@@ -663,12 +663,6 @@ defineExpose({
 @keyframes sweep-light {
     0% { transform: translateX(-60%); }
     100% { transform: translateX(160%); }
-}
-
-/* WebView: disable unread flash (layout-triggering) but keep sweep-light (transform-only, GPU-safe) */
-:root[data-app-mode] .chat-action-btn.has-unread {
-    animation: none;
-    background: color-mix(in srgb, var(--accent-color, #0066cc) 16%, transparent);
 }
 
 .chat-action-btn svg {
