@@ -12,6 +12,7 @@ __pycache__/
 # Go build output
 /clawbench
 clawbench-dev
+dev-clawbench
 coverage.out
 
 # Runtime
