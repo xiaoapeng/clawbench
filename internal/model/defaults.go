@@ -104,6 +104,9 @@ func ApplyDefaults(cfg *Config, presence map[string]bool) string {
 	if cfg.Chat.CollapsedHeight <= 0 {
 		cfg.Chat.CollapsedHeight = 150
 	}
+	if cfg.Chat.SystemPromptInterval <= 0 {
+		cfg.Chat.SystemPromptInterval = 10
+	}
 
 	// --- Session ---
 	if cfg.Session.MaxCount <= 0 {

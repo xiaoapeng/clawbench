@@ -8,15 +8,34 @@ import (
 
 // ChatRequest represents a request to the AI backend
 type ChatRequest struct {
-	Prompt             string
-	SessionID          string
-	WorkDir            string
-	SystemPrompt       string
-	Model              string // per-request model override (empty = use global default)
-	Command            string // optional: custom command path for the AI backend CLI
-	AgentID            string // agent ID for logging and persistence
-	Resume             bool   // If true, resume an existing session instead of creating new
-	ScheduledExecution bool   // If true, this is a scheduled task execution — block schedule-proposal creation
+	Prompt                string
+	SessionID             string
+	WorkDir               string
+	SystemPrompt          string
+	Model                 string // per-request model override (empty = use global default)
+	Command               string // optional: custom command path for the AI backend CLI
+	AgentID               string // agent ID for logging and persistence
+	Resume                bool   // If true, resume an existing session instead of creating new
+	ScheduledExecution    bool   // If true, this is a scheduled task execution — block schedule-proposal creation
+	AssistantMessageCount int    // Number of finalized assistant messages in the session (0 for new sessions)
+}
+
+// ShouldInjectSystemPrompt determines whether the system prompt should be injected
+// into the user prompt for CLI backends that lack a --system-prompt flag.
+// On the first message (!Resume): always inject.
+// On resume: inject every N assistant turns (configured via chat.system_prompt_interval).
+func (r ChatRequest) ShouldInjectSystemPrompt() bool {
+	if r.SystemPrompt == "" {
+		return false
+	}
+	if !r.Resume {
+		return true
+	}
+	interval := model.ChatSystemPromptInterval
+	if interval <= 0 {
+		return false
+	}
+	return r.AssistantMessageCount > 0 && r.AssistantMessageCount%interval == 0
 }
 
 // Metadata contains additional information about the AI response

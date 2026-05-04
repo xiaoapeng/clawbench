@@ -304,9 +304,15 @@ func GetSessionAgentID(sessionID string) string {
 
 // SessionHasAssistant checks if a session already has finalized assistant replies (for Claude --resume).
 func SessionHasAssistant(sessionID string) bool {
+	return GetAssistantMessageCount(sessionID) > 0
+}
+
+// GetAssistantMessageCount returns the number of finalized assistant messages in a session.
+// Used to determine when to re-inject the system prompt for CLI backends without --system-prompt.
+func GetAssistantMessageCount(sessionID string) int {
 	var count int
 	DB.QueryRow("SELECT COUNT(*) FROM chat_history WHERE session_id = ? AND role = 'assistant' AND streaming = 0", sessionID).Scan(&count)
-	return count > 0
+	return count
 }
 
 // UpdateStreamingMessage updates the content of the streaming assistant message for a session.

@@ -117,14 +117,15 @@ phase1Done:
 	defer innerCancel2()
 
 	resumeReq := ChatRequest{
-		Prompt:       "继续",
-		SessionID:    origReq.SessionID,
-		WorkDir:      origReq.WorkDir,
-		SystemPrompt: origReq.SystemPrompt,
-		Model:        origReq.Model,
-		Command:      origReq.Command,
-		AgentID:      origReq.AgentID,
-		Resume:       true,
+		Prompt:                "继续",
+		SessionID:             origReq.SessionID,
+		WorkDir:               origReq.WorkDir,
+		SystemPrompt:          origReq.SystemPrompt,
+		Model:                 origReq.Model,
+		Command:               origReq.Command,
+		AgentID:               origReq.AgentID,
+		Resume:                true,
+		AssistantMessageCount: origReq.AssistantMessageCount,
 	}
 
 	innerCh2, err := b.inner.ExecuteStream(innerCtx2, resumeReq)

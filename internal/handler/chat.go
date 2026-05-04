@@ -768,14 +768,15 @@ func buildChatRequest(prompt, sessionID, backendName, agentID, fileDir string) a
 	}
 
 	return ai.ChatRequest{
-		Prompt:       prompt,
-		SessionID:    effectiveSessionID,
-		WorkDir:      fileDir,
-		SystemPrompt: systemPrompt,
-		Model:        agentModel,
-		Command:      agentCommand,
-		AgentID:      agentID,
-		Resume:       resume,
+		Prompt:                prompt,
+		SessionID:             effectiveSessionID,
+		WorkDir:               fileDir,
+		SystemPrompt:          systemPrompt,
+		Model:                 agentModel,
+		Command:               agentCommand,
+		AgentID:               agentID,
+		Resume:                resume,
+		AssistantMessageCount: service.GetAssistantMessageCount(sessionID),
 	}
 }
 

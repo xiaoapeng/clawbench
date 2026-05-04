@@ -135,6 +135,7 @@ func main() {
 	model.ChatPageSize = cfg.Chat.PageSize
 	model.ChatCollapsedHeight = cfg.Chat.CollapsedHeight
 	model.ChatQuickSend = cfg.Chat.QuickSend
+	model.ChatSystemPromptInterval = cfg.Chat.SystemPromptInterval
 	model.SessionMaxCount = cfg.Session.MaxCount
 
 	// Apply TTS text processing config (defaults applied in ApplyDefaults)
