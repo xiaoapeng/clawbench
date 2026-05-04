@@ -15,9 +15,17 @@ NAME="clawbench-dev"
 BIN="./clawbench"
 DEV_BACKEND_PID_FILE="/tmp/${NAME}-backend.pid"
 DEV_PID_FILE="/tmp/${NAME}-vite.pid"
+AUTO_PW_FILE=".clawbench/auto-password"
 
 get_watch_dir() {
     grep "^watch_dir:" "config.yaml" 2>/dev/null | awk '{print $2}' | tr -d '"' || echo ""
+}
+
+show_auto_password() {
+    if [[ -f "$AUTO_PW_FILE" ]]; then
+        local pw=$(cat "$AUTO_PW_FILE")
+        echo "  Password: $pw (auto-generated)"
+    fi
 }
 
 get_dev_port() {
@@ -85,6 +93,7 @@ start_dev() {
     echo "  Frontend: http://$DEV_HOST:$DEV_FRONTEND_PORT"
     echo "  DB:       ClawBench-dev.db (separate from release)"
     echo "  Watch:    ${WATCH_DIR:-default}"
+    show_auto_password
     echo ""
 
     # Start Go backend in dev mode

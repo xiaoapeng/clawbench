@@ -34,6 +34,7 @@ $DEV_FRONTEND_PORT = 20001
 $PID_FILE = Join-Path $env:TEMP "$NAME.pid"
 $DEV_PID_FILE = Join-Path $env:TEMP "$NAME-dev.pid"
 $DEV_BACKEND_PID_FILE = Join-Path $env:TEMP "$NAME-dev-backend.pid"
+$AUTO_PW_FILE = ".\.clawbench\auto-password"
 
 # Read watch_dir from config.yaml
 function Get-WatchDir {
@@ -51,6 +52,16 @@ function Get-WatchDir {
         }
     }
     return ""
+}
+
+function Show-AutoPassword {
+    if (Test-Path $AUTO_PW_FILE) {
+        $pw = Get-Content $AUTO_PW_FILE -Raw
+        $pw = $pw.Trim()
+        if ($pw) {
+            Write-Host "  Password: $pw (auto-generated, saved in .clawbench\auto-password)"
+        }
+    }
 }
 
 function Stop-Release {
@@ -172,6 +183,7 @@ function Start-Server {
     Write-Host "  Binary:   $BIN"
     Write-Host "  Config:   $CONFIG"
     Write-Host "  Watch:    $(if ($WATCH_DIR) { $WATCH_DIR } else { 'default' })"
+    Show-AutoPassword
 
     if ($Port -gt 0) {
         Write-Host "  Port:     $Port"

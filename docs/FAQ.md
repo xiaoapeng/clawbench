@@ -24,9 +24,17 @@ A: 可以。将 `summarize_backend` 设为 `"ollama"` 即可使用本地 Ollama 
 
 A: 可以。发布版和开发版使用独立端口和数据库，可以同时运行。也可以通过 `--port` 参数指定不同端口运行多个实例。
 
+**Q: 是否需要配置文件才能启动？**
+
+A: 不需要。所有配置项均有默认值，无需 `config.yaml` 即可启动。未配置 `password` 时自动生成随机密码并保存到 `.clawbench/auto-password`，启动脚本会自动显示。如需自定义，复制 `config.example.yaml` 为 `config.yaml` 并修改。
+
+**Q: 忘记自动生成的密码怎么办？**
+
+A: 查看 `.clawbench/auto-password` 文件即可获取密码。也可以在 `config.yaml` 中设置 `password` 来使用固定密码。
+
 **Q: 数据存储在哪里？**
 
-A: 数据存储在二进制文件同级目录下的 `.clawbench/` 中，包括数据库文件（`ClawBench.db`）和日志文件（`logs/`）。上传的文件存放在项目目录的 `.clawbench/uploads/` 中。绿色便携，删除程序目录即可彻底卸载。
+A: 数据存储在二进制文件同级目录下的 `.clawbench/` 中，包括数据库文件（`ClawBench.db`）、日志文件（`logs/`）和自动密码（`auto-password`）。上传的文件存放在项目目录的 `.clawbench/uploads/` 中。绿色便携，删除程序目录即可彻底卸载。
 
 **Q: 如何备份数据？**
 

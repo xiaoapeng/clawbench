@@ -362,12 +362,14 @@ func main() {
 		slog.Warn("no agents available, session creation will fail")
 	}
 
-	// Print auto-generated password prominently
+	// Print auto-generated password info
 	if autoPassword != "" {
-		fmt.Println("========================================")
-		fmt.Printf("  Auto-generated password: %s\n", autoPassword)
-		fmt.Println("  Please save this password for login.")
-		fmt.Println("========================================")
+		slog.Info("auto-generated password (no password configured)",
+			slog.String("password", autoPassword),
+			slog.String("file", filepath.Join(model.BinDir, ".clawbench", "auto-password")),
+		)
+		// Also print to stdout for foreground mode and shell scripts to capture
+		fmt.Printf("Auto-generated password: %s\n", autoPassword)
 	}
 
 	// Hash the password for session comparison

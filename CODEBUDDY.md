@@ -171,16 +171,17 @@ npx vitest run web/src/components/__tests__/gitGraphUtils.test.ts  # Single test
 - **ProxyRegistry health checks:** Forwarded ports are probed every 5s; auto-detection scans `/proc/net/tcp` (Linux), `lsof` (macOS), `netstat` (Windows); TLS probing for HTTPS ports.
 - **Android native bridge:** `useAppMode()` detects Android WebView via JS bridge (`AndroidNative.*`). Supports auto-login, port forwarding registration, SSH password management, and native dialogs.
 - **Touch device CSS:** Use `@media (hover: hover)` to scope `:hover` styles — touch devices get sticky hover that masks `.active` class changes.
-- **Green portable deployment:** All runtime data (SQLite DB, logs, uploads, SSH host keys, TTS models) lives under `.clawbench/` next to the binary. Deleting that directory = clean uninstall.
+- **Green portable deployment:** All runtime data (SQLite DB, logs, uploads, SSH host keys, TTS models, auto-generated password) lives under `.clawbench/` next to the binary. Deleting that directory = clean uninstall.
+- **Zero-config startup:** `config.yaml` is optional. `model.ApplyDefaults()` (in `defaults.go`) fills all zero-value fields with sensible defaults. When `password` is empty, a random UUID is generated and persisted to `.clawbench/auto-password` for reuse across restarts. `ParsePresenceMap()` handles the bool-defaults problem (Go zero value is `false`, but `proxy.enabled` and `ssh.enabled` should default to `true`).
 - **Structured errors:** Backend uses `model.NotFound()`, `model.Forbidden()`, `model.Internal()` constructors for consistent HTTP error responses.
 
 ## Configuration
 
-`config.yaml` (not committed, see `config.example.yaml`):
+`config.yaml` is entirely optional — all settings have sensible defaults. See `config.example.yaml` for available options.
 
 | Section | Key options |
 |---------|------------|
-| Server | `port`, `watch_dir`, `password` |
+| Server | `port` (default: 20000), `watch_dir` (default: user home), `password` (default: auto-generated UUID saved to `.clawbench/auto-password`) |
 | Upload | `upload.max_size_mb`, `upload.max_files` |
 | Chat UI | `chat.initial_messages`, `chat.page_size`, `chat.collapsed_height`, `chat.quick_send` |
 | Session | `session.max_count` |

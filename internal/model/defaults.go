@@ -3,6 +3,7 @@ package model
 import (
 	"crypto/rand"
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"clawbench/internal/platform"
@@ -54,11 +55,25 @@ func ApplyDefaults(cfg *Config, presence map[string]bool) string {
 	cfg.WatchDir = platform.ExpandTilde(cfg.WatchDir)
 
 	// --- Password ---
+	autoPasswordFile := filepath.Join(BinDir, ".clawbench", "auto-password")
 	if cfg.Password == "" {
-		b := make([]byte, 16)
-		rand.Read(b)
-		cfg.Password = fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+		// Try to reuse previously auto-generated password
+		saved, err := os.ReadFile(autoPasswordFile)
+		if err == nil && len(saved) > 0 {
+			cfg.Password = string(saved)
+		} else {
+			// Generate new random password
+			b := make([]byte, 16)
+			rand.Read(b)
+			cfg.Password = fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+			// Persist for reuse across restarts
+			os.MkdirAll(filepath.Dir(autoPasswordFile), 0755)
+			os.WriteFile(autoPasswordFile, []byte(cfg.Password), 0600)
+		}
 		autoPassword = cfg.Password
+	} else {
+		// User explicitly set a password — remove stale auto-password file if any
+		os.Remove(autoPasswordFile)
 	}
 
 	// --- LogDir ---

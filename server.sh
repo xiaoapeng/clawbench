@@ -14,11 +14,19 @@ NAME="clawbench"
 BIN="./$NAME"
 PID_FILE="/tmp/${NAME}.pid"
 CONFIG="config.yaml"
+AUTO_PW_FILE=".clawbench/auto-password"
 
 RELEASE_PORT=20000
 
 get_watch_dir() {
     grep "^watch_dir:" "$CONFIG" 2>/dev/null | awk '{print $2}' | tr -d '"' || echo ""
+}
+
+show_auto_password() {
+    if [[ -f "$AUTO_PW_FILE" ]]; then
+        local pw=$(cat "$AUTO_PW_FILE")
+        echo "  Password: $pw (auto-generated, saved in $AUTO_PW_FILE)"
+    fi
 }
 
 check_binary() {
@@ -63,6 +71,7 @@ start_release() {
     echo "  Config:   $CONFIG"
     echo "  Port:     ${PORT:-$RELEASE_PORT}"
     echo "  Watch:    ${WATCH_DIR:-default}"
+    show_auto_password
     echo ""
 
     if [[ -n "$FOREGROUND" ]]; then

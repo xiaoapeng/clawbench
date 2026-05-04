@@ -53,11 +53,6 @@ func NewProxyRegistry(cfg model.ProxyConfig, selfPort int) *ProxyRegistry {
 		cancel:   cancel,
 	}
 
-	// Set default allowed ports
-	if cfg.AllowedPorts == "" {
-		r.cfg.AllowedPorts = "1024-65535"
-	}
-
 	// Restore persisted ports from database
 	r.loadPortsFromDB()
 
