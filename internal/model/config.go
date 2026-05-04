@@ -32,17 +32,18 @@ type Config struct {
 		MaxCount int `yaml:"max_count"` // Maximum number of chat sessions per project (default: 10)
 	} `yaml:"session"`
 	TTS struct {
-		Engine           string      `yaml:"engine"`            // TTS engine: "minimax" (default), "edge", "piper", or "kokoro"
-		SummarizeBackend string      `yaml:"summarize_backend"` // Summarization backend: "mmx" (default), "claude", "codebuddy", "gemini", "opencode", "codex", "ollama"
-		SummarizeModel   string      `yaml:"summarize_model"`   // Model for summarization (default: "MiniMax-M2.7" for mmx, "gemma3:270m" for ollama; empty = backend default for others)
-		TTSModel         string      `yaml:"tts_model"`         // TTS model for speech synthesis (default: "Speech-2.8-Turbo")
-		Voice            string      `yaml:"voice"`             // Voice ID for TTS (default: "female-chengshu")
-		Language         string      `yaml:"language"`          // Language boost code (default: "zh")
-		Speed            float64     `yaml:"speed"`             // Speech speed multiplier (default: 1.0)
-		Format           string      `yaml:"format"`            // Audio output format (default: "mp3")
-		Piper            PiperConfig `yaml:"piper"`             // Piper-specific configuration (only used when engine: "piper")
-		Kokoro           KokoroConfig `yaml:"kokoro"`           // Kokoro-specific configuration (only used when engine: "kokoro")
-		Ollama           OllamaConfig `yaml:"ollama"`           // Ollama-specific configuration (only used when summarize_backend: "ollama")
+		Engine           string         `yaml:"engine"`            // TTS engine: "minimax" (default), "edge", "piper", "kokoro", "moss-nano"
+		SummarizeBackend string         `yaml:"summarize_backend"` // Summarization backend: "mmx" (default), "claude", "codebuddy", "gemini", "opencode", "codex", "ollama"
+		SummarizeModel   string         `yaml:"summarize_model"`   // Model for summarization (default: "MiniMax-M2.7" for mmx, "gemma3:270m" for ollama; empty = backend default for others)
+		TTSModel         string         `yaml:"tts_model"`         // TTS model for speech synthesis (default: "Speech-2.8-Turbo")
+		Voice            string         `yaml:"voice"`             // Voice ID for TTS (default: "female-chengshu")
+		Language         string         `yaml:"language"`          // Language boost code (default: "zh")
+		Speed            float64        `yaml:"speed"`             // Speech speed multiplier (default: 1.0)
+		Format           string         `yaml:"format"`            // Audio output format (default: "mp3")
+		Piper            PiperConfig    `yaml:"piper"`             // Piper-specific configuration (only used when engine: "piper")
+		Kokoro           KokoroConfig   `yaml:"kokoro"`            // Kokoro-specific configuration (only used when engine: "kokoro")
+		MossNano         MossNanoConfig `yaml:"moss_nano"`         // MOSS-TTS-Nano-specific configuration (only used when engine: "moss-nano")
+		Ollama           OllamaConfig   `yaml:"ollama"`            // Ollama-specific configuration (only used when summarize_backend: "ollama")
 	} `yaml:"tts"`
 	Proxy ProxyConfig `yaml:"proxy"` // Port forwarding configuration
 	SSH   SSHConfig   `yaml:"ssh"`   // SSH tunnel server configuration
@@ -61,6 +62,14 @@ type KokoroConfig struct {
 	ModelPath  string  `yaml:"model_path"`   // Path to kokoro .onnx model file (empty = .clawbench/kokoro-models/kokoro-v1.0.onnx)
 	VoicesPath string  `yaml:"voices_path"`  // Path to voices .bin file (empty = .clawbench/kokoro-models/voices-v1.0.bin)
 	Lang       string  `yaml:"lang"`         // espeak language code for phonemization (default: "cmn" for Mandarin Chinese)
+}
+
+// MossNanoConfig holds configuration for the MOSS-TTS-Nano TTS engine.
+type MossNanoConfig struct {
+	ModelDir     string `yaml:"model_dir"`      // Directory for ONNX model files (empty = .clawbench/moss-nano-models; CLI auto-downloads if missing)
+	PromptSpeech string `yaml:"prompt_speech"`  // Path to reference audio for voice cloning (empty = use built-in voice preset)
+	Voice        string `yaml:"voice"`           // Built-in voice preset for ONNX backend when no prompt-speech (default: "Junhao")
+	Backend      string `yaml:"backend"`         // Inference backend: "onnx" (default, CPU) or "pytorch" (requires GPU)
 }
 
 // OllamaConfig holds configuration for the Ollama summarization backend.

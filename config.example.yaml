@@ -224,6 +224,33 @@ tts:
   #   voices_path: ""                                   # Voices file path; leave empty to use .clawbench/kokoro-models/voices-v1.1-zh.bin
                                                        # 音色文件路径，留空则使用 .clawbench/kokoro-models/voices-v1.1-zh.bin
   #   lang: "cmn"                                       # espeak language code (cmn = Mandarin Chinese, en-us = American English, default/默认: cmn)
+
+  # --- Combo 8: MOSS-TTS-Nano (local offline, multilingual, voice cloning, 48kHz) ---
+  # --- 组合8: MOSS-TTS-Nano（本地离线，多语言，音色克隆，48kHz） ---
+  # engine: "moss-nano"
+  # summarize_backend: "mmx"
+  # summarize_model: "MiniMax-M2.7"
+  # moss_nano:
+  #   model_dir: ""                                      # ONNX model directory; leave empty to use .clawbench/moss-nano-models (CLI auto-downloads on first run)
+                                                        # ONNX模型目录，留空则使用 .clawbench/moss-nano-models（首次运行CLI会自动下载）
+  #   prompt_speech: ""                                  # Reference audio for voice cloning; leave empty for default voice (no cloning)
+                                                        # 参考音频用于音色克隆，留空则使用默认音色（不克隆）
+  #   backend: "onnx"                                    # Inference backend: "onnx" (default, CPU-friendly) or "pytorch" (requires GPU)
+                                                       # 推理后端: "onnx"（默认，CPU可用）或 "pytorch"（需要GPU）
+  #
+  # MOSS-TTS-Nano features / MOSS-TTS-Nano 特性：
+  #   - 0.1B parameters, runs on CPU / 0.1B参数，CPU即可运行
+  #   - 48kHz stereo WAV output / 48kHz 立体声 WAV 输出
+  #   - ~20 languages: zh, en, ja, ko, de, es, fr, it, ... / 约20种语言
+  #   - Zero-shot voice cloning with reference audio / 零样本音色克隆（需参考音频）
+  #   - ONNX runtime: ~2x faster than PyTorch / ONNX推理比PyTorch快约2倍
+  #
+  # MOSS-TTS-Nano installation / MOSS-TTS-Nano 安装步骤：
+  #   conda create -n moss-tts-nano python=3.12 -y
+  #   conda activate moss-tts-nano
+  #   git clone https://github.com/OpenMOSS/MOSS-TTS-Nano.git
+  #   cd MOSS-TTS-Nano && pip install -r requirements.txt && pip install -e .
+  #   # Then ensure "moss-tts-nano" CLI is on $PATH or in .venv/bin/
                                                        # espeak语言代码（cmn=普通话，en-us=美式英语，默认: cmn）
   #
   # Kokoro installation / Kokoro 安装步骤：

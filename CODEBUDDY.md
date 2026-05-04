@@ -185,7 +185,7 @@ npx vitest run web/src/components/__tests__/gitGraphUtils.test.ts  # Single test
 | Chat UI | `chat.initial_messages`, `chat.page_size`, `chat.collapsed_height`, `chat.quick_send` |
 | Session | `session.max_count` |
 | TLS | `tls.enabled`, `tls.cert_file`, `tls.key_file` |
-| TTS | `tts.engine` (minimax/edge/piper/kokoro), `tts.summarize_backend` (mmx/claude/codebuddy/gemini/opencode/codex/ollama), `tts.summarize_model`, `tts.speed`, `tts.voice`, engine-specific sub-configs, `tts.ollama.base_url` |
+| TTS | `tts.engine` (minimax/edge/piper/kokoro/moss-nano), `tts.summarize_backend` (mmx/claude/codebuddy/gemini/opencode/codex/ollama), `tts.summarize_model`, `tts.speed`, `tts.voice`, engine-specific sub-configs, `tts.ollama.base_url` |
 | Proxy | `proxy.enabled`, `proxy.allowed_ports` |
 | SSH | `ssh.enabled`, `ssh.port`, `ssh.host_key` |
 | Dev | `dev.port`, `dev.frontend_port`, `dev.host` |
@@ -198,4 +198,4 @@ Dev mode uses separate port (20002) and database (`ClawBench-dev.db`).
 - Go tests use `testify/assert`. Test files colocated with source (`*_test.go`). 40 test files across 8 packages.
 - Frontend tests use Vitest + `@vue/test-utils`. Located in `web/src/components/__tests__/`.
 - Many handler tests need a running test server — see `testutil_test.go` in handler package.
-- Key test packages: `ai/` (stream parsers, auto-resume, factory), `handler/` (auth, chat, files, git, proxy, scheduler, SSH info, TTS), `service/` (chat, proxy, scheduler, stream, uuid), `speech/` (minimax, piper, kokoro, ollama), `ssh/` (server).
+- Key test packages: `ai/` (stream parsers, auto-resume, factory), `handler/` (auth, chat, files, git, proxy, scheduler, SSH info, TTS), `service/` (chat, proxy, scheduler, stream, uuid), `speech/` (minimax, piper, kokoro, moss_tts_nano, ollama), `ssh/` (server).

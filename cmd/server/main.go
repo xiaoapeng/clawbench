@@ -261,6 +261,26 @@ func main() {
 			slog.String("lang", k.Lang),
 			slog.Float64("speed", k.Speed),
 		)
+	case "moss-nano":
+		m := speech.NewMossNanoProvider()
+		if cfg.TTS.MossNano.Backend != "" {
+			m.Backend = cfg.TTS.MossNano.Backend
+		}
+		m.ModelDir = speech.ResolveMossNanoModelDir(cfg.TTS.MossNano.ModelDir)
+		if cfg.TTS.MossNano.PromptSpeech != "" {
+			m.PromptSpeech = cfg.TTS.MossNano.PromptSpeech
+		}
+		if cfg.TTS.MossNano.Voice != "" {
+			m.Voice = cfg.TTS.MossNano.Voice
+		}
+		ttsProvider = m
+		slog.Info("tts provider configured",
+			slog.String("engine", "moss-nano"),
+			slog.String("backend", m.Backend),
+			slog.String("model_dir", m.ModelDir),
+			slog.String("prompt_speech", m.PromptSpeech),
+			slog.String("voice", m.Voice),
+		)
 	default:
 		p := speech.NewMiniMaxProvider()
 		if cfg.TTS.TTSModel != "" {

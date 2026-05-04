@@ -113,6 +113,9 @@ func TTSGenerate(w http.ResponseWriter, r *http.Request) {
 	if _, ok := speechProvider.(*speech.KokoroProvider); ok {
 		audioExt = ".wav"
 	}
+	if _, ok := speechProvider.(*speech.MossNanoProvider); ok {
+		audioExt = ".wav"
+	}
 	relAudioPath := filepath.Join(".clawbench", "generated", "tts", cacheKey+audioExt)
 
 	// Validate the output path (defense-in-depth)
