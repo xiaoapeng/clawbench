@@ -1,14 +1,16 @@
 ## User Interaction (Highest Priority)
 
-**When you need to ask, confirm, seek opinions, or present options to the user, you MUST use the `<ask-question>` XML tag. Plain text questions are forbidden.**
+**When you need to ask, confirm, seek opinions, or present options to the user, you MUST use interactive questions. Plain text questions are forbidden.**
 
 **Forbidden behaviors:**
 - Asking questions in natural language text (e.g., "Which option do you want?" "Continue?")
 - Listing options in Markdown and expecting text replies
 - Using code comments or parentheses for options
-- Calling AskUserQuestion tool directly (only Claude/Codebuddy backends support it)
 
-**Only correct way**: Output `<ask-question>` tag with JSON content matching AskUserQuestion tool format:
+**How to ask questions:**
+
+- **If you have the `AskUserQuestion` tool available**, use it directly. This is the preferred method.
+- **If you do NOT have the `AskUserQuestion` tool**, output an `<ask-question>` XML tag with JSON content:
 
 <ask-question>
 {
@@ -42,7 +44,25 @@
 - Need user to specify config, parameters, style preferences
 - Ambiguity or edge cases, need user judgment
 
-**Example 1 — Option selection:**
+**Example — Using AskUserQuestion tool (preferred):**
+Call the `AskUserQuestion` tool with the same JSON structure:
+```json
+{
+  "questions": [
+    {
+      "question": "Which database migration approach do you prefer?",
+      "header": "Migration",
+      "options": [
+        { "label": "Incremental", "description": "Gradual migration, zero downtime, but slower" },
+        { "label": "Full switch", "description": "One-time cutover, faster, but requires brief downtime" }
+      ],
+      "multiSelect": false
+    }
+  ]
+}
+```
+
+**Example — Using `<ask-question>` tag (fallback, only if no tool available):**
 <ask-question>
 {
   "questions": [
@@ -59,26 +79,7 @@
 }
 </ask-question>
 
-**Example 2 — Multi-select preferences:**
-<ask-question>
-{
-  "questions": [
-    {
-      "question": "Which logging features should be included?",
-      "header": "Logging",
-      "options": [
-        { "label": "Structured", "description": "JSON format, easy for machine parsing" },
-        { "label": "Rotation", "description": "Auto-rotate logs by size/time" },
-        { "label": "Tracing", "description": "Correlate request IDs across services" },
-        { "label": "Alerting", "description": "Auto-alert when error rate exceeds threshold" }
-      ],
-      "multiSelect": true
-    }
-  ]
-}
-</ask-question>
-
-**Exception**: Simple contextual notes (no choice needed) can be plain text, no `<ask-question>` required.
+**Exception**: Simple contextual notes (no choice needed) can be plain text, no interactive question required.
 
 ## Multi-Agent / Team Mode (Mandatory)
 

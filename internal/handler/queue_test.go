@@ -254,3 +254,73 @@ func TestQueueHandler_MethodNotAllowed(t *testing.T) {
 
 	assertStatus(t, w, http.StatusMethodNotAllowed)
 }
+
+// TestQueueHandler_Enqueue_FilesNoDuplicate verifies that when both filePaths
+// and files are provided (with files already containing filePaths, as the
+// frontend sends), the queued message stores files without duplication.
+func TestQueueHandler_Enqueue_FilesNoDuplicate(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	sessionID := "q-enqueue-dedup"
+	defer service.ClearQueue(sessionID)
+
+	// Simulate frontend: files already includes filePaths
+	body := map[string]any{
+		"message":   "check this file",
+		"filePaths": []string{"config.yaml"},
+		"files":     []string{"config.yaml"},
+	}
+	req := newRequest(t, http.MethodPost, "/api/ai/queue?session_id="+sessionID, body)
+	req = withProjectCookie(req, env.ProjectDir)
+	w := callHandler(QueueHandler, req)
+
+	assertOK(t, w)
+	var result map[string]any
+	json.Unmarshal(w.Body.Bytes(), &result)
+	queue := result["queue"].([]any)
+	assert.Len(t, queue, 1)
+	item := queue[0].(map[string]any)
+
+	// filePaths should be preserved as-is for prompt building
+	filePaths := item["filePaths"].([]any)
+	assert.Len(t, filePaths, 1)
+	assert.Equal(t, "config.yaml", filePaths[0])
+
+	// files should NOT contain duplicates
+	files := item["files"].([]any)
+	assert.Len(t, files, 1, "files should have exactly 1 entry (no duplicate), got %v", files)
+	assert.Equal(t, "config.yaml", files[0])
+}
+
+// TestQueueHandler_Enqueue_FilesWithUploads verifies that when files includes
+// both uploads and references, all are preserved correctly.
+func TestQueueHandler_Enqueue_FilesWithUploads(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	sessionID := "q-enqueue-uploads"
+	defer service.ClearQueue(sessionID)
+
+	body := map[string]any{
+		"message":   "check these",
+		"filePaths": []string{"src/main.go"},
+		"files":     []string{".clawbench/uploads/img.png", "src/main.go"},
+	}
+	req := newRequest(t, http.MethodPost, "/api/ai/queue?session_id="+sessionID, body)
+	req = withProjectCookie(req, env.ProjectDir)
+	w := callHandler(QueueHandler, req)
+
+	assertOK(t, w)
+	var result map[string]any
+	json.Unmarshal(w.Body.Bytes(), &result)
+	queue := result["queue"].([]any)
+	assert.Len(t, queue, 1)
+	item := queue[0].(map[string]any)
+
+	// files should preserve all entries without duplication
+	files := item["files"].([]any)
+	assert.Len(t, files, 2, "files should have 2 entries (upload + ref), got %v", files)
+	assert.Equal(t, ".clawbench/uploads/img.png", files[0])
+	assert.Equal(t, "src/main.go", files[1])
+}

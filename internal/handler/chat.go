@@ -257,11 +257,8 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 		prompt = fmt.Sprintf("[用户上传了 %d 个文件: %s]\n%s", len(fileAbsPaths), strings.Join(fileAbsPaths, ", "), prompt)
 	}
 
-	// Merge filePaths into files for DB storage
+	// allFiles already includes filePaths (frontend merges them before sending)
 	allFiles := req.Files
-	if len(allFilePaths) > 0 {
-		allFiles = append(allFiles, allFilePaths...)
-	}
 
 	// Resolve agent config early (needed for both enqueue and execution paths)
 	effectiveAgentID := req.AgentID

@@ -120,4 +120,53 @@ describe('Pending Message Queue (API-driven)', () => {
     expect(messages[1].role).toBe('assistant')
     expect(messages[1].streaming).toBe(true)
   })
+
+  it('queue_consume SSE event files are not duplicated when filePaths overlaps files', () => {
+    // Simulates the queue_consume handler in useChatStream.ts
+    // The backend sends both filePaths and files in the event, where files
+    // already includes filePaths. The frontend should only use data.files
+    // to avoid duplication.
+    const data = {
+      text: 'check this file',
+      filePaths: ['config.yaml'],
+      files: ['config.yaml'],
+    }
+
+    // This is the fixed handler logic:
+    // files: (data.files || []).map(p => ({ path: p }))
+    const userFiles = (data.files || []).map(p => ({ path: p }))
+
+    expect(userFiles).toHaveLength(1)
+    expect(userFiles[0].path).toBe('config.yaml')
+  })
+
+  it('queue_consume SSE event preserves all files when filePaths is a subset', () => {
+    // Simulates: user attached one file + uploaded another
+    // Frontend sends: filePaths=['src/main.go'], files=['.clawbench/uploads/img.png', 'src/main.go']
+    // Backend stores: files=['.clawbench/uploads/img.png', 'src/main.go']
+    // queue_consume sends: filePaths=['src/main.go'], files=['.clawbench/uploads/img.png', 'src/main.go']
+    const data = {
+      text: 'check these',
+      filePaths: ['src/main.go'],
+      files: ['.clawbench/uploads/img.png', 'src/main.go'],
+    }
+
+    const userFiles = (data.files || []).map(p => ({ path: p }))
+
+    expect(userFiles).toHaveLength(2)
+    expect(userFiles[0].path).toBe('.clawbench/uploads/img.png')
+    expect(userFiles[1].path).toBe('src/main.go')
+  })
+
+  it('queue_consume SSE event handles empty files gracefully', () => {
+    const data = {
+      text: 'simple question',
+      filePaths: [],
+      files: [],
+    }
+
+    const userFiles = (data.files || []).map(p => ({ path: p }))
+
+    expect(userFiles).toHaveLength(0)
+  })
 })

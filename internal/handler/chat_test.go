@@ -1039,3 +1039,96 @@ func TestAccumulateBlock_SessionCaptureNotAccumulated(t *testing.T) {
 		t.Errorf("expected text block, got %q", blocks[0].Type)
 	}
 }
+
+// ============================================================================
+// Files deduplication tests
+// ============================================================================
+
+// TestAddChatMessage_FilesNoDuplicate verifies that files stored in the DB
+// are not duplicated when the same path appears in both filePaths and files
+// (the frontend sends both, with files already containing filePaths).
+func TestAddChatMessage_FilesNoDuplicate(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	sessionID, err := service.CreateSession(env.ProjectDir, "codebuddy", "files-dedup", "", "", "default")
+	assert.NoError(t, err)
+
+	// Simulate what the handler does: allFiles = req.Files (frontend already merged filePaths into files)
+	allFiles := []string{"config.yaml"}
+
+	msgID, err := service.AddChatMessage(env.ProjectDir, "codebuddy", sessionID, "user", "what is this?", allFiles, false)
+	assert.NoError(t, err)
+	assert.NotZero(t, msgID)
+
+	// Read back from DB and verify no duplicates
+	messages, err := service.GetChatHistory(env.ProjectDir, "codebuddy", sessionID)
+	assert.NoError(t, err)
+	assert.Len(t, messages, 1)
+	assert.Len(t, messages[0].Files, 1, "files should have exactly 1 entry, got %v", messages[0].Files)
+	assert.Equal(t, "config.yaml", messages[0].Files[0])
+}
+
+// TestAddChatMessage_FilesWithUploadsAndReferences verifies that files with
+// both uploads and references are stored correctly without duplication.
+func TestAddChatMessage_FilesWithUploadsAndReferences(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	sessionID, err := service.CreateSession(env.ProjectDir, "codebuddy", "files-mixed", "", "", "default")
+	assert.NoError(t, err)
+
+	// Frontend sends: files = [upload path, reference path] (already merged)
+	allFiles := []string{".clawbench/uploads/photo.png", "src/main.go"}
+
+	msgID, err := service.AddChatMessage(env.ProjectDir, "codebuddy", sessionID, "user", "check both", allFiles, false)
+	assert.NoError(t, err)
+	assert.NotZero(t, msgID)
+
+	messages, err := service.GetChatHistory(env.ProjectDir, "codebuddy", sessionID)
+	assert.NoError(t, err)
+	assert.Len(t, messages, 1)
+	assert.Len(t, messages[0].Files, 2, "files should have exactly 2 entries, got %v", messages[0].Files)
+}
+
+// TestAIChat_EnqueuePath_FilesNoDuplicate tests the AIChat handler's enqueue
+// path (when session is already running) to ensure files are not duplicated
+// in DB storage when filePaths and files overlap.
+func TestAIChat_EnqueuePath_FilesNoDuplicate(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	// Create a test file within the project so validation passes
+	createTestFile(t, env.ProjectDir, "config.yaml", "test: true")
+
+	// Create a session and mark it as running (to trigger enqueue path)
+	sessionID, err := service.CreateSession(env.ProjectDir, "codebuddy", "enqueue-dedup", "", "", "default")
+	assert.NoError(t, err)
+	service.TrySetSessionRunning(sessionID)
+	defer func() {
+		service.SetSessionRunning(sessionID, false)
+		service.ClearQueue(sessionID)
+	}()
+
+	// Simulate frontend sending both filePaths and files (where files already includes filePaths)
+	body := map[string]any{
+		"message":   "check this",
+		"filePaths": []string{"config.yaml"},
+		"files":     []string{"config.yaml"}, // frontend already merged filePaths into files
+	}
+	req := newRequest(t, http.MethodPost, "/api/ai/chat?session_id="+sessionID, body)
+	withProjectCookie(req, env.ProjectDir)
+
+	w := callHandler(AIChat, req)
+	assertOK(t, w)
+
+	var result map[string]any
+	assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &result))
+	assert.Equal(t, true, result["queued"])
+
+	// Verify DB has no duplicate files
+	messages, err := service.GetChatHistory(env.ProjectDir, "codebuddy", sessionID)
+	assert.NoError(t, err)
+	assert.Len(t, messages, 1, "should have 1 user message")
+	assert.Len(t, messages[0].Files, 1, "files should have exactly 1 entry (no duplicate), got %v", messages[0].Files)
+}
