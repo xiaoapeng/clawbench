@@ -11,7 +11,9 @@ import android.content.SharedPreferences;
 import android.net.Uri;
 import android.net.wifi.WifiManager;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.PowerManager;
 import android.os.SystemClock;
 import android.content.pm.ServiceInfo;
@@ -73,8 +75,8 @@ public class PortForwardService extends Service {
     private static final int MAX_RECONNECT_ATTEMPTS = 10;
     private static final int MONITOR_CHECK_INTERVAL_MS = 15000;
 
-    private static boolean isRunning = false;
-    private static PortForwardService instance;
+    private static volatile boolean isRunning = false;
+    private static volatile PortForwardService instance;
 
     private JSch jsch;
     private Session sshSession;
@@ -171,12 +173,14 @@ public class PortForwardService extends Service {
                 .apply();
     }
 
+
     @Override
     public void onCreate() {
         super.onCreate();
         isRunning = true;
         instance = this;
         jsch = new JSch();
+        createNotificationChannel();
         startForegroundCompat(NOTIFICATION_ID, buildNotification(0, null));
 
         // Restore previously saved ports (from before Service was killed)
@@ -723,6 +727,24 @@ public class PortForwardService extends Service {
     }
 
     /**
+     * Create the notification channel (called once in onCreate).
+     */
+    private void createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            android.app.NotificationChannel channel = new android.app.NotificationChannel(
+                    CHANNEL_ID,
+                    "SSH 端口转发",
+                    android.app.NotificationManager.IMPORTANCE_LOW
+            );
+            channel.setDescription("SSH 隧道端口转发服务");
+            android.app.NotificationManager nm = getSystemService(android.app.NotificationManager.class);
+            if (nm != null) {
+                nm.createNotificationChannel(channel);
+            }
+        }
+    }
+
+    /**
      * Build the foreground service notification.
      * @param portCount  Number of currently forwarded ports
      * @param statusText Optional status override (e.g. "SSH 隧道断开，正在重连…"). Null = normal status.
@@ -741,20 +763,6 @@ public class PortForwardService extends Service {
             text = portCount + " 个端口转发活跃";
         } else {
             text = "SSH 隧道已连接";
-        }
-
-        // Create notification channel for Android O+
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            android.app.NotificationChannel channel = new android.app.NotificationChannel(
-                    CHANNEL_ID,
-                    "SSH 端口转发",
-                    android.app.NotificationManager.IMPORTANCE_LOW
-            );
-            channel.setDescription("SSH 隧道端口转发服务");
-            android.app.NotificationManager nm = getSystemService(android.app.NotificationManager.class);
-            if (nm != null) {
-                nm.createNotificationChannel(channel);
-            }
         }
 
         return new NotificationCompat.Builder(this, CHANNEL_ID)

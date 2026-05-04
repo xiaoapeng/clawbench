@@ -586,6 +586,9 @@ onMounted(async () => {
             store.state.currentFile = null
         }
     }
+
+    // Expose chat opener for Android native notification tap
+    ;(window as any).__clawbenchOpenChat = () => ensureDrawerOpen('chat')
 })
 
 onUnmounted(() => {

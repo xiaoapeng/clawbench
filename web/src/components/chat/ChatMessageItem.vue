@@ -505,6 +505,7 @@ function getFileName(path) {
     word-break: break-word;
     max-width: 100%;
     box-sizing: border-box;
+    contain: layout style;
 }
 
 /* ── File attachment in messages (global for reuse in PendingMessageItem) ── */
@@ -635,6 +636,7 @@ function getFileName(path) {
     border-radius: 16px 16px 16px 0;
     position: relative;
     min-width: 0;
+    overflow: hidden;
     overflow-wrap: break-word;
 }
 

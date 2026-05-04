@@ -4,6 +4,7 @@ import { useToast } from '@/composables/useToast.ts'
 import { useNotification } from '@/composables/useNotification.ts'
 import { useSessionIdentity } from '@/composables/useSessionIdentity.ts'
 import { useAgents } from '@/composables/useAgents.ts'
+import { useAppMode } from '@/composables/useAppMode.ts'
 import { store } from '@/stores/app.ts'
 
 export interface UseChatSessionOptions {
@@ -54,6 +55,7 @@ export function useChatSession(options: UseChatSessionOptions) {
 
   const toast = useToast()
   const notification = useNotification()
+  const { isAppMode } = useAppMode()
 
   // ── Identity refs from singleton ──
   const identity = useSessionIdentity()
@@ -348,17 +350,27 @@ export function useChatSession(options: UseChatSessionOptions) {
         const hasUnreadOther = sessions.some(s => s.unreadCount > 0 && s.id !== currentSessionId.value)
         store.state.chatUnread = hasUnreadOther
 
+        // Calculate total chat unread count for native badge
+        const totalChatUnread = sessions.reduce((sum, s) => sum + (s.unreadCount || 0), 0)
+
         // Track running sessions for dock/chat button indicator
         store.state.chatRunning = newRunning.size > 0
 
         // Check for unread task executions
+        let totalTaskUnread = 0
         try {
           const taskResp = await fetch('/api/tasks')
           if (taskResp.ok) {
             const taskData = await taskResp.json()
             store.state.taskUnread = !!taskData.hasUnread
+            totalTaskUnread = (taskData.tasks || []).reduce((sum: number, t: any) => sum + (t.unreadCount || 0), 0)
           }
         } catch (_) {}
+
+        // Sync unread counts to Android native layer for launcher badge
+        if (isAppMode.value) {
+          ;(window as any).AndroidNative?.setUnreadCount(totalChatUnread, totalTaskUnread)
+        }
 
         // Check for completed sessions
         const completedSessions: string[] = []

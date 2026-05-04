@@ -168,15 +168,16 @@ export function useChatStream(options: UseChatStreamOptions) {
           onMessage()
           onScrollBottom(true)
           onStreamEnd?.('done')
-          // Show toast notification when AI replies and chat panel is not open
-          if (!isOpen.value) {
-            const lastMsg = messages.value[messages.value.length - 1]
-            if (lastMsg?.role === 'assistant') {
+          const lastMsg = messages.value[messages.value.length - 1]
+          if (lastMsg?.role === 'assistant') {
+            const appInBackground = document.visibilityState !== 'visible'
+            if (!isOpen.value || appInBackground) {
               onToast(gt('chat.stream.aiReplied'), { icon: '🤖', duration: 5000, onClick: () => onOpen() })
               onNotification(gt('chat.stream.aiReplied'), {
                 body: gt('chat.stream.clickToViewReply'),
                 onClick: () => onOpen()
               })
+            }
             }
           }
           return
@@ -330,9 +331,10 @@ export function useChatStream(options: UseChatStreamOptions) {
         onMessage()
         onScrollBottom(true)
         onStreamEnd?.('done')
-        if (!isOpen.value) {
-          const lastMsg = messages.value[messages.value.length - 1]
-          if (lastMsg?.role === 'assistant') {
+        const lastMsg = messages.value[messages.value.length - 1]
+        if (lastMsg?.role === 'assistant') {
+          const appInBackground = document.visibilityState !== 'visible'
+          if (!isOpen.value || appInBackground) {
             onToast(gt('chat.stream.aiReplied'), { icon: '🤖', duration: 5000, onClick: () => onOpen() })
             onNotification(gt('chat.stream.aiReplied'), {
               body: gt('chat.stream.clickToViewReply'),
