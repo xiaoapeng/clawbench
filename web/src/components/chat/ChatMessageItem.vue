@@ -64,6 +64,7 @@
       <span class="chat-meta-info">
         <span v-if="msg.backend">{{ msg.backend }}</span>
         <span v-if="msg.metadata?.model" class="chat-meta-sep">{{ msg.metadata.model }}</span>
+        <span v-if="msg.metadata?.wallMs" class="chat-meta-sep chat-meta-duration">{{ formatDuration(msg.metadata.wallMs) }}</span>
         <span v-if="msg.createdAt" class="chat-meta-sep">{{ formatMessageTime(msg.createdAt) }}</span>
       </span>
       <div class="chat-meta-actions">
@@ -107,6 +108,7 @@ import { ref, inject, computed, watch, nextTick, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { FileImage, FileText, Paperclip, ChevronDown, ChevronUp, Clock, Pause, Volume2, Info } from 'lucide-vue-next'
 import { baseName } from '@/utils/path.ts'
+import { formatDuration } from '@/utils/format.ts'
 import { store } from '@/stores/app.ts'
 import ContentBlocks from './ContentBlocks.vue'
 
@@ -392,6 +394,10 @@ function getFileName(path) {
 .chat-meta-sep::before {
     content: '·';
     margin-right: 6px;
+}
+
+.chat-meta-duration {
+    font-variant-numeric: tabular-nums;
 }
 
 /* Chat Info Button */

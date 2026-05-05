@@ -32,6 +32,12 @@
               <div v-else class="exec-summary empty">{{ t('task.exec.noTextOutput') }}</div>
               <span v-if="exec.triggerType === 'manual'" class="exec-trigger-type manual">{{ t('task.exec.manual') }}</span>
             </div>
+            <div v-if="exec.metadata" class="exec-meta-row">
+              <span v-if="exec.metadata.wallMs" class="exec-meta-tag exec-meta-duration">{{ formatDuration(exec.metadata.wallMs) }}</span>
+              <span v-if="exec.metadata.model" class="exec-meta-tag">{{ exec.metadata.model }}</span>
+              <span v-if="exec.metadata.inputTokens || exec.metadata.outputTokens" class="exec-meta-tag">{{ formatTokens(exec.metadata) }}</span>
+              <span v-if="exec.metadata.costUsd" class="exec-meta-tag">${{ exec.metadata.costUsd.toFixed(4) }}</span>
+            </div>
           </div>
           <ChevronRight :size="14" class="exec-chevron" />
         </div>
@@ -51,6 +57,15 @@
         :toolCallSummary="chatRender.toolCallSummary"
         @toggle-tool="toggleTool"
       />
+      <!-- Execution metadata bar -->
+      <div v-if="selectedExec.metadata" class="exec-detail-meta">
+        <span v-if="selectedExec.metadata.wallMs" class="exec-meta-tag exec-meta-duration">{{ t('chat.metadata.wallDuration') }} {{ formatDuration(selectedExec.metadata.wallMs) }}</span>
+        <span v-if="selectedExec.metadata.model" class="exec-meta-tag">{{ selectedExec.metadata.model }}</span>
+        <span v-if="selectedExec.metadata.inputTokens" class="exec-meta-tag">{{ t('chat.metadata.inputTokens') }} {{ selectedExec.metadata.inputTokens.toLocaleString() }}</span>
+        <span v-if="selectedExec.metadata.outputTokens" class="exec-meta-tag">{{ t('chat.metadata.outputTokens') }} {{ selectedExec.metadata.outputTokens.toLocaleString() }}</span>
+        <span v-if="selectedExec.metadata.costUsd" class="exec-meta-tag">{{ t('chat.metadata.cost') }} ${{ selectedExec.metadata.costUsd.toFixed(6) }}</span>
+        <span v-if="selectedExec.metadata.stopReason" class="exec-meta-tag">{{ selectedExec.metadata.stopReason }}</span>
+      </div>
     </div>
 
     <template #footer>
@@ -70,6 +85,7 @@ import ModalDialog from '@/components/common/ModalDialog.vue'
 import ContentBlocks from '@/components/chat/ContentBlocks.vue'
 import { useChatRender } from '@/composables/useChatRender.ts'
 import { useToast } from '@/composables/useToast.ts'
+import { formatDuration } from '@/utils/format.ts'
 
 const props = defineProps({
   open: Boolean,
@@ -79,6 +95,13 @@ const props = defineProps({
 const emit = defineEmits(['close'])
 
 const { t } = useI18n()
+
+function formatTokens(meta) {
+  const parts = []
+  if (meta.inputTokens) parts.push(`${meta.inputTokens.toLocaleString()}↑`)
+  if (meta.outputTokens) parts.push(`${meta.outputTokens.toLocaleString()}↓`)
+  return parts.join(' ')
+}
 
 const loading = ref(false)
 const triggering = ref(false)
@@ -162,9 +185,9 @@ async function loadExecutions() {
     const data = await resp.json()
     const rawExecutions = data.executions || []
     executions.value = rawExecutions.map(exec => {
-      const { blocks } = chatRender.parseAssistantContent(exec.content)
+      const { blocks, metadata } = chatRender.parseAssistantContent(exec.content)
       const summary = extractSummary(blocks)
-      return { ...exec, blocks, summary }
+      return { ...exec, blocks, metadata, summary }
     })
   } catch (err) {
     console.error('Failed to load executions:', err)
@@ -240,6 +263,28 @@ watch(() => props.open, (isOpen) => {
   display: flex;
   flex-direction: column;
   gap: 3px;
+}
+
+.exec-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.exec-meta-tag {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--bg-tertiary, #f0f0f0);
+  color: var(--text-secondary, #666);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.exec-meta-duration {
+  font-weight: 500;
+  color: var(--text-primary);
 }
 
 .execution-time-row {
@@ -346,6 +391,20 @@ watch(() => props.open, (isOpen) => {
 .exec-chevron {
   flex-shrink: 0;
   color: var(--text-muted, #ccc);
+}
+
+.exec-detail-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border-color, #e5e5e5);
+  margin-top: 4px;
+}
+
+.exec-detail-meta .exec-meta-tag {
+  font-size: 11px;
 }
 
 .back-btn {

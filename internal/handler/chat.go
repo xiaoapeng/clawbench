@@ -445,6 +445,9 @@ func executeStreamRun(
 		return streamRunResult{err: errMsg}
 	}
 
+	// Record wall-clock start time for duration tracking
+	wallStart := time.Now()
+
 	// Create streaming placeholder message in DB
 	emptyContent, _ := json.Marshal(map[string]any{"blocks": []any{}})
 	_, _ = service.AddChatMessage(projectPath, backendName, sessionID, "assistant", string(emptyContent), nil, true)
@@ -472,11 +475,11 @@ func executeStreamRun(
 		case event, ok := <-eventCh:
 			if !ok {
 				// Stream ended — finalize below
-				return finalizeStreamRun(ctx, streamCh, projectPath, backendName, sessionID, agentID, chatReq, blocks, responseMetadata, rawOutput, eventCh)
+				return finalizeStreamRun(ctx, streamCh, projectPath, backendName, sessionID, agentID, chatReq, blocks, responseMetadata, rawOutput, eventCh, wallStart)
 			}
 			// Don't forward "done" here — finalize below
 			if event.Type == "done" {
-				return finalizeStreamRun(ctx, streamCh, projectPath, backendName, sessionID, agentID, chatReq, blocks, responseMetadata, rawOutput, eventCh)
+				return finalizeStreamRun(ctx, streamCh, projectPath, backendName, sessionID, agentID, chatReq, blocks, responseMetadata, rawOutput, eventCh, wallStart)
 			}
 			// Capture raw output for debugging (not forwarded to SSE)
 			if event.Type == "raw_output" {
@@ -507,7 +510,7 @@ func executeStreamRun(
 			}
 			// Forward to SSE channel
 			if !sendEvent(ctx, streamCh, event) {
-				return finalizeStreamRun(ctx, streamCh, projectPath, backendName, sessionID, agentID, chatReq, blocks, responseMetadata, rawOutput, eventCh)
+				return finalizeStreamRun(ctx, streamCh, projectPath, backendName, sessionID, agentID, chatReq, blocks, responseMetadata, rawOutput, eventCh, wallStart)
 			}
 
 			ai.AccumulateBlock(&blocks, event)
@@ -541,6 +544,7 @@ func executeStreamRun(
 				blocks = nil
 				responseMetadata = nil
 				eventCount = 0
+				wallStart = time.Now() // Reset wall-clock start for the resumed segment
 
 				// Create new streaming assistant placeholder
 				emptyContent, _ = json.Marshal(map[string]any{"blocks": []any{}})
@@ -603,6 +607,7 @@ func finalizeStreamRun(
 	responseMetadata *ai.Metadata,
 	rawOutput string,
 	eventCh <-chan ai.StreamEvent,
+	wallStart time.Time,
 ) streamRunResult {
 	// Detect <ask-question> in the fully accumulated text blocks and convert to tool_use blocks.
 	// This enables all backends (not just Claude/Codebuddy) to produce interactive question cards.
@@ -626,6 +631,13 @@ func finalizeStreamRun(
 			}
 		}
 	}
+
+	// Compute wall-clock duration and inject into metadata
+	wallMs := int(time.Since(wallStart).Milliseconds())
+	if responseMetadata == nil {
+		responseMetadata = &ai.Metadata{}
+	}
+	responseMetadata.WallMs = wallMs
 
 	// Determine cancellation reason
 	cancelReason := service.GetAndClearCancelReason(sessionID)
@@ -727,7 +739,12 @@ saveRaw:
 		slog.String("session", sessionID),
 		slog.Int("blocks", len(blocks)),
 		slog.String("cancel_reason", cancelReason),
+		slog.Int("wall_ms", wallMs),
 	)
+
+	// Send updated metadata (with wallMs) to SSE before the terminal event
+	// so the frontend has duration info even for cancelled streams.
+	sendEvent(ctx, streamCh, ai.StreamEvent{Type: "metadata", Meta: responseMetadata})
 
 	return result
 }

@@ -40,6 +40,10 @@
             <span class="metadata-label">{{ t('chat.metadata.outputTokens') }}</span>
             <span class="metadata-value">{{ data.outputTokens.toLocaleString() }}</span>
           </div>
+          <div v-if="data.wallMs" class="metadata-item">
+            <span class="metadata-label">{{ t('chat.metadata.wallDuration') }}</span>
+            <span class="metadata-value">{{ formatDuration(data.wallMs) }}</span>
+          </div>
           <div v-if="data.durationMs" class="metadata-item">
             <span class="metadata-label">{{ t('chat.metadata.duration') }}</span>
             <span class="metadata-value">{{ (data.durationMs / 1000).toFixed(2) }}s</span>
@@ -75,6 +79,7 @@
 import { Copy } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 import { useToast } from '@/composables/useToast.ts'
+import { formatDuration } from '@/utils/format.ts'
 
 const { t } = useI18n()
 

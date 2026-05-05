@@ -278,6 +278,7 @@ func (s *Scheduler) executeTask(task *model.ScheduledTask, projectPath string, t
 	// Consume streaming events and build content blocks
 	var blocks []model.ContentBlock
 	var responseMetadata *ai.Metadata
+	wallStart := time.Now()
 
 	for event := range eventCh {
 		switch event.Type {
@@ -291,6 +292,13 @@ func (s *Scheduler) executeTask(task *model.ScheduledTask, projectPath string, t
 			ai.AccumulateBlock(&blocks, event)
 		}
 	}
+
+	// Compute wall-clock duration and inject into metadata
+	wallMs := int(time.Since(wallStart).Milliseconds())
+	if responseMetadata == nil {
+		responseMetadata = &ai.Metadata{}
+	}
+	responseMetadata.WallMs = wallMs
 
 	// Build content JSON
 	contentMap := map[string]any{"blocks": blocks}

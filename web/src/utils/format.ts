@@ -66,6 +66,16 @@ export function humanizeCron(expr: string): string {
     return expr
 }
 
+/** Format milliseconds as human-readable duration (e.g. "12.3s", "1m30s") */
+export function formatDuration(ms: number): string {
+    if (ms < 1000) return `${ms}ms`
+    const sec = ms / 1000
+    if (sec < 60) return `${sec.toFixed(1)}s`
+    const min = Math.floor(sec / 60)
+    const rem = Math.round(sec % 60)
+    return `${min}m${rem}s`
+}
+
 /** Get a label for task repeat mode */
 export function repeatLabel(mode: string, maxRuns: number): string {
     if (mode === 'once') return i18n.global.t('task.repeat.once')
