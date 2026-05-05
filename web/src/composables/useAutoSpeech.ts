@@ -9,9 +9,8 @@
  * Should only be instantiated once (in ChatPanel.vue) and provided via inject to children.
  *
  * State machine: idle → summarizing → synthesizing → playing → idle
- *   - "summarizing" is only entered when the backend sends a phase event for it.
- *   - "synthesizing" is entered as soon as fetch returns OK (optimistic) or when
- *     the backend explicitly sends the phase event.
+ *   - Phase transitions are driven by EventSource SSE events from the backend.
+ *   - Cache hits skip SSE entirely and play audio immediately.
  */
 
 import { ref } from 'vue'
@@ -31,6 +30,7 @@ const activeId = ref<string>('')
 const playingSummary = ref<string>('')
 const lastError = ref<string>('')
 let abortController: AbortController | null = null
+let currentEventSource: EventSource | null = null
 let currentAudioEl: HTMLAudioElement | null = null
 
 // Load persisted state once at module level
@@ -64,6 +64,10 @@ export function useAutoSpeech() {
   function stopAudio() {
     abortController?.abort()
     abortController = null
+    if (currentEventSource) {
+      currentEventSource.close()
+      currentEventSource = null
+    }
     if (currentAudioEl) {
       currentAudioEl.pause()
       currentAudioEl.currentTime = 0
@@ -81,6 +85,44 @@ export function useAutoSpeech() {
     toast.show(message, { icon: '🔊', type: 'error', duration: 5000 })
   }
 
+  // --- Internal: play audio from a path ---
+  function playAudio(audioPath: string) {
+    const audioUrl = `/api/local-file/${encodeURIComponent(audioPath)}`
+    const audio = new Audio(audioUrl)
+    currentAudioEl = audio
+    state.value = 'playing'
+
+    audio.onended = () => {
+      if (currentAudioEl === audio) {
+        currentAudioEl = null
+        activeId.value = ''
+        playingSummary.value = ''
+        state.value = 'idle'
+      }
+    }
+    audio.onerror = () => {
+      if (currentAudioEl === audio) {
+        currentAudioEl = null
+        activeId.value = ''
+        playingSummary.value = ''
+        state.value = 'idle'
+        reportError(gt('autoSpeech.playbackFailed'))
+      }
+    }
+
+    audio.play().catch((err: any) => {
+      if (err?.name === 'AbortError') return
+      let message = gt('autoSpeech.generateFailedGeneric')
+      if (err?.name === 'NotAllowedError') {
+        message = gt('autoSpeech.autoplayBlocked')
+      }
+      reportError(message)
+      activeId.value = ''
+      playingSummary.value = ''
+      state.value = 'idle'
+    })
+  }
+
   // --- Internal: generate and play TTS for text ---
   async function _speak(id: string, text: string) {
     if (!text) return
@@ -91,12 +133,9 @@ export function useAutoSpeech() {
     const controller = new AbortController()
     abortController = controller
     activeId.value = id
-    // Set state IMMEDIATELY so the user sees "摘要中" right away —
-    // don't wait for the fetch to return.
-    state.value = 'summarizing'
 
     try {
-      // POST to backend TTS endpoint (SSE streaming)
+      // Step 1: POST to create TTS job (or get cached result)
       const resp = await fetch('/api/tts/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -113,105 +152,107 @@ export function useAutoSpeech() {
         throw new Error(errorMsg)
       }
 
-      // Parse SSE stream to get phase updates and the final result
-      const reader = resp.body?.getReader()
-      if (!reader) throw new Error(gt('autoSpeech.cannotReadStream'))
+      const data = await resp.json()
 
-      const decoder = new TextDecoder()
+      // Cache hit — play audio immediately, no SSE needed
+      if (data.cached && data.audioPath) {
+        if (data.summary) {
+          playingSummary.value = data.summary
+        }
+        playAudio(data.audioPath)
+        return
+      }
+
+      // Cache miss — set state to summarizing immediately so the user sees
+      // feedback while the EventSource connection is being established.
+      state.value = 'summarizing'
+
+      // Connect to EventSource for phase updates
+      if (!data.jobId) throw new Error(gt('autoSpeech.noResult'))
+
+      const es = new EventSource(`/api/tts/stream/${data.jobId}`)
+      currentEventSource = es
+
       let resultData: any = null
-      let sseBuffer = ''
 
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        sseBuffer += decoder.decode(value, { stream: true })
-
-        // Process complete SSE messages (delimited by \n\n)
-        while (sseBuffer.includes('\n\n')) {
-          const idx = sseBuffer.indexOf('\n\n')
-          const block = sseBuffer.slice(0, idx)
-          sseBuffer = sseBuffer.slice(idx + 2)
-
-          for (const line of block.split('\n')) {
-            if (!line.startsWith('data: ')) continue
-            try {
-              const event = JSON.parse(line.slice(6))
-              if (event.type === 'phase') {
-                const phase = event.phase as string
-                if (phase === 'summarizing') {
-                  state.value = 'summarizing'
-                  await new Promise<void>(resolve => requestAnimationFrame(resolve))
-                } else if (phase === 'synthesizing') {
-                  state.value = 'synthesizing'
-                  // Ensure "合成中" is visible for at least one frame before
-                  // we process the result event (which switches to "playing").
-                  await new Promise<void>(resolve => requestAnimationFrame(resolve))
-                }
-              } else if (event.type === 'result') {
-                // Don't process result immediately — give the current phase
-                // label (e.g. "合成中") time to render.  The result event
-                // switches us to the "playing" state, which would overwrite
-                // the phase label instantly.
-                resultData = event
-              }
-            } catch { /* ignore malformed SSE lines */ }
+      es.addEventListener('phase', (e: MessageEvent) => {
+        try {
+          const event = JSON.parse(e.data)
+          if (event.phase === 'summarizing') {
+            state.value = 'summarizing'
+          } else if (event.phase === 'synthesizing') {
+            state.value = 'synthesizing'
           }
+        } catch { /* ignore malformed data */ }
+      })
+
+      es.addEventListener('result', (e: MessageEvent) => {
+        try {
+          resultData = JSON.parse(e.data)
+        } catch { /* ignore malformed data */ }
+        // Close EventSource — we have the result
+        es.close()
+        currentEventSource = null
+        handleResult(resultData)
+      })
+
+      es.onerror = () => {
+        es.close()
+        if (currentEventSource === es) {
+          currentEventSource = null
         }
+        // If we already have result data, process it
+        if (resultData) {
+          handleResult(resultData)
+          return
+        }
+        // Otherwise report error (unless aborted)
+        if (controller.signal.aborted) return
+        reportError(gt('autoSpeech.generateFailedGeneric'))
+        activeId.value = ''
+        playingSummary.value = ''
+        state.value = 'idle'
       }
 
-      if (!resultData) throw new Error(gt('autoSpeech.noResult'))
-
-      // Handle synthesize failure
-      if (resultData.synthesizeFailed) {
-        throw new Error(resultData.synthesizeError || gt('autoSpeech.synthesisFailed'))
-      }
-
-      if (!resultData.audioPath) throw new Error(gt('autoSpeech.noAudioFile'))
-
-      // Warn if summarization failed (fell back to full text)
-      if (resultData.summarizeFailed) {
-        toast.show(gt('autoSpeech.summaryFailed'), { icon: '🔊', type: 'info', duration: 3000 })
-      }
-
-      // Store the AI-generated summary for display
-      if (resultData.summary) {
-        playingSummary.value = resultData.summary
-      }
-
-      // Ensure "合成中" is visible for at least a short moment before
-      // switching to "playing".  Without this, the synthesizing phase
-      // label disappears instantly because result follows synthesizing
-      // with zero gap.
-      if (state.value === 'synthesizing') {
-        await new Promise<void>(resolve => setTimeout(resolve, 300))
-      }
-
-      // Play audio via HTML5 Audio element
-      const audioUrl = `/api/local-file/${encodeURIComponent(resultData.audioPath)}`
-      const audio = new Audio(audioUrl)
-      currentAudioEl = audio
-      state.value = 'playing'
-
-      audio.onended = () => {
-        if (currentAudioEl === audio) {
-          currentAudioEl = null
+      function handleResult(result: any) {
+        if (!result) {
+          reportError(gt('autoSpeech.noResult'))
           activeId.value = ''
           playingSummary.value = ''
           state.value = 'idle'
+          return
         }
-      }
-      audio.onerror = () => {
-        if (currentAudioEl === audio) {
-          currentAudioEl = null
+
+        // Handle synthesize failure
+        if (result.synthesizeFailed) {
+          reportError(result.synthesizeError || gt('autoSpeech.synthesisFailed'))
           activeId.value = ''
           playingSummary.value = ''
           state.value = 'idle'
-          reportError(gt('autoSpeech.playbackFailed'))
+          return
         }
+
+        if (!result.audioPath) {
+          reportError(gt('autoSpeech.noAudioFile'))
+          activeId.value = ''
+          playingSummary.value = ''
+          state.value = 'idle'
+          return
+        }
+
+        // Warn if summarization failed (fell back to full text)
+        if (result.summarizeFailed) {
+          toast.show(gt('autoSpeech.summaryFailed'), { icon: '🔊', type: 'info', duration: 3000 })
+        }
+
+        // Store the AI-generated summary for display
+        if (result.summary) {
+          playingSummary.value = result.summary
+        }
+
+        playAudio(result.audioPath)
       }
 
-      await audio.play()
     } catch (err: any) {
       if (err?.name === 'AbortError') return
 

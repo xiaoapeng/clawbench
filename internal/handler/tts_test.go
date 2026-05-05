@@ -11,7 +11,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"clawbench/internal/service"
 	"clawbench/internal/speech"
 
 	"github.com/stretchr/testify/assert"
@@ -84,22 +86,6 @@ func setupTTSTest(t *testing.T, mockProvider *mockSpeechProvider, mockSum *mockS
 	return env, teardown
 }
 
-// parseTTSResult parses SSE data lines and returns the result event.
-func parseTTSResult(t *testing.T, body string) ttsSSEEvent {
-	t.Helper()
-	lines := strings.Split(body, "\n")
-	for _, line := range lines {
-		if strings.HasPrefix(line, "data: ") {
-			var event ttsSSEEvent
-			if err := json.Unmarshal([]byte(line[6:]), &event); err == nil && event.Type == "result" {
-				return event
-			}
-		}
-	}
-	t.Fatal("no result event found in SSE output")
-	return ttsSSEEvent{}
-}
-
 // --- TTSGenerate: method validation ---
 
 func TestTTSGenerate_MethodNotAllowed(t *testing.T) {
@@ -157,7 +143,7 @@ func TestTTSGenerate_TextTooLong(t *testing.T) {
 	assert.False(t, mockSum.called)
 }
 
-// --- TTSGenerate: successful generation ---
+// --- TTSGenerate: successful generation returns jobId ---
 
 func TestTTSGenerate_Success(t *testing.T) {
 	mockProvider := &mockSpeechProvider{}
@@ -173,22 +159,39 @@ func TestTTSGenerate_Success(t *testing.T) {
 	TTSGenerate(w, req)
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	result := parseTTSResult(t, w.Body.String())
-	assert.Contains(t, result.AudioPath, ".clawbench/generated/tts/")
-	assert.Contains(t, result.AudioPath, ".mp3")
+	// Response should be JSON with jobId
+	var resp map[string]any
+	err := json.Unmarshal(w.Body.Bytes(), &resp)
+	assert.NoError(t, err)
+	assert.Contains(t, resp, "jobId")
+	assert.NotEmpty(t, resp["jobId"])
+
+	// Wait for the background goroutine to complete
+	hash := sha256.Sum256([]byte(text))
+	cacheKey := hex.EncodeToString(hash[:])[:speech.CacheKeyHexLen]
+	job, ok := service.GetTTSJob(cacheKey)
+	if ok {
+		select {
+		case <-job.Done:
+		case <-time.After(5 * time.Second):
+			t.Fatal("TTS job did not complete in time")
+		}
+	}
+
+	// Verify the mock was called
 	assert.True(t, mockSum.called)
 	assert.True(t, mockProvider.synthesizeCalled)
 }
 
-// --- TTSGenerate: summarize failure falls back to original text ---
+// --- TTSGenerate: summarize failure returns error, does not synthesize ---
 
-func TestTTSGenerate_SummarizeFailure_Fallback(t *testing.T) {
+func TestTTSGenerate_SummarizeFailure(t *testing.T) {
 	mockProvider := &mockSpeechProvider{}
 	mockSum := &mockSummarizer{err: context.DeadlineExceeded}
 	env, teardown := setupTTSTest(t, mockProvider, mockSum)
 	defer teardown()
 
-	text := "这是一段需要总结的长文本内容，但由于摘要失败会回退到原文。内容足够长以触发摘要流程。"
+	text := "这是一段需要总结的长文本内容，但由于摘要失败会直接报错。内容足够长以触发摘要流程。"
 	req := newRequest(t, http.MethodPost, "/api/tts/generate", map[string]string{"text": text})
 	req = withProjectCookie(req, env.ProjectDir)
 	w := httptest.NewRecorder()
@@ -196,18 +199,24 @@ func TestTTSGenerate_SummarizeFailure_Fallback(t *testing.T) {
 	TTSGenerate(w, req)
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	// Synthesize should be called
-	assert.True(t, mockSum.called)
-	assert.True(t, mockProvider.synthesizeCalled)
-	// The text passed to Synthesize should contain the original text
-	assert.Contains(t, mockProvider.lastSynthText, "摘要失败")
+	// Wait for the background goroutine to complete
+	hash := sha256.Sum256([]byte(text))
+	cacheKey := hex.EncodeToString(hash[:])[:speech.CacheKeyHexLen]
+	job, ok := service.GetTTSJob(cacheKey)
+	if ok {
+		select {
+		case <-job.Done:
+		case <-time.After(5 * time.Second):
+			t.Fatal("TTS job did not complete in time")
+		}
+	}
 
-	// Response should indicate summarizeFailed
-	result := parseTTSResult(t, w.Body.String())
-	assert.True(t, result.SummarizeFailed)
+	// Summarizer was called, but synthesize should NOT be called
+	assert.True(t, mockSum.called)
+	assert.False(t, mockProvider.synthesizeCalled)
 }
 
-// --- TTSGenerate: synthesize failure returns error ---
+// --- TTSGenerate: synthesize failure returns error via SSE stream ---
 
 func TestTTSGenerate_SynthesizeFailure(t *testing.T) {
 	mockProvider := &mockSpeechProvider{synthesizeErr: context.DeadlineExceeded}
@@ -223,13 +232,28 @@ func TestTTSGenerate_SynthesizeFailure(t *testing.T) {
 	TTSGenerate(w, req)
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	// SSE result should indicate synthesize failed
-	result := parseTTSResult(t, w.Body.String())
-	assert.True(t, result.SynthesizeFailed)
-	assert.Contains(t, result.SynthesizeError, "语音合成失败")
+	var resp map[string]any
+	err := json.Unmarshal(w.Body.Bytes(), &resp)
+	assert.NoError(t, err)
+	assert.Contains(t, resp, "jobId")
+
+	// Wait for job to complete
+	hash := sha256.Sum256([]byte(text))
+	cacheKey := hex.EncodeToString(hash[:])[:speech.CacheKeyHexLen]
+	job, ok := service.GetTTSJob(cacheKey)
+	if ok {
+		select {
+		case <-job.Done:
+		case <-time.After(5 * time.Second):
+			t.Fatal("TTS job did not complete in time")
+		}
+	}
+
+	assert.True(t, mockSum.called)
+	assert.True(t, mockProvider.synthesizeCalled)
 }
 
-// --- TTSGenerate: cache hit returns immediately ---
+// --- TTSGenerate: cache hit returns JSON directly ---
 
 func TestTTSGenerate_CacheHit(t *testing.T) {
 	mockProvider := &mockSpeechProvider{}
@@ -258,8 +282,12 @@ func TestTTSGenerate_CacheHit(t *testing.T) {
 	TTSGenerate(w, req)
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	result := parseTTSResult(t, w.Body.String())
-	assert.Equal(t, relAudioPath, result.AudioPath)
+	// Cache hit returns JSON directly (not SSE)
+	var resp map[string]any
+	err := json.Unmarshal(w.Body.Bytes(), &resp)
+	assert.NoError(t, err)
+	assert.Equal(t, true, resp["cached"])
+	assert.Equal(t, relAudioPath, resp["audioPath"])
 
 	// Provider should NOT be called on cache hit
 	assert.False(t, mockSum.called)
@@ -345,6 +373,17 @@ func TestTTSGenerate_LanguageDefaultToZh(t *testing.T) {
 	TTSGenerate(w, req)
 	assert.Equal(t, http.StatusOK, w.Code)
 
+	// Wait for job to complete
+	hash := sha256.Sum256([]byte(text))
+	cacheKey := hex.EncodeToString(hash[:])[:speech.CacheKeyHexLen]
+	if job, ok := service.GetTTSJob(cacheKey); ok {
+		select {
+		case <-job.Done:
+		case <-time.After(5 * time.Second):
+			t.Fatal("TTS job did not complete in time")
+		}
+	}
+
 	// Language should default to "zh"
 	assert.Equal(t, "zh", mockSum.lastLanguage)
 	assert.Equal(t, "zh", mockProvider.lastSynthLang)
@@ -365,6 +404,17 @@ func TestTTSGenerate_LanguageEn(t *testing.T) {
 	TTSGenerate(w, req)
 	assert.Equal(t, http.StatusOK, w.Code)
 
+	// Wait for job to complete
+	hash := sha256.Sum256([]byte(text))
+	cacheKey := hex.EncodeToString(hash[:])[:speech.CacheKeyHexLen]
+	if job, ok := service.GetTTSJob(cacheKey); ok {
+		select {
+		case <-job.Done:
+		case <-time.After(5 * time.Second):
+			t.Fatal("TTS job did not complete in time")
+		}
+	}
+
 	assert.Equal(t, "en", mockSum.lastLanguage)
 	assert.Equal(t, "en", mockProvider.lastSynthLang)
 }
@@ -383,6 +433,76 @@ func TestTTSGenerate_LanguageJa(t *testing.T) {
 	TTSGenerate(w, req)
 	assert.Equal(t, http.StatusOK, w.Code)
 
+	// Wait for job to complete
+	hash := sha256.Sum256([]byte(text))
+	cacheKey := hex.EncodeToString(hash[:])[:speech.CacheKeyHexLen]
+	if job, ok := service.GetTTSJob(cacheKey); ok {
+		select {
+		case <-job.Done:
+		case <-time.After(5 * time.Second):
+			t.Fatal("TTS job did not complete in time")
+		}
+	}
+
 	assert.Equal(t, "ja", mockSum.lastLanguage)
 	assert.Equal(t, "ja", mockProvider.lastSynthLang)
+}
+
+// --- TTSStream: SSE streaming via EventSource-compatible format ---
+
+func TestTTSStream_Success(t *testing.T) {
+	mockProvider := &mockSpeechProvider{}
+	mockSum := &mockSummarizer{result: "这是核心结论"}
+	env, teardown := setupTTSTest(t, mockProvider, mockSum)
+	defer teardown()
+
+	text := "这是用于测试SSE流的文本内容，包含足够的文字以触发摘要流程。"
+	req := newRequest(t, http.MethodPost, "/api/tts/generate", map[string]string{"text": text})
+	req = withProjectCookie(req, env.ProjectDir)
+	w := httptest.NewRecorder()
+
+	TTSGenerate(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var genResp map[string]any
+	json.Unmarshal(w.Body.Bytes(), &genResp)
+	jobID := genResp["jobId"].(string)
+
+	// Connect to stream endpoint immediately (as a real client would).
+	// TTSStream blocks reading from the job's channel until the goroutine completes.
+	streamReq := httptest.NewRequest(http.MethodGet, "/api/tts/stream/"+jobID, nil)
+	streamReq = withProjectCookie(streamReq, env.ProjectDir)
+	streamW := httptest.NewRecorder()
+
+	TTSStream(streamW, streamReq)
+
+	body := streamW.Body.String()
+	assert.Contains(t, body, "event: phase")
+	assert.Contains(t, body, "summarizing")
+	assert.Contains(t, body, "synthesizing")
+	assert.Contains(t, body, "event: result")
+}
+
+func TestTTSStream_JobNotFound(t *testing.T) {
+	_, teardown := setupTTSTest(t, &mockSpeechProvider{}, &mockSummarizer{})
+	defer teardown()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/tts/stream/nonexistent", nil)
+	req = withProjectCookie(req, t.TempDir())
+	w := httptest.NewRecorder()
+
+	TTSStream(w, req)
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestTTSStream_MissingJobID(t *testing.T) {
+	_, teardown := setupTTSTest(t, &mockSpeechProvider{}, &mockSummarizer{})
+	defer teardown()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/tts/stream/", nil)
+	req = withProjectCookie(req, t.TempDir())
+	w := httptest.NewRecorder()
+
+	TTSStream(w, req)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 }

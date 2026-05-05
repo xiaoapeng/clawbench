@@ -148,6 +148,7 @@ func RegisterRoutes(mux *http.ServeMux) {
 	register("/api/tasks", middleware.Auth(ServeTasks))
 	register("/api/tasks/", middleware.Auth(ServeTaskByID))
 	register("/api/tts/generate", middleware.Auth(TTSGenerate))
+	register("/api/tts/stream/", middleware.Auth(TTSStream))
 
 	// File watch SSE (auto-refresh on file changes)
 	register("/api/file/watch", middleware.Auth(FileWatchSSE))

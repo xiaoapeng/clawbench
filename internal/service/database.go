@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"time"
 
 	"clawbench/internal/model"
 
@@ -15,11 +14,6 @@ import (
 )
 
 var DB *sql.DB
-
-// ttsFailedCacheTTL is how long a failed TTS summary entry remains cached.
-// After this duration the entry is treated as a cache miss so summarization
-// is retried instead of serving the stale raw text forever.
-const ttsFailedCacheTTL = 10 * time.Minute
 
 // InitDB initializes the SQLite database with latest schema.
 func InitDB() error {
@@ -130,7 +124,6 @@ func InitDB() error {
 		CREATE TABLE IF NOT EXISTS tts_summaries (
 			cache_key TEXT PRIMARY KEY,
 			summary TEXT NOT NULL,
-			summarize_failed INTEGER DEFAULT 0,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		);
 
@@ -224,47 +217,24 @@ func InitDB() error {
 }
 
 // GetTTSSummary looks up a cached TTS summary by cache key.
-// Returns (summary, summarizeFailed, found).
-// Failed entries (summarize_failed=1) are treated as missing if they are
-// older than ttsFailedCacheTTL, so the system retries summarization.
-func GetTTSSummary(cacheKey string) (string, bool, bool) {
+// Returns (summary, found).
+func GetTTSSummary(cacheKey string) (string, bool) {
 	var summary string
-	var summarizeFailed bool
-	var createdAt string
 	err := DB.QueryRow(
-		"SELECT summary, summarize_failed, created_at FROM tts_summaries WHERE cache_key = ?",
+		"SELECT summary FROM tts_summaries WHERE cache_key = ?",
 		cacheKey,
-	).Scan(&summary, &summarizeFailed, &createdAt)
+	).Scan(&summary)
 	if err != nil {
-		return "", false, false
+		return "", false
 	}
-	// Expire stale failed entries so summarization is retried
-	if summarizeFailed {
-		// Try both datetime formats: SQLite's "YYYY-MM-DD HH:MM:SS" and
-		// the RFC3339 format that modernc.org/sqlite may return ("YYYY-MM-DDTHH:MM:SSZ").
-		// Use UTC for comparison since SQLite's CURRENT_TIMESTAMP is UTC
-		// and the driver may return it as RFC3339 with Z suffix.
-		var t time.Time
-		if parsed, err := time.Parse(time.RFC3339, createdAt); err == nil {
-			t = parsed
-		} else if parsed, err := time.Parse("2006-01-02 15:04:05", createdAt); err == nil {
-			t = parsed
-		}
-		if !t.IsZero() && time.Since(t) > ttsFailedCacheTTL {
-			slog.Info("tts summary cache expired for failed entry, will retry",
-				slog.String("cache_key", cacheKey),
-			)
-			return "", false, false
-		}
-	}
-	return summary, summarizeFailed, true
+	return summary, true
 }
 
 // SaveTTSSummary persists a TTS summary to the database.
-func SaveTTSSummary(cacheKey, summary string, summarizeFailed bool) error {
+func SaveTTSSummary(cacheKey, summary string) error {
 	_, err := DB.Exec(
-		"INSERT OR REPLACE INTO tts_summaries (cache_key, summary, summarize_failed, created_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
-		cacheKey, summary, summarizeFailed,
+		"INSERT OR REPLACE INTO tts_summaries (cache_key, summary, created_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
+		cacheKey, summary,
 	)
 	return err
 }
