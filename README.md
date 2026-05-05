@@ -119,18 +119,21 @@ cd clawbench
 
 ### 配置智能体
 
-`config/agents/` 目录下的 YAML 文件定义了可用的 AI 智能体。基于示例创建你需要的智能体：
+`config/agents/` 目录下的 YAML 文件定义了可用的 AI 智能体。最简配置示例：
 
-```bash
-# 查看示例模板（包含所有字段的详细说明）
-cat config/agents/agent.yaml.example
-
-# 复制示例并修改，创建你自己的智能体
-cp config/agents/agent.yaml.example config/agents/my-agent.yaml
-# 编辑 id、name、icon、specialty、backend、model、system_prompt 等字段
+```yaml
+id: my-agent
+name: 我的助手
+icon: 🤖
+specialty: 通用问答、代码编写
+backend: claude
+# model: claude-sonnet-4-20250514  # 可选，省略则使用 CLI 默认模型
+# command: /path/to/custom-cli     # 可选，自定义 CLI 路径或参数
+# system_prompt: |                 # 可选，省略则使用 agent_common_prompt.md
+#   你是一名专业的编程助手。
 ```
 
-每个 YAML 文件对应一个智能体，至少需要配置：`id`（唯一标识）、`name`（显示名）、`icon`（Emoji 图标）、`specialty`（专长描述）、`backend`（AI 后端类型）。可选字段：`model`（指定模型）、`command`（自定义 CLI 路径或参数）、`system_prompt`（角色设定，省略时使用 `agent_common_prompt.md` 的内容）。
+完整字段说明请参阅 [config/agents/agent.yaml.example](config/agents/agent.yaml.example)。
 
 ### 启动服务
 
