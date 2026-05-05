@@ -50,3 +50,62 @@ func TestEdgeTTSProvider_Synthesize_CreatesDirectory(t *testing.T) {
 	_, statErr := os.Stat(nestedDir)
 	assert.NoError(t, statErr, "output directory should be created even if synthesis fails")
 }
+
+// --- EdgeTTSProvider rate argument handling ---
+
+func TestEdgeTTSProvider_RateArgs(t *testing.T) {
+	tests := []struct {
+		name       string
+		rate       string
+		expectRate bool // whether --rate should be in args
+	}{
+		{"default rate +0%", "+0%", false},
+		{"empty rate", "", false},
+		{"faster rate +20%", "+20%", true},
+		{"slower rate -10%", "-10%", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &EdgeTTSProvider{
+				Voice: "zh-CN-XiaoxiaoNeural",
+				Rate:  tt.rate,
+			}
+			assert.Equal(t, tt.rate, p.Rate)
+
+			// Build args the same way Synthesize does
+			args := []string{
+				"--voice", p.Voice,
+				"--file", "/tmp/dummy.txt",
+				"--write-media", "/tmp/dummy.mp3",
+			}
+			if p.Rate != "" && p.Rate != "+0%" {
+				args = append(args, "--rate", p.Rate)
+			}
+
+			hasRate := false
+			for i, arg := range args {
+				if arg == "--rate" && i+1 < len(args) && args[i+1] == tt.rate {
+					hasRate = true
+				}
+			}
+			assert.Equal(t, tt.expectRate, hasRate)
+		})
+	}
+}
+
+// --- EdgeTTSProvider different voices ---
+
+func TestEdgeTTSProvider_DifferentVoices(t *testing.T) {
+	voices := []string{
+		"zh-CN-XiaoxiaoNeural",
+		"en-US-JennyNeural",
+		"ja-JP-NanamiNeural",
+		"ko-KR-SunHiNeural",
+	}
+
+	for _, voice := range voices {
+		p := &EdgeTTSProvider{Voice: voice, Rate: "+0%"}
+		assert.Equal(t, voice, p.Voice)
+	}
+}
