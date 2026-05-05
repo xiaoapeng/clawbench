@@ -162,10 +162,14 @@ func AIChatStream(w http.ResponseWriter, r *http.Request) {
 			}
 
 		case <-r.Context().Done():
-			slog.Info("sse client disconnected, cancelling ai session",
+			// SSE client disconnected — do NOT force-cancel the AI session.
+			// Disconnections are often transient (Vite HMR, proxy timeout, mobile
+			// network switch) and the frontend will reconnect or fall back to polling.
+			// Let the AI goroutine finish naturally; it cleans itself up via defers.
+			// If no SSE client reconnects, the goroutine still completes and unregisters.
+			slog.Info("sse client disconnected, ai session continues",
 				slog.String("session_id", sessionID),
 			)
-			service.ForceCancelSession(sessionID)
 			return
 		}
 	}

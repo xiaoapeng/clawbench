@@ -336,7 +336,7 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 
 		// Drain loop: keep executing queued messages after normal completion
 		for {
-			if result.cancelReason == "user" || result.cancelReason == "disconnect" {
+			if result.cancelReason == "user" {
 				service.ClearQueue(sessionID)
 				sendFinalEvent(streamCh, ai.StreamEvent{Type: "cancelled"})
 				return
@@ -397,7 +397,7 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 
 // streamRunResult captures the outcome of a single AI stream execution.
 type streamRunResult struct {
-	cancelReason string // "", "user", "disconnect"
+	cancelReason string // "", "user"
 	err          string // error message if execution failed
 	empty        bool   // true if AI returned no content
 }
@@ -641,8 +641,6 @@ func finalizeStreamRun(
 		switch {
 		case cancelReason == "user":
 			errMsg, reason = "User cancelled", ai.ReasonUserCancel
-		case cancelReason == "disconnect":
-			errMsg, reason = "Connection lost, AI response interrupted", ai.ReasonDisconnect
 		case ctx.Err() == context.Canceled:
 			errMsg, reason = "AI response cancelled", ai.ReasonContextCancel
 		case ctx.Err() == context.DeadlineExceeded:
@@ -652,7 +650,7 @@ func finalizeStreamRun(
 		}
 		blocks = append(blocks, model.ContentBlock{Type: "warning", Text: errMsg, Reason: reason})
 		contentMap := map[string]any{"blocks": blocks}
-		if cancelReason == "user" || cancelReason == "disconnect" || ctx.Err() == context.Canceled {
+		if cancelReason == "user" || ctx.Err() == context.Canceled {
 			contentMap["cancelled"] = true
 		}
 		blocksJSON, _ := json.Marshal(contentMap)
@@ -663,10 +661,7 @@ func finalizeStreamRun(
 			contentMap["metadata"] = responseMetadata
 		}
 		// When there are blocks but the stream was interrupted, add a warning and mark cancelled
-		if cancelReason == "disconnect" {
-			blocks = append(blocks, model.ContentBlock{Type: "warning", Text: "Connection lost, AI response interrupted", Reason: ai.ReasonDisconnect})
-			contentMap["cancelled"] = true
-		} else if cancelReason == "user" {
+		if cancelReason == "user" {
 			contentMap["cancelled"] = true
 		} else if ctx.Err() == context.Canceled {
 			contentMap["cancelled"] = true
@@ -715,7 +710,7 @@ saveRaw:
 	// Build result — do NOT send terminal SSE event here
 	result := streamRunResult{}
 
-	if cancelReason == "user" || cancelReason == "disconnect" {
+	if cancelReason == "user" {
 		result.cancelReason = cancelReason
 	} else if ctx.Err() == context.Canceled {
 		result.cancelReason = "cancel"

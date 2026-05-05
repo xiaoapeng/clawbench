@@ -468,7 +468,7 @@ func TestAIChatStream_ClientDisconnect(t *testing.T) {
 	ch := setupStreamSession(sessionID)
 	defer cleanupStreamSession(sessionID)
 
-	// Register a cancel function so ForceCancelSession has something to cancel
+	// Register a cancel function — should NOT be called on SSE disconnect
 	_, cancel := context.WithCancel(context.Background())
 	service.RegisterSessionCancel(sessionID, cancel)
 
@@ -485,9 +485,11 @@ func TestAIChatStream_ClientDisconnect(t *testing.T) {
 	w := httptest.NewRecorder()
 	AIChatStream(w, req)
 
-	// After SSE disconnect, ForceCancelSession should have been called,
-	// which sets the cancel reason to "disconnect"
+	// After SSE disconnect, the AI session should continue running
+	// (no ForceCancelSession called), so cancel reason should be empty
 	reason := service.GetAndClearCancelReason(sessionID)
-	assert.Equal(t, "disconnect", reason)
+	assert.Equal(t, "", reason)
+	// Session should still be running
+	assert.True(t, service.IsSessionRunning(sessionID))
 	_ = ch
 }
