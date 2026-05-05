@@ -18,7 +18,7 @@ func ServeAuthCheck(w http.ResponseWriter, r *http.Request) {
 	}
 	token, err := r.Cookie(model.SessionCookie)
 	if err != nil || token == nil || token.Value != model.SessionToken {
-		model.WriteError(w, model.Unauthorized(nil))
+		writeLocalizedError(w, r, model.Unauthorized(nil))
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -53,5 +53,5 @@ func ServeLogin(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	model.WriteErrorf(w, http.StatusMethodNotAllowed, "Method not allowed")
+	writeLocalizedErrorf(w, r, http.StatusMethodNotAllowed, "MethodNotAllowed")
 }

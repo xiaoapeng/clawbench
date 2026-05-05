@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
 
@@ -29,7 +28,7 @@ func ServeProxyPortAction(w http.ResponseWriter, r *http.Request) {
 	case http.MethodDelete:
 		unregisterPortByQuery(w, r)
 	default:
-		model.WriteErrorf(w, http.StatusMethodNotAllowed, "Method not allowed")
+		writeLocalizedErrorf(w, r, http.StatusMethodNotAllowed, "MethodNotAllowed")
 	}
 }
 
@@ -44,12 +43,12 @@ func registerPort(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.Port <= 0 || req.Port > 65535 {
-		model.WriteErrorf(w, http.StatusBadRequest, fmt.Sprintf("Invalid port number: %d", req.Port))
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "InvalidPortNumber", map[string]any{"Port": req.Port})
 		return
 	}
 
 	if err := service.ProxyService.RegisterPort(req.Port, req.Name, req.Protocol); err != nil {
-		model.WriteErrorf(w, http.StatusForbidden, err.Error())
+		writeLocalizedError(w, r, model.Forbidden(err, "AccessDenied"))
 		return
 	}
 
@@ -60,12 +59,12 @@ func unregisterPortByQuery(w http.ResponseWriter, r *http.Request) {
 	portStr := r.URL.Query().Get("port")
 	port, err := strconv.Atoi(portStr)
 	if err != nil || port <= 0 || port > 65535 {
-		model.WriteErrorf(w, http.StatusBadRequest, "Invalid port number in query")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "InvalidPortInQuery")
 		return
 	}
 
 	if err := service.ProxyService.UnregisterPort(port); err != nil {
-		model.WriteErrorf(w, http.StatusNotFound, err.Error())
+		writeLocalizedError(w, r, model.NotFound(err, "FileNotFoundShort"))
 		return
 	}
 

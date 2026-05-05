@@ -89,7 +89,7 @@ func TestAIChatStream_SessionNotRunning(t *testing.T) {
 	events := parseSSEEvents(w.Body.String())
 	assert.Len(t, events, 1)
 	assert.Equal(t, "error", events[0]["event"])
-	assert.Contains(t, events[0]["data"], "会话未在运行")
+	assert.Contains(t, events[0]["data"], "Session is not running")
 }
 
 func TestAIChatStream_NoStreamChannel(t *testing.T) {
@@ -107,7 +107,7 @@ func TestAIChatStream_NoStreamChannel(t *testing.T) {
 	events := parseSSEEvents(w.Body.String())
 	assert.Len(t, events, 1)
 	assert.Equal(t, "error", events[0]["event"])
-	assert.Contains(t, events[0]["data"], "未找到会话流")
+	assert.Contains(t, events[0]["data"], "Session stream not found")
 }
 
 func TestAIChatStream_ContentEvent(t *testing.T) {

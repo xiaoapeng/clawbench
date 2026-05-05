@@ -5,14 +5,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"clawbench/internal/model"
 )
 
 // ServeProjectDialog serves the project dialog HTML template.
 func ServeProjectDialog(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		model.WriteErrorf(w, http.StatusMethodNotAllowed, "Method not allowed")
+		writeLocalizedErrorf(w, r, http.StatusMethodNotAllowed, "MethodNotAllowed")
 		return
 	}
 	tmplPath := filepath.Join("web", "project-dialog.html")

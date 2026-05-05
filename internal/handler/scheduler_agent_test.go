@@ -51,8 +51,8 @@ func TestServeChatCount(t *testing.T) {
 	sid := createTestSession(t, env.ProjectDir)
 
 	// Add messages
-	service.AddChatMessage(env.ProjectDir, "claude", sid, "user", "Hello", nil, false)
-	service.AddChatMessage(env.ProjectDir, "claude", sid, "assistant", "Hi", nil, false)
+	service.AddChatMessage(env.ProjectDir, "claude", sid, "user", "Hello", nil, false, "NewSession")
+	service.AddChatMessage(env.ProjectDir, "claude", sid, "assistant", "Hi", nil, false, "NewSession")
 
 	req := newRequest(t, http.MethodGet, "/api/ai/chat/count?session_id="+sid, nil)
 	w := callHandler(ServeChatCount, req)
@@ -82,7 +82,7 @@ func TestServeChatMessageUpdate(t *testing.T) {
 	defer teardown()
 
 	sid := createTestSession(t, env.ProjectDir)
-	msgID, err := service.AddChatMessage(env.ProjectDir, "claude", sid, "user", "original", nil, false)
+	msgID, err := service.AddChatMessage(env.ProjectDir, "claude", sid, "user", "original", nil, false, "NewSession")
 	assert.NoError(t, err)
 
 	req := newRequest(t, http.MethodPut, "/api/ai/chat/message", map[string]any{

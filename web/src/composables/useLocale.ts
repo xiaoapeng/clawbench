@@ -1,6 +1,6 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import i18n, { STORAGE_KEY } from '@/i18n'
+import i18n, { STORAGE_KEY, setLocaleCookie } from '@/i18n'
 
 export function useLocale() {
   const { locale } = useI18n()
@@ -10,6 +10,7 @@ export function useLocale() {
   function setLocale(lang: 'zh' | 'en') {
     locale.value = lang
     localStorage.setItem(STORAGE_KEY, lang)
+    setLocaleCookie(lang)
   }
 
   function toggleLocale() {

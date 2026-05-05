@@ -2,20 +2,62 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
 
+	"github.com/nicksnyder/go-i18n/v2/i18n"
+	i18npkg "clawbench/internal/i18n"
 	"clawbench/internal/middleware"
 	"clawbench/internal/model"
 )
+
+// loc returns the Localizer for the current request.
+func loc(r *http.Request) *i18n.Localizer {
+	return middleware.GetLocalizer(r)
+}
+
+// T is a shorthand for translating a message key in the handler layer.
+func T(r *http.Request, msgKey string, templateData ...map[string]interface{}) string {
+	return i18npkg.T(loc(r), msgKey, templateData...)
+}
+
+// writeLocalizedErrorf writes a localized error response with i18n message key.
+func writeLocalizedErrorf(w http.ResponseWriter, r *http.Request, status int, msgKey string, templateData ...map[string]interface{}) {
+	localizedMsg := T(r, msgKey, templateData...)
+	var detail map[string]any
+	if len(templateData) > 0 {
+		detail = templateData[0]
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(model.ErrorResponse{Error: localizedMsg, Code: status, MsgKey: msgKey, Detail: detail})
+}
+
+// writeLocalizedError writes a localized AppError response.
+func writeLocalizedError(w http.ResponseWriter, r *http.Request, err error) {
+	var appErr *model.AppError
+	if err == nil {
+		writeLocalizedErrorf(w, r, http.StatusInternalServerError, "InternalError")
+		return
+	}
+	if ok := errors.As(err, &appErr); ok {
+		localizedMsg := T(r, appErr.Message)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(appErr.Code)
+		json.NewEncoder(w).Encode(model.ErrorResponse{Error: localizedMsg, Code: appErr.Code, MsgKey: appErr.Message})
+		return
+	}
+	writeLocalizedErrorf(w, r, http.StatusInternalServerError, "InternalError")
+}
 
 // requireProject extracts the project path from cookie and writes error if not set.
 // Returns the project path and true on success, or empty string and false on failure.
 func requireProject(w http.ResponseWriter, r *http.Request) (string, bool) {
 	projectPath := middleware.GetProjectFromCookie(r)
 	if projectPath == "" {
-		model.WriteError(w, model.Forbidden(model.ErrProjectNotSet, "no project selected"))
+		writeLocalizedError(w, r, model.Forbidden(model.ErrProjectNotSet, "NoProjectSelected"))
 		return "", false
 	}
 	return projectPath, true
@@ -29,7 +71,7 @@ func requireMethod(w http.ResponseWriter, r *http.Request, methods ...string) bo
 			return true
 		}
 	}
-	model.WriteErrorf(w, http.StatusMethodNotAllowed, "Method not allowed")
+	writeLocalizedErrorf(w, r, http.StatusMethodNotAllowed, "MethodNotAllowed")
 	return false
 }
 
@@ -44,7 +86,7 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 // Returns true on success.
 func decodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
-		model.WriteErrorf(w, http.StatusBadRequest, "Invalid request body")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "InvalidRequestBody")
 		return false
 	}
 	return true
@@ -52,10 +94,10 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 
 // validateAndResolvePath validates a relative path and returns the absolute path.
 // Writes 403 on failure. Returns (absPath, true) on success.
-func validateAndResolvePath(w http.ResponseWriter, basePath, relPath string) (string, bool) {
+func validateAndResolvePath(w http.ResponseWriter, r *http.Request, basePath, relPath string) (string, bool) {
 	absPath, ok := model.ValidatePath(basePath, relPath)
 	if !ok {
-		model.WriteError(w, model.Forbidden(nil, "Access denied"))
+		writeLocalizedError(w, r, model.Forbidden(nil, "AccessDenied"))
 		return "", false
 	}
 	return absPath, true
@@ -82,7 +124,7 @@ func resolveAgentConfig(agentID string) (string, string, string, string, bool) {
 func requireSessionID(w http.ResponseWriter, r *http.Request) (string, bool) {
 	sessionID := getSessionID(r)
 	if sessionID == "" {
-		model.WriteErrorf(w, http.StatusBadRequest, "session_id required")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "SessionIdRequired")
 		return "", false
 	}
 	return sessionID, true
@@ -90,10 +132,10 @@ func requireSessionID(w http.ResponseWriter, r *http.Request) (string, bool) {
 
 // requireGitRepo checks that a .git directory exists in projectPath.
 // Writes 404 if not found. Returns true if repo exists.
-func requireGitRepo(w http.ResponseWriter, projectPath string) bool {
+func requireGitRepo(w http.ResponseWriter, r *http.Request, projectPath string) bool {
 	gitDir := filepath.Join(projectPath, ".git")
 	if _, err := os.Stat(gitDir); os.IsNotExist(err) {
-		model.WriteError(w, model.NotFound(nil, "Not a git repository"))
+		writeLocalizedError(w, r, model.NotFound(nil, "NotAGitRepo"))
 		return false
 	}
 	return true
@@ -102,7 +144,10 @@ func requireGitRepo(w http.ResponseWriter, projectPath string) bool {
 // RegisterRoutes registers all HTTP routes with the given mux
 func RegisterRoutes(mux *http.ServeMux) {
 	register := func(pattern string, handler http.HandlerFunc) {
-		wrapped := middleware.RecoverPanic(middleware.WithRequestID(middleware.RequestLogger(handler)))
+		wrapped := middleware.RecoverPanic(
+			middleware.WithRequestID(
+				middleware.RequestLogger(
+					middleware.WithLocalizer(handler))))
 		mux.HandleFunc(pattern, wrapped)
 	}
 

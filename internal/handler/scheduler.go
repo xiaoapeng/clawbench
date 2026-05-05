@@ -45,7 +45,7 @@ func ServeTasks(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if req.Name == "" || req.CronExpr == "" || req.AgentID == "" || req.Prompt == "" {
-			model.WriteErrorf(w, http.StatusBadRequest, "name, cronExpr, agentId, and prompt are required")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "TaskFieldsRequired")
 			return
 		}
 	if req.RepeatMode == "" {
@@ -71,7 +71,7 @@ func ServeTasks(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "task": task})
 
 	default:
-		model.WriteErrorf(w, http.StatusMethodNotAllowed, "Method not allowed")
+		writeLocalizedErrorf(w, r, http.StatusMethodNotAllowed, "MethodNotAllowed")
 	}
 }
 
@@ -91,7 +91,7 @@ func ServeTaskByID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if taskID == "" {
-		model.WriteErrorf(w, http.StatusBadRequest, "Task ID required")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "TaskIdRequired")
 		return
 	}
 
@@ -105,7 +105,7 @@ func ServeTaskByID(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		task, err := service.GetTaskByID(taskID)
 		if err != nil {
-			model.WriteError(w, model.NotFound(nil, "Task not found"))
+		writeLocalizedError(w, r, model.NotFound(nil, "TaskNotFound"))
 			return
 		}
 		writeJSON(w, http.StatusOK, task)
@@ -148,7 +148,7 @@ func ServeTaskByID(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.Action == "trigger" {
 			if err := service.GlobalScheduler.TriggerTask(taskID); err != nil {
-				model.WriteError(w, model.NotFound(nil, err.Error()))
+				writeLocalizedError(w, r, model.NotFound(err, "TaskNotFound"))
 				return
 			}
 			writeJSON(w, http.StatusOK, map[string]any{"ok": true})
@@ -158,7 +158,7 @@ func ServeTaskByID(w http.ResponseWriter, r *http.Request) {
 		// Full task update
 		task, err := service.GetTaskByID(taskID)
 		if err != nil {
-			model.WriteError(w, model.NotFound(nil, "Task not found"))
+		writeLocalizedError(w, r, model.NotFound(nil, "TaskNotFound"))
 			return
 		}
 
@@ -193,7 +193,7 @@ func ServeTaskByID(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 
 	default:
-		model.WriteErrorf(w, http.StatusMethodNotAllowed, "Method not allowed")
+		writeLocalizedErrorf(w, r, http.StatusMethodNotAllowed, "MethodNotAllowed")
 	}
 }
 
@@ -202,8 +202,8 @@ func ServeTaskByID(w http.ResponseWriter, r *http.Request) {
 func serveTaskExecutions(w http.ResponseWriter, r *http.Request, taskID string) {
 	task, err := service.GetTaskByID(taskID)
 	if err != nil {
-		model.WriteError(w, model.NotFound(nil, "Task not found"))
-		return
+	writeLocalizedError(w, r, model.NotFound(nil, "TaskNotFound"))
+	return
 	}
 
 	type Execution struct {

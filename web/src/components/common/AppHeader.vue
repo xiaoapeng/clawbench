@@ -128,8 +128,13 @@ async function selectRecent(item) {
         } else {
             const text = await resp.text()
             let msg = text
-            try { msg = JSON.parse(text).error || msg } catch (_) {}
-            if (msg === 'Not a directory') {
+            let msgKey = ''
+            try {
+                const parsed = JSON.parse(text)
+                msg = parsed.error || msg
+                msgKey = parsed.msgKey || ''
+            } catch (_) {}
+            if (msgKey === 'NotADirectory') {
                 toast?.show(t('appHeader.projectPathNotFound'), { icon: '⚠️', type: 'error', duration: 3000 })
                 // Remove stale entry from recent projects
                 fetch('/api/recent-projects', {

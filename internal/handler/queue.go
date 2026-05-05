@@ -23,14 +23,14 @@ func QueueHandler(w http.ResponseWriter, r *http.Request) {
 	case http.MethodDelete:
 		handleQueueDelete(w, r)
 	default:
-		model.WriteErrorf(w, http.StatusMethodNotAllowed, "method not allowed")
+		writeLocalizedErrorf(w, r, http.StatusMethodNotAllowed, "MethodNotAllowed")
 	}
 }
 
 func handleQueueEnqueue(w http.ResponseWriter, r *http.Request) {
 	sessionID := r.URL.Query().Get("session_id")
 	if sessionID == "" {
-		model.WriteErrorf(w, http.StatusBadRequest, "session_id required")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "SessionIdRequired")
 		return
 	}
 
@@ -40,12 +40,12 @@ func handleQueueEnqueue(w http.ResponseWriter, r *http.Request) {
 		Files     []string `json:"files"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		model.WriteErrorf(w, http.StatusBadRequest, "invalid request body")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "InvalidRequestBody")
 		return
 	}
 
 	if req.Message == "" && len(req.Files) == 0 && len(req.FilePaths) == 0 {
-		model.WriteErrorf(w, http.StatusBadRequest, "message or files required")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "MessageOrFilesRequired")
 		return
 	}
 
@@ -66,7 +66,7 @@ func handleQueueEnqueue(w http.ResponseWriter, r *http.Request) {
 func handleQueueGet(w http.ResponseWriter, r *http.Request) {
 	sessionID := r.URL.Query().Get("session_id")
 	if sessionID == "" {
-		model.WriteErrorf(w, http.StatusBadRequest, "session_id required")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "SessionIdRequired")
 		return
 	}
 
@@ -82,7 +82,7 @@ func handleQueueGet(w http.ResponseWriter, r *http.Request) {
 func handleQueueDelete(w http.ResponseWriter, r *http.Request) {
 	sessionID := r.URL.Query().Get("session_id")
 	if sessionID == "" {
-		model.WriteErrorf(w, http.StatusBadRequest, "session_id required")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "SessionIdRequired")
 		return
 	}
 
@@ -97,7 +97,7 @@ func handleQueueDelete(w http.ResponseWriter, r *http.Request) {
 	// Remove specific item
 	index, err := strconv.Atoi(indexStr)
 	if err != nil {
-		model.WriteErrorf(w, http.StatusBadRequest, "invalid index")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "InvalidIndex")
 		return
 	}
 

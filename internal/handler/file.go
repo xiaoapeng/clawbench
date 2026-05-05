@@ -60,7 +60,7 @@ func ListDir(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	absPath, ok := validateAndResolvePath(w, basePath, relPath)
+	absPath, ok := validateAndResolvePath(w, r, basePath, relPath)
 	if !ok {
 		return
 	}
@@ -68,9 +68,9 @@ func ListDir(w http.ResponseWriter, r *http.Request) {
 	entries, err := os.ReadDir(absPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			model.WriteError(w, model.NotFound(nil, "Directory not found"))
+		writeLocalizedError(w, r, model.NotFound(nil, "DirectoryNotFound"))
 		} else if isNotDirError(err) {
-			model.WriteErrorf(w, http.StatusBadRequest, "Not a directory")
+			writeLocalizedErrorf(w, r, http.StatusBadRequest, "NotADirectory")
 		} else {
 			model.WriteError(w, model.Internal(fmt.Errorf("cannot read directory")))
 		}
@@ -160,12 +160,12 @@ func GetFile(w http.ResponseWriter, r *http.Request) {
 	filepathStr = path.Clean(filepathStr)
 
 	if filepathStr == ".." || path.IsAbs(filepathStr) {
-		model.WriteErrorf(w, http.StatusBadRequest, "Invalid file path")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "InvalidFilePath")
 		return
 	}
 
 	basePath, _ := filepath.Abs(projectPath)
-	absPath, ok := validateAndResolvePath(w, basePath, filepathStr)
+	absPath, ok := validateAndResolvePath(w, r, basePath, filepathStr)
 	if !ok {
 		return
 	}
@@ -173,19 +173,19 @@ func GetFile(w http.ResponseWriter, r *http.Request) {
 	info, err := os.Stat(absPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			model.WriteError(w, model.NotFound(nil, "File not found"))
+		writeLocalizedError(w, r, model.NotFound(nil, "FileNotFoundShort"))
 		} else {
 			model.WriteError(w, model.Internal(fmt.Errorf("cannot access file")))
 		}
 		return
 	}
 	if info.IsDir() {
-		model.WriteErrorf(w, http.StatusBadRequest, "Not a file")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "NotAFile")
 		return
 	}
 
 	if info.Size() > 10*1024*1024 {
-		model.WriteErrorf(w, http.StatusBadRequest, "文件过大")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "FileTooLarge")
 		return
 	}
 
@@ -238,23 +238,23 @@ func ServeLocalFile(w http.ResponseWriter, r *http.Request) {
 	filepathStr = path.Clean(filepathStr)
 
 	if filepathStr == ".." || path.IsAbs(filepathStr) {
-		model.WriteErrorf(w, http.StatusBadRequest, "Invalid path")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "InvalidPath")
 		return
 	}
 
 	basePath, _ := filepath.Abs(projectPath)
-	absPath, ok := validateAndResolvePath(w, basePath, filepathStr)
+	absPath, ok := validateAndResolvePath(w, r, basePath, filepathStr)
 	if !ok {
 		return
 	}
 
 	info, err := os.Stat(absPath)
 	if err != nil {
-		model.WriteError(w, model.NotFound(nil, "File not found"))
+		writeLocalizedError(w, r, model.NotFound(nil, "FileNotFoundShort"))
 		return
 	}
 	if info.IsDir() {
-		model.WriteErrorf(w, http.StatusBadRequest, "Not a directory")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "NotADirectory")
 		return
 	}
 
@@ -284,7 +284,7 @@ func ServeProjects(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		// continue below
 	default:
-		model.WriteErrorf(w, http.StatusMethodNotAllowed, "Method not allowed")
+		writeLocalizedErrorf(w, r, http.StatusMethodNotAllowed, "MethodNotAllowed")
 		return
 	}
 
@@ -318,16 +318,16 @@ func ServeProjects(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !strings.HasPrefix(absPath, basePath+string(filepath.Separator)) && absPath != basePath {
-		model.WriteError(w, model.Forbidden(nil, "Access denied"))
+		writeLocalizedError(w, r, model.Forbidden(nil, "AccessDenied"))
 		return
 	}
 
 	entries, err := os.ReadDir(absPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			model.WriteError(w, model.NotFound(nil, "Directory not found"))
+			writeLocalizedError(w, r, model.NotFound(nil, "DirectoryNotFound"))
 		} else if isNotDirError(err) {
-			model.WriteErrorf(w, http.StatusBadRequest, "Not a directory")
+			writeLocalizedErrorf(w, r, http.StatusBadRequest, "NotADirectory")
 		} else {
 			model.WriteError(w, model.Internal(fmt.Errorf("cannot read directory")))
 		}
@@ -442,7 +442,7 @@ func serveProjectsCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Name == "" {
-		model.WriteErrorf(w, http.StatusBadRequest, "Directory name required")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "DirectoryNameRequired")
 		return
 	}
 	var absPath string
@@ -458,7 +458,7 @@ func serveProjectsCreate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !strings.HasPrefix(absPath, basePath+string(filepath.Separator)) && absPath != basePath {
-		model.WriteError(w, model.Forbidden(nil, "Access denied"))
+		writeLocalizedError(w, r, model.Forbidden(nil, "AccessDenied"))
 		return
 	}
 	newDir := filepath.Join(absPath, req.Name)

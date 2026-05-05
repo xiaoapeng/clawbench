@@ -161,7 +161,7 @@ func ServeGitInit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if isGitRepo(projectPath) {
-		model.WriteErrorf(w, http.StatusBadRequest, "already a git repository")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "AlreadyGitRepo")
 		return
 	}
 
@@ -237,18 +237,18 @@ func ServeGitFileDiff(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !isGitRepo(projectPath) {
-		model.WriteErrorf(w, http.StatusBadRequest, "not a git repository")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "NotAGitRepoShort")
 		return
 	}
 
 	sha := r.URL.Query().Get("sha")
 	filePath := r.URL.Query().Get("path")
 	if sha == "" || filePath == "" {
-		model.WriteErrorf(w, http.StatusBadRequest, "missing sha or path")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "MissingShaOrPath")
 		return
 	}
 
-	if _, ok := validateAndResolvePath(w, projectPath, filePath); !ok {
+	if _, ok := validateAndResolvePath(w, r, projectPath, filePath); !ok {
 		return
 	}
 
@@ -266,13 +266,13 @@ func ServeGitCommitFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !isGitRepo(projectPath) {
-		model.WriteErrorf(w, http.StatusBadRequest, "not a git repository")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "NotAGitRepoShort")
 		return
 	}
 
 	sha := r.URL.Query().Get("sha")
 	if sha == "" {
-		model.WriteErrorf(w, http.StatusBadRequest, "missing sha")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "MissingSha")
 		return
 	}
 
@@ -328,11 +328,11 @@ func ServeGitHistory(w http.ResponseWriter, r *http.Request) {
 
 	relPath := r.URL.Query().Get("path")
 	if relPath == "" {
-		model.WriteErrorf(w, http.StatusBadRequest, "missing path")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "MissingPath")
 		return
 	}
 
-	if _, ok := validateAndResolvePath(w, projectPath, relPath); !ok {
+	if _, ok := validateAndResolvePath(w, r, projectPath, relPath); !ok {
 		return
 	}
 
@@ -364,17 +364,17 @@ func ServeGitDiff(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !isGitRepo(projectPath) {
-		model.WriteErrorf(w, http.StatusBadRequest, "not a git repository")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "NotAGitRepoShort")
 		return
 	}
 
 	relPath := r.URL.Query().Get("path")
 	if relPath == "" {
-		model.WriteErrorf(w, http.StatusBadRequest, "missing path")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "MissingPath")
 		return
 	}
 
-	if _, ok := validateAndResolvePath(w, projectPath, relPath); !ok {
+	if _, ok := validateAndResolvePath(w, r, projectPath, relPath); !ok {
 		return
 	}
 
@@ -399,11 +399,11 @@ func ServeGitStatus(w http.ResponseWriter, r *http.Request) {
 
 	relPath := r.URL.Query().Get("path")
 	if relPath == "" {
-		model.WriteErrorf(w, http.StatusBadRequest, "missing path")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "MissingPath")
 		return
 	}
 
-	if _, ok := validateAndResolvePath(w, projectPath, relPath); !ok {
+	if _, ok := validateAndResolvePath(w, r, projectPath, relPath); !ok {
 		return
 	}
 
@@ -483,7 +483,7 @@ func ServeGitWorkingTreeFiles(w http.ResponseWriter, r *http.Request) {
 
 	// For specific file: check if it has uncommitted changes
 	if relPath != "" {
-		if _, ok := validateAndResolvePath(w, projectPath, relPath); !ok {
+		if _, ok := validateAndResolvePath(w, r, projectPath, relPath); !ok {
 			return
 		}
 		cmd := exec.Command("git", "diff", "--name-status", "HEAD", "--", relPath)

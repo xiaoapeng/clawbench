@@ -91,7 +91,7 @@ func GetChatMessageCount(sessionID string) int {
 }
 
 // AddChatMessage adds a message to the chat history for a given project path, backend, and session.
-func AddChatMessage(projectPath, backend, sessionID, role, content string, files []string, streaming bool) (int64, error) {
+func AddChatMessage(projectPath, backend, sessionID, role, content string, files []string, streaming bool, fallbackTitle string) (int64, error) {
 	var filesJSON string
 	if len(files) > 0 {
 		data, _ := json.Marshal(files)
@@ -131,10 +131,10 @@ func AddChatMessage(projectPath, backend, sessionID, role, content string, files
 		if err == nil && count == 1 {
 			title := content
 			if len(files) > 0 && title == "" {
-				title = "文件消息"
+				title = fallbackTitle
 			}
 			if title == "" {
-				title = "新会话"
+				title = fallbackTitle
 			}
 			runes := []rune(title)
 			if len(runes) > 50 {

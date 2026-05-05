@@ -29,7 +29,7 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method != http.MethodPost {
-		model.WriteErrorf(w, http.StatusMethodNotAllowed, "Method not allowed")
+		writeLocalizedErrorf(w, r, http.StatusMethodNotAllowed, "MethodNotAllowed")
 		return
 	}
 
@@ -38,13 +38,13 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 
 	// Parse multipart form
 	if err := r.ParseMultipartForm(maxUploadSize()); err != nil {
-		model.WriteErrorf(w, http.StatusBadRequest, "File too large or invalid form")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "FileTooLargeOrInvalid")
 		return
 	}
 
 	file, header, err := r.FormFile("file")
 	if err != nil {
-		model.WriteErrorf(w, http.StatusBadRequest, "No file provided")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "NoFileProvided")
 		return
 	}
 	defer file.Close()
@@ -52,7 +52,7 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 	// Validate file extension — reject only hidden files and dangerous extensions
 	ext := strings.ToLower(filepath.Ext(header.Filename))
 	if ext == "" {
-		model.WriteErrorf(w, http.StatusBadRequest, "File must have an extension")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "FileMustHaveExtension")
 		return
 	}
 	dangerousExts := map[string]bool{
@@ -61,7 +61,7 @@ func UploadFile(w http.ResponseWriter, r *http.Request) {
 		".wsf": true, ".ps1": true,
 	}
 	if dangerousExts[ext] {
-		model.WriteErrorf(w, http.StatusBadRequest, fmt.Sprintf("File type not allowed: %s", ext))
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "FileTypeNotAllowed", map[string]any{"Ext": ext})
 		return
 	}
 

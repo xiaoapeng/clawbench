@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"testing"
-	"time"
 
 	_ "modernc.org/sqlite"
 
@@ -238,9 +237,8 @@ func TestGetTTSSummary_NotFound(t *testing.T) {
 	_, teardown := setupTestDBForTTS(t)
 	defer teardown()
 
-	summary, failed, found := GetTTSSummary("nonexistent-key")
+	summary, found := GetTTSSummary("nonexistent-key")
 	assert.Equal(t, "", summary)
-	assert.False(t, failed)
 	assert.False(t, found)
 }
 
@@ -248,12 +246,11 @@ func TestGetTTSSummary_Found(t *testing.T) {
 	_, teardown := setupTestDBForTTS(t)
 	defer teardown()
 
-	err := SaveTTSSummary("key-1", "hello world", false)
+	err := SaveTTSSummary("key-1", "hello world")
 	assert.NoError(t, err)
 
-	summary, failed, found := GetTTSSummary("key-1")
+	summary, found := GetTTSSummary("key-1")
 	assert.Equal(t, "hello world", summary)
-	assert.False(t, failed)
 	assert.True(t, found)
 }
 
@@ -261,47 +258,25 @@ func TestGetTTSSummary_FailedEntry(t *testing.T) {
 	_, teardown := setupTestDBForTTS(t)
 	defer teardown()
 
-	err := SaveTTSSummary("key-fail", "raw text", true)
+	err := SaveTTSSummary("key-fail", "raw text")
 	assert.NoError(t, err)
 
-	summary, failed, found := GetTTSSummary("key-fail")
+	summary, found := GetTTSSummary("key-fail")
 	assert.Equal(t, "raw text", summary)
-	assert.True(t, failed)
 	assert.True(t, found)
-}
-
-func TestGetTTSSummary_FailedEntryExpired(t *testing.T) {
-	db, teardown := setupTestDBForTTS(t)
-	defer teardown()
-
-	// Insert a failed entry with an old timestamp (beyond TTL).
-	// Use UTC time since SQLite CURRENT_TIMESTAMP is UTC and the
-	// modernc.org/sqlite driver returns DATETIME as RFC3339 with Z suffix.
-	// Using local time would cause the driver to mislabel it as UTC.
-	_, err := db.Exec(
-		"INSERT OR REPLACE INTO tts_summaries (cache_key, summary, summarize_failed, created_at) VALUES (?, ?, ?, ?)",
-		"key-expired", "old text", true, time.Now().UTC().Add(-15*time.Minute).Format("2006-01-02 15:04:05"),
-	)
-	assert.NoError(t, err)
-
-	// Expired failed entry should be treated as cache miss
-	summary, failed, found := GetTTSSummary("key-expired")
-	assert.Equal(t, "", summary)
-	assert.False(t, failed)
-	assert.False(t, found)
 }
 
 func TestSaveTTSSummary_Upsert(t *testing.T) {
 	_, teardown := setupTestDBForTTS(t)
 	defer teardown()
 
-	err := SaveTTSSummary("key-upsert", "version 1", false)
+	err := SaveTTSSummary("key-upsert", "version 1")
 	assert.NoError(t, err)
 
-	err = SaveTTSSummary("key-upsert", "version 2", false)
+	err = SaveTTSSummary("key-upsert", "version 2")
 	assert.NoError(t, err)
 
-	summary, _, found := GetTTSSummary("key-upsert")
+	summary, found := GetTTSSummary("key-upsert")
 	assert.True(t, found)
 	assert.Equal(t, "version 2", summary)
 }

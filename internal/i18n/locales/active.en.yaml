@@ -1,0 +1,61 @@
+SessionNotRunning: Session is not running
+SessionStreamNotFound: Session stream not found
+SessionLimitReached: Session limit reached ({{.MaxCount}}), please delete old sessions
+SessionIdRequired: session_id required
+NewSession: New Session
+NewSessionN: New Session {{.N}}
+FileMessage: File Message
+FileTooLarge: File too large
+TextTooLong: Text too long, max {{.MaxChars}} characters
+SummarizeFailed: Summarization failed, please retry later
+SynthesizeFailed: Speech synthesis failed, please retry later
+BackendCreateFailed: "Failed to create AI backend: {{.Error}}"
+StreamStartFailed: "Failed to start streaming: {{.Error}}"
+MethodNotAllowed: Method not allowed
+InvalidRequestBody: Invalid request body
+NotADirectory: Not a directory
+NotAFile: Not a file
+NotAGitRepo: Not a git repository
+NoProjectSelected: no project selected
+AccessDenied: Access denied
+Unauthorized: unauthorized
+InvalidPath: invalid path
+PathTraversal: path traversal detected
+InternalError: internal server error
+SessionNotFound: session not found
+NoAgentsAvailable: no agents available
+MessageOrFilesRequired: Message or files required
+TextRequired: text is required
+JobIdRequired: job ID required
+FileNotFound: "File not found: {{.Path}}"
+ClientIdRequired: clientId required
+FileWatcherNotAvailable: file watcher not available
+InvalidRole: Invalid role
+MessageIdRequired: messageId required
+InvalidRequest: Invalid request
+SessionBackendNotFound: Session backend not found
+FileNotFoundShort: File not found
+DirectoryNotFound: Directory not found
+InvalidFilePath: Invalid file path
+FileTooLargeOrInvalid: File too large or invalid form
+NoFileProvided: No file provided
+FileMustHaveExtension: File must have an extension
+FileTypeNotAllowed: "File type not allowed: {{.Ext}}"
+MissingPathOrName: Missing path or name
+MissingPath: Missing path
+MissingName: Missing name
+FileAlreadyExists: File already exists
+MissingPathOrDest: Missing path or dest
+MissingShaOrPath: missing sha or path
+MissingSha: missing sha
+AlreadyGitRepo: already a git repository
+NotAGitRepoShort: not a git repository
+InvalidPortNumber: "Invalid port number: {{.Port}}"
+InvalidPortInQuery: Invalid port number in query
+TaskIdRequired: Task ID required
+TaskNotFound: Task not found
+TaskFieldsRequired: name, cronExpr, agentId, and prompt are required
+DirectoryNameRequired: Directory name required
+LineNumberOutOfRange: Line number out of range
+InvalidIndex: invalid index
+JobNotFound: job not found

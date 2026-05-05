@@ -98,7 +98,7 @@ func TestDecodeJSON_InvalidBody(t *testing.T) {
 func TestValidateAndResolvePath_ValidPath(t *testing.T) {
 	w := httptest.NewRecorder()
 	basePath := t.TempDir()
-	absPath, ok := validateAndResolvePath(w, basePath, "test.txt")
+	absPath, ok := validateAndResolvePath(w, httptest.NewRequest(http.MethodGet, "/", nil), basePath, "test.txt")
 	assert.True(t, ok)
 	assert.True(t, strings.HasPrefix(absPath, basePath))
 }
@@ -106,7 +106,7 @@ func TestValidateAndResolvePath_ValidPath(t *testing.T) {
 func TestValidateAndResolvePath_TraversalPath(t *testing.T) {
 	w := httptest.NewRecorder()
 	basePath := t.TempDir()
-	absPath, ok := validateAndResolvePath(w, basePath, "../../etc/passwd")
+	absPath, ok := validateAndResolvePath(w, httptest.NewRequest(http.MethodGet, "/", nil), basePath, "../../etc/passwd")
 	assert.False(t, ok)
 	assert.Empty(t, absPath)
 	assert.Equal(t, http.StatusForbidden, w.Code)
@@ -208,14 +208,14 @@ func TestRequireGitRepo_Exists(t *testing.T) {
 	w := httptest.NewRecorder()
 	dir := t.TempDir()
 	os.MkdirAll(filepath.Join(dir, ".git"), 0755)
-	ok := requireGitRepo(w, dir)
+	ok := requireGitRepo(w, httptest.NewRequest(http.MethodGet, "/", nil), dir)
 	assert.True(t, ok)
 }
 
 func TestRequireGitRepo_NotExists(t *testing.T) {
 	w := httptest.NewRecorder()
 	dir := t.TempDir()
-	ok := requireGitRepo(w, dir)
+	ok := requireGitRepo(w, httptest.NewRequest(http.MethodGet, "/", nil), dir)
 	assert.False(t, ok)
 	assert.Equal(t, http.StatusNotFound, w.Code)
 }

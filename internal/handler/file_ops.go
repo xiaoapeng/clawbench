@@ -27,7 +27,7 @@ func ServeFileRename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Path == "" || req.Name == "" {
-		model.WriteErrorf(w, http.StatusBadRequest, "Missing path or name")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "MissingPathOrName")
 		return
 	}
 
@@ -36,7 +36,7 @@ func ServeFileRename(w http.ResponseWriter, r *http.Request) {
 	if basePath == "" {
 		basePath = middleware.GetProjectFromCookie(r)
 		if basePath == "" {
-			model.WriteError(w, model.Forbidden(model.ErrProjectNotSet, "no project selected"))
+			writeLocalizedError(w, r, model.Forbidden(model.ErrProjectNotSet, "NoProjectSelected"))
 			return
 		}
 	}
@@ -47,14 +47,14 @@ func ServeFileRename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	absOld, ok := validateAndResolvePath(w, baseAbs, req.Path)
+	absOld, ok := validateAndResolvePath(w, r, baseAbs, req.Path)
 	if !ok {
 		return
 	}
 	newPath := filepath.Join(filepath.Dir(absOld), req.Name)
 	absNew, err := filepath.Abs(newPath)
 	if err != nil || !strings.HasPrefix(absNew, baseAbs+string(filepath.Separator)) {
-		model.WriteError(w, model.Forbidden(nil, "Access denied"))
+		writeLocalizedError(w, r, model.Forbidden(nil, "AccessDenied"))
 		return
 	}
 
@@ -89,11 +89,11 @@ func ServeFileEditLine(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Path == "" || req.LineNum < 1 {
-		model.WriteErrorf(w, http.StatusBadRequest, "Invalid request")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "InvalidRequest")
 		return
 	}
 	basePath, _ := filepath.Abs(projectPath)
-	absPath, ok := validateAndResolvePath(w, basePath, req.Path)
+	absPath, ok := validateAndResolvePath(w, r, basePath, req.Path)
 	if !ok {
 		return
 	}
@@ -104,7 +104,7 @@ func ServeFileEditLine(w http.ResponseWriter, r *http.Request) {
 	}
 	lines := strings.Split(string(data), "\n")
 	if req.LineNum > len(lines) {
-		model.WriteErrorf(w, http.StatusBadRequest, "Line number out of range")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "LineNumberOutOfRange")
 		return
 	}
 	if req.Delete {
@@ -137,7 +137,7 @@ func ServeFileDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Path == "" {
-		model.WriteErrorf(w, http.StatusBadRequest, "Missing path")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "MissingPath")
 		return
 	}
 
@@ -146,7 +146,7 @@ func ServeFileDelete(w http.ResponseWriter, r *http.Request) {
 	if basePath == "" {
 		basePath = middleware.GetProjectFromCookie(r)
 		if basePath == "" {
-			model.WriteError(w, model.Forbidden(model.ErrProjectNotSet, "no project selected"))
+			writeLocalizedError(w, r, model.Forbidden(model.ErrProjectNotSet, "NoProjectSelected"))
 			return
 		}
 	}
@@ -157,14 +157,14 @@ func ServeFileDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	absPath, ok := validateAndResolvePath(w, baseAbs, req.Path)
+	absPath, ok := validateAndResolvePath(w, r, baseAbs, req.Path)
 	if !ok {
 		return
 	}
 
 	info, err := os.Stat(absPath)
 	if err != nil {
-		model.WriteError(w, model.NotFound(nil, "Not found"))
+		writeLocalizedError(w, r, model.NotFound(nil, "FileNotFoundShort"))
 		return
 	}
 
@@ -179,11 +179,11 @@ func ServeFileDelete(w http.ResponseWriter, r *http.Request) {
 
 // validateCreatePath validates the path for file/directory creation operations.
 // Returns the absolute path of the item to create, or empty string on error (response already written).
-func validateCreatePath(w http.ResponseWriter, projectPath, reqPath, reqName string) string {
+func validateCreatePath(w http.ResponseWriter, r *http.Request, projectPath, reqPath, reqName string) string {
 	basePath, _ := filepath.Abs(projectPath)
 	absDir, ok := model.ValidatePath(basePath, reqPath)
 	if !ok && reqPath != "" {
-		model.WriteError(w, model.Forbidden(nil, "Access denied"))
+		writeLocalizedError(w, r, model.Forbidden(nil, "AccessDenied"))
 		return ""
 	}
 	if reqPath == "" {
@@ -193,7 +193,7 @@ func validateCreatePath(w http.ResponseWriter, projectPath, reqPath, reqName str
 	fullPath := filepath.Join(absDir, reqName)
 	absPath, err := filepath.Abs(fullPath)
 	if err != nil || !strings.HasPrefix(absPath, basePath+string(filepath.Separator)) {
-		model.WriteError(w, model.Forbidden(nil, "Access denied"))
+		writeLocalizedError(w, r, model.Forbidden(nil, "AccessDenied"))
 		return ""
 	}
 	return absPath
@@ -217,17 +217,17 @@ func ServeFileCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Name == "" {
-		model.WriteErrorf(w, http.StatusBadRequest, "Missing name")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "MissingName")
 		return
 	}
 
-	absPath := validateCreatePath(w, projectPath, req.Path, req.Name)
+	absPath := validateCreatePath(w, r, projectPath, req.Path, req.Name)
 	if absPath == "" {
 		return
 	}
 
 	if _, err := os.Stat(absPath); err == nil {
-		model.WriteErrorf(w, http.StatusConflict, "File already exists")
+		writeLocalizedErrorf(w, r, http.StatusConflict, "FileAlreadyExists")
 		return
 	}
 
@@ -257,11 +257,11 @@ func ServeDirCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Name == "" {
-		model.WriteErrorf(w, http.StatusBadRequest, "Missing name")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "MissingName")
 		return
 	}
 
-	absPath := validateCreatePath(w, projectPath, req.Path, req.Name)
+	absPath := validateCreatePath(w, r, projectPath, req.Path, req.Name)
 	if absPath == "" {
 		return
 	}
@@ -276,13 +276,13 @@ func ServeDirCreate(w http.ResponseWriter, r *http.Request) {
 
 // validateSrcDestPath validates source and destination paths for move/copy operations.
 // Returns (srcAbsPath, destAbsPath) or empty strings on error (response already written).
-func validateSrcDestPath(w http.ResponseWriter, projectPath, srcRel, destRel string) (string, string) {
+func validateSrcDestPath(w http.ResponseWriter, r *http.Request, projectPath, srcRel, destRel string) (string, string) {
 	basePath, _ := filepath.Abs(projectPath)
-	srcAbsPath, ok := validateAndResolvePath(w, basePath, srcRel)
+	srcAbsPath, ok := validateAndResolvePath(w, r, basePath, srcRel)
 	if !ok {
 		return "", ""
 	}
-	destAbsPath, ok := validateAndResolvePath(w, basePath, destRel)
+	destAbsPath, ok := validateAndResolvePath(w, r, basePath, destRel)
 	if !ok {
 		return "", ""
 	}
@@ -307,11 +307,11 @@ func ServeFileMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Path == "" || req.Dest == "" {
-		model.WriteErrorf(w, http.StatusBadRequest, "Missing path or dest")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "MissingPathOrDest")
 		return
 	}
 
-	srcAbsPath, destAbsPath := validateSrcDestPath(w, projectPath, req.Path, req.Dest)
+	srcAbsPath, destAbsPath := validateSrcDestPath(w, r, projectPath, req.Path, req.Dest)
 	if srcAbsPath == "" {
 		return
 	}
@@ -342,11 +342,11 @@ func ServeFileCopy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Path == "" || req.Dest == "" {
-		model.WriteErrorf(w, http.StatusBadRequest, "Missing path or dest")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "MissingPathOrDest")
 		return
 	}
 
-	srcAbsPath, destAbsPath := validateSrcDestPath(w, projectPath, req.Path, req.Dest)
+	srcAbsPath, destAbsPath := validateSrcDestPath(w, r, projectPath, req.Path, req.Dest)
 	if srcAbsPath == "" {
 		return
 	}

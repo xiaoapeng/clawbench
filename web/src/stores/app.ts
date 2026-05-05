@@ -279,8 +279,8 @@ async function selectFile(path: string, isImageFile = false, isAudioFile = false
             : `/api/file/${encodeURIComponent(path)}`
         const resp = await fetch(url)
         if (!resp.ok) {
-            const err = await resp.json() as { error?: string }
-            if (err.error && err.error.includes('文件过大')) {
+            const err = await resp.json() as { error?: string, msgKey?: string }
+            if (err.msgKey === 'FileTooLarge') {
                 const fileName = baseName(path)
                 const sizeInfo = state.dirEntries.find(e => e.name === fileName)
                 state.currentFile = { name: fileName, path, content: null, tooLarge: true, size: sizeInfo?.size }

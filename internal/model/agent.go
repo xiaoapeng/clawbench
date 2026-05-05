@@ -91,7 +91,7 @@ func LoadAgents(dir string) error {
 	// Build available agent list for {{AVAILABLE_AGENTS}} placeholder (include all agents)
 	var agentLines []string
 	for _, a := range AgentList {
-		agentLines = append(agentLines, fmt.Sprintf("    - %s：%s", a.ID, a.Specialty))
+		agentLines = append(agentLines, fmt.Sprintf("    - %s: %s", a.ID, a.Specialty))
 	}
 	agentListReplacement := strings.Join(agentLines, "\n")
 

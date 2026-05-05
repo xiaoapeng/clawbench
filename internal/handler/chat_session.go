@@ -31,7 +31,7 @@ func ServeSessions(w http.ResponseWriter, r *http.Request) {
 		// Check session count limit before creating (0 = unlimited)
 		if model.SessionMaxCount > 0 {
 			if count, cerr := service.GetSessionCount(projectPath); cerr == nil && count >= model.SessionMaxCount {
-				model.WriteErrorf(w, http.StatusConflict, fmt.Sprintf("已达会话数量上限（%d），请先删除旧会话", model.SessionMaxCount))
+				writeLocalizedErrorf(w, r, http.StatusConflict, "SessionLimitReached", map[string]any{"MaxCount": model.SessionMaxCount})
 				return
 			}
 		}
@@ -52,7 +52,7 @@ func ServeSessions(w http.ResponseWriter, r *http.Request) {
 		agentSource := "default"
 		backend2, model2, _, _, ok := resolveAgentConfig(agentID)
 		if !ok {
-			model.WriteErrorf(w, http.StatusServiceUnavailable, "no agents available")
+		writeLocalizedErrorf(w, r, http.StatusServiceUnavailable, "NoAgentsAvailable")
 			return
 		}
 		if backend2 != "" {
@@ -73,9 +73,9 @@ func ServeSessions(w http.ResponseWriter, r *http.Request) {
 		if title == "" {
 			existingSessions, err := service.GetSessions(projectPath, backend)
 			if err == nil {
-				title = fmt.Sprintf("新会话 %d", len(existingSessions)+1)
+				title = T(r, "NewSessionN", map[string]any{"N": len(existingSessions) + 1})
 			} else {
-				title = "新会话"
+				title = T(r, "NewSession")
 			}
 		}
 		sessionID, err := service.CreateSession(projectPath, backend, title, resolvedAgentID, agentModel, agentSource)
@@ -89,7 +89,7 @@ func ServeSessions(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "sessionId": sessionID, "backend": backend, "agentId": resolvedAgentID, "sessionCount": sessionCount, "title": title})
 
 	default:
-		model.WriteErrorf(w, http.StatusMethodNotAllowed, "Method not allowed")
+		writeLocalizedErrorf(w, r, http.StatusMethodNotAllowed, "MethodNotAllowed")
 	}
 }
 

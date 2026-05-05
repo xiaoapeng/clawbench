@@ -2,10 +2,18 @@ import '../../../css/layout.css'
 import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
+import { createI18n } from 'vue-i18n'
 import FileViewer from '../file/FileViewer.vue'
 import MarkdownPreview from '../file/MarkdownPreview.vue'
 import WelcomeView from '../WelcomeView.vue'
 import CodePreview from '../file/CodePreview.vue'
+
+// Minimal i18n instance for tests — returns the key as-is
+const i18n = createI18n({
+  legacy: false,
+  locale: 'en',
+  messages: { en: {} },
+})
 
 vi.mock('@/composables/useMarkdownRenderer.ts', () => ({
   useMarkdownRenderer: () => ({
@@ -48,6 +56,7 @@ describe('preview layout contract', () => {
         },
       },
       global: {
+        plugins: [i18n],
         stubs: {
           FileHeader: { template: '<div class="file-header-stub" />' },
           ImagePreview: true,
@@ -74,6 +83,9 @@ describe('preview layout contract', () => {
         },
         viewMode: 'rendered',
       },
+      global: {
+        plugins: [i18n],
+      },
     })
 
     await nextTick()
@@ -87,7 +99,11 @@ describe('preview layout contract', () => {
   })
 
   it('stretches welcome view as the empty state', () => {
-    const wrapper = mount(WelcomeView)
+    const wrapper = mount(WelcomeView, {
+      global: {
+        plugins: [i18n],
+      },
+    })
     const style = getComputedStyle(wrapper.get('.welcome-view').element)
 
     expect(style.flexGrow).toBe('1')
@@ -116,6 +132,7 @@ describe('preview layout contract', () => {
         },
       },
       global: {
+        plugins: [i18n],
         stubs: {
           FileHeader: { template: '<div class="file-header-stub" />' },
           ImagePreview: true,
@@ -139,6 +156,7 @@ describe('preview layout contract', () => {
         editable: false,
       },
       global: {
+        plugins: [i18n],
         stubs: {
           BottomSheet: true,
           teleport: true,

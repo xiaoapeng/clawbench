@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"time"
 
-	"clawbench/internal/model"
 	"clawbench/internal/service"
 )
 
@@ -42,7 +41,7 @@ func FileWatchSSE(w http.ResponseWriter, r *http.Request) {
 
 	fw := service.GlobalFileWatcher
 	if fw == nil {
-		model.WriteErrorf(w, http.StatusServiceUnavailable, "file watcher not available")
+		writeLocalizedErrorf(w, r, http.StatusServiceUnavailable, "FileWatcherNotAvailable")
 		return
 	}
 
@@ -55,14 +54,14 @@ func FileWatchSSE(w http.ResponseWriter, r *http.Request) {
 	if dirRel == "" {
 		dirAbs = projectPath
 	} else {
-		abs, ok := validateAndResolvePath(w, projectPath, dirRel)
+		abs, ok := validateAndResolvePath(w, r, projectPath, dirRel)
 		if !ok {
 			return
 		}
 		dirAbs = abs
 	}
 	if fileRel != "" {
-		abs, ok := validateAndResolvePath(w, projectPath, fileRel)
+		abs, ok := validateAndResolvePath(w, r, projectPath, fileRel)
 		if !ok {
 			return
 		}
@@ -146,7 +145,7 @@ func FileWatchUpdate(w http.ResponseWriter, r *http.Request) {
 
 	fw := service.GlobalFileWatcher
 	if fw == nil {
-		model.WriteErrorf(w, http.StatusServiceUnavailable, "file watcher not available")
+		writeLocalizedErrorf(w, r, http.StatusServiceUnavailable, "FileWatcherNotAvailable")
 		return
 	}
 
@@ -156,7 +155,7 @@ func FileWatchUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.ClientID == "" {
-		model.WriteErrorf(w, http.StatusBadRequest, "clientId required")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "ClientIdRequired")
 		return
 	}
 
@@ -166,14 +165,14 @@ func FileWatchUpdate(w http.ResponseWriter, r *http.Request) {
 	if req.DirPath == "" {
 		dirAbs = projectPath
 	} else {
-		abs, ok := validateAndResolvePath(w, projectPath, req.DirPath)
+		abs, ok := validateAndResolvePath(w, r, projectPath, req.DirPath)
 		if !ok {
 			return
 		}
 		dirAbs = abs
 	}
 	if req.FilePath != "" {
-		abs, ok := validateAndResolvePath(w, projectPath, req.FilePath)
+		abs, ok := validateAndResolvePath(w, r, projectPath, req.FilePath)
 		if !ok {
 			return
 		}

@@ -1,0 +1,61 @@
+SessionNotRunning: 会话未在运行
+SessionStreamNotFound: 未找到会话流
+SessionLimitReached: 已达会话数量上限（{{.MaxCount}}），请先删除旧会话
+SessionIdRequired: session_id required
+NewSession: 新会话
+NewSessionN: 新会话 {{.N}}
+FileMessage: 文件消息
+FileTooLarge: 文件过大
+TextTooLong: 文本过长，最多支持{{.MaxChars}}字符
+SummarizeFailed: 摘要生成失败，请稍后重试
+SynthesizeFailed: 语音合成失败，请稍后重试
+BackendCreateFailed: "创建 AI Backend 失败: {{.Error}}"
+StreamStartFailed: "启动流式输出失败: {{.Error}}"
+MethodNotAllowed: Method not allowed
+InvalidRequestBody: Invalid request body
+NotADirectory: Not a directory
+NotAFile: Not a file
+NotAGitRepo: Not a git repository
+NoProjectSelected: no project selected
+AccessDenied: Access denied
+Unauthorized: unauthorized
+InvalidPath: invalid path
+PathTraversal: path traversal detected
+InternalError: internal server error
+SessionNotFound: session not found
+NoAgentsAvailable: no agents available
+MessageOrFilesRequired: Message or files required
+TextRequired: text is required
+JobIdRequired: job ID required
+FileNotFound: "File not found: {{.Path}}"
+ClientIdRequired: 客户端ID为必填项
+FileWatcherNotAvailable: 文件监视器不可用
+InvalidRole: 无效的角色
+MessageIdRequired: 消息ID为必填项
+InvalidRequest: 无效的请求
+SessionBackendNotFound: 会话后端未找到
+FileNotFoundShort: 文件未找到
+DirectoryNotFound: 目录未找到
+InvalidFilePath: 无效的文件路径
+FileTooLargeOrInvalid: 文件过大或格式无效
+NoFileProvided: 未提供文件
+FileMustHaveExtension: 文件必须有扩展名
+FileTypeNotAllowed: "不允许的文件类型: {{.Ext}}"
+MissingPathOrName: 缺少路径或名称
+MissingPath: 缺少路径
+MissingName: 缺少名称
+FileAlreadyExists: 文件已存在
+MissingPathOrDest: 缺少路径或目标
+MissingShaOrPath: 缺少sha或路径
+MissingSha: 缺少sha
+AlreadyGitRepo: 已经是Git仓库
+NotAGitRepoShort: 不是Git仓库
+InvalidPortNumber: "无效的端口号: {{.Port}}"
+InvalidPortInQuery: 查询中的端口号无效
+TaskIdRequired: 任务ID为必填项
+TaskNotFound: 任务未找到
+TaskFieldsRequired: 名称、cron表达式、智能体ID和提示词为必填项
+DirectoryNameRequired: 目录名称为必填项
+LineNumberOutOfRange: 行号超出范围
+InvalidIndex: 无效的索引
+JobNotFound: 任务未找到

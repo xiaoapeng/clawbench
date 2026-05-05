@@ -8,7 +8,7 @@ import (
 // AutoResumeBackend wraps an AIBackend and adds ExitPlanMode auto-resume behavior.
 // When it detects a tool_use event with Name="ExitPlanMode" and Done=true,
 // it cancels the inner CLI process, then starts a new ExecuteStream call with
-// the same session ID and prompt="继续" with Resume=true.
+// the same session ID and prompt="continue" with Resume=true.
 // The outer caller sees a single continuous <-chan StreamEvent.
 type AutoResumeBackend struct {
 	inner AIBackend
@@ -112,12 +112,12 @@ phase1Done:
 		return
 	}
 
-	// Phase 2: resume with "继续"
+	// Phase 2: resume with "continue"
 	innerCtx2, innerCancel2 := context.WithCancel(ctx)
 	defer innerCancel2()
 
 	resumeReq := ChatRequest{
-		Prompt:                "继续",
+		Prompt:                "continue",
 		SessionID:             origReq.SessionID,
 		WorkDir:               origReq.WorkDir,
 		SystemPrompt:          origReq.SystemPrompt,

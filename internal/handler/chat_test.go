@@ -436,7 +436,7 @@ func TestServeChatHistory_Get_WithExistingSession(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Add a message to that session
-	_, err = service.AddChatMessage(env.ProjectDir, "codebuddy", sessionID, "user", "hello", nil, false)
+	_, err = service.AddChatMessage(env.ProjectDir, "codebuddy", sessionID, "user", "hello", nil, false, "NewSession")
 	assert.NoError(t, err)
 
 	req := newRequest(t, http.MethodGet, "/api/ai/history", nil)
@@ -1057,7 +1057,7 @@ func TestAddChatMessage_FilesNoDuplicate(t *testing.T) {
 	// Simulate what the handler does: allFiles = req.Files (frontend already merged filePaths into files)
 	allFiles := []string{"config.yaml"}
 
-	msgID, err := service.AddChatMessage(env.ProjectDir, "codebuddy", sessionID, "user", "what is this?", allFiles, false)
+	msgID, err := service.AddChatMessage(env.ProjectDir, "codebuddy", sessionID, "user", "what is this?", allFiles, false, "NewSession")
 	assert.NoError(t, err)
 	assert.NotZero(t, msgID)
 
@@ -1081,7 +1081,7 @@ func TestAddChatMessage_FilesWithUploadsAndReferences(t *testing.T) {
 	// Frontend sends: files = [upload path, reference path] (already merged)
 	allFiles := []string{".clawbench/uploads/photo.png", "src/main.go"}
 
-	msgID, err := service.AddChatMessage(env.ProjectDir, "codebuddy", sessionID, "user", "check both", allFiles, false)
+	msgID, err := service.AddChatMessage(env.ProjectDir, "codebuddy", sessionID, "user", "check both", allFiles, false, "NewSession")
 	assert.NoError(t, err)
 	assert.NotZero(t, msgID)
 

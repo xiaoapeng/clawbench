@@ -31,7 +31,7 @@ func ServeRecentProjects(w http.ResponseWriter, r *http.Request) {
 			Path string `json:"path"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			model.WriteErrorf(w, http.StatusBadRequest, "Invalid request body")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "InvalidRequestBody")
 			return
 		}
 		if err := service.AddRecentProject(req.Path); err != nil {
@@ -46,7 +46,7 @@ func ServeRecentProjects(w http.ResponseWriter, r *http.Request) {
 			Path string `json:"path"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			model.WriteErrorf(w, http.StatusBadRequest, "Invalid request body")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "InvalidRequestBody")
 			return
 		}
 		if err := service.RemoveRecentProject(req.Path); err != nil {
@@ -57,7 +57,7 @@ func ServeRecentProjects(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 
 	default:
-		model.WriteErrorf(w, http.StatusMethodNotAllowed, "Method not allowed")
+		writeLocalizedErrorf(w, r, http.StatusMethodNotAllowed, "MethodNotAllowed")
 	}
 }
 
@@ -98,7 +98,7 @@ func ServeProjectSet(w http.ResponseWriter, r *http.Request) {
 			Path string `json:"path"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			model.WriteErrorf(w, http.StatusBadRequest, "Invalid request body")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "InvalidRequestBody")
 			return
 		}
 
@@ -122,13 +122,13 @@ func ServeProjectSet(w http.ResponseWriter, r *http.Request) {
 			absPath, _ = filepath.Abs(filepath.Join(basePath, relPath))
 		}
 		if !strings.HasPrefix(absPath, basePath+string(filepath.Separator)) && absPath != basePath {
-			model.WriteError(w, model.Forbidden(nil, "Access denied"))
+			writeLocalizedError(w, r, model.Forbidden(nil, "AccessDenied"))
 			return
 		}
 
 		info, err := os.Stat(absPath)
 		if err != nil || !info.IsDir() {
-			model.WriteErrorf(w, http.StatusBadRequest, "Not a directory")
+			writeLocalizedErrorf(w, r, http.StatusBadRequest, "NotADirectory")
 			return
 		}
 
@@ -154,7 +154,7 @@ func ServeProjectSet(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]string{"ok": "true", "path": absPath})
 
 	default:
-		model.WriteErrorf(w, http.StatusMethodNotAllowed, "Method not allowed")
+		writeLocalizedErrorf(w, r, http.StatusMethodNotAllowed, "MethodNotAllowed")
 	}
 }
 

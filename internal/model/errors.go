@@ -68,8 +68,10 @@ func Unauthorized(err error) *AppError {
 // JSON error response helpers
 
 type ErrorResponse struct {
-	Error string `json:"error"`
-	Code  int    `json:"code,omitempty"`
+	Error  string         `json:"error"`
+	Code   int            `json:"code,omitempty"`
+	MsgKey string         `json:"msgKey,omitempty"`
+	Detail map[string]any `json:"detail,omitempty"`
 }
 
 func WriteError(w http.ResponseWriter, err error) {

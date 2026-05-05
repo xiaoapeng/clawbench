@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"clawbench/internal/model"
 	"clawbench/internal/service"
 	"clawbench/internal/speech"
 )
@@ -75,7 +74,7 @@ func TTSGenerate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.Text == "" {
-		model.WriteErrorf(w, http.StatusBadRequest, "text is required")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "TextRequired")
 		return
 	}
 
@@ -85,7 +84,7 @@ func TTSGenerate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if speech.MaxTextRunes > 0 && len([]rune(req.Text)) > speech.MaxTextRunes {
-		model.WriteErrorf(w, http.StatusBadRequest, fmt.Sprintf("文本过长，最多支持%d字符", speech.MaxTextRunes))
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "TextTooLong", map[string]any{"MaxChars": speech.MaxTextRunes})
 		return
 	}
 
@@ -107,7 +106,7 @@ func TTSGenerate(w http.ResponseWriter, r *http.Request) {
 	relAudioPath := filepath.Join(".clawbench", "generated", "tts", cacheKey+audioExt)
 
 	// Validate the output path (defense-in-depth)
-	absAudioPath, ok := validateAndResolvePath(w, projectPath, relAudioPath)
+	absAudioPath, ok := validateAndResolvePath(w, r, projectPath, relAudioPath)
 	if !ok {
 		return
 	}
@@ -164,7 +163,7 @@ func TTSGenerate(w http.ResponseWriter, r *http.Request) {
 				service.SendTTSEvent(cacheKey, service.TTSEvent{
 					Type:             "result",
 					SynthesizeFailed: true,
-					SynthesizeError:  "摘要生成失败，请稍后重试",
+					SynthesizeError:  T(r, "SummarizeFailed"),
 				})
 				return
 			}
@@ -197,7 +196,7 @@ func TTSGenerate(w http.ResponseWriter, r *http.Request) {
 		service.SendTTSEvent(cacheKey, service.TTSEvent{
 			Type:             "result",
 			SynthesizeFailed: true,
-			SynthesizeError:  "语音合成失败，请稍后重试",
+			SynthesizeError:  T(r, "SynthesizeFailed"),
 			Summary:          summary,
 		})
 			return
@@ -237,13 +236,13 @@ func TTSStream(w http.ResponseWriter, r *http.Request) {
 	// Extract jobId from URL path: /api/tts/stream/{jobId}
 	jobID := strings.TrimPrefix(r.URL.Path, "/api/tts/stream/")
 	if jobID == "" {
-		model.WriteErrorf(w, http.StatusBadRequest, "job ID required")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "JobIdRequired")
 		return
 	}
 
 	job, ok := service.GetTTSJob(jobID)
 	if !ok {
-		model.WriteErrorf(w, http.StatusNotFound, "job not found")
+		writeLocalizedErrorf(w, r, http.StatusNotFound, "JobNotFound")
 		return
 	}
 

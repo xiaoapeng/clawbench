@@ -30,10 +30,10 @@ func ServeChatHistory(w http.ResponseWriter, r *http.Request) {
 					agentID := model.GetDefaultAgentID()
 					backend, defaultModel, _, _, ok := resolveAgentConfig(agentID)
 					if !ok {
-						model.WriteErrorf(w, http.StatusServiceUnavailable, "no agents available")
+				writeLocalizedErrorf(w, r, http.StatusServiceUnavailable, "NoAgentsAvailable")
 						return
 					}
-					sessionID, err = service.CreateSession(projectPath, backend, "新会话", agentID, defaultModel, "default")
+					sessionID, err = service.CreateSession(projectPath, backend, T(r, "NewSession"), agentID, defaultModel, "default")
 					if err != nil {
 						model.WriteError(w, model.Internal(fmt.Errorf("failed to create session")))
 						return
@@ -46,7 +46,7 @@ func ServeChatHistory(w http.ResponseWriter, r *http.Request) {
 		}
 		backend := service.GetSessionBackend(sessionID)
 		if backend == "" {
-			model.WriteErrorf(w, http.StatusNotFound, "session not found")
+		writeLocalizedErrorf(w, r, http.StatusNotFound, "SessionNotFound")
 			return
 		}
 		messages, err := service.GetChatHistory(projectPath, backend, sessionID)
@@ -68,7 +68,7 @@ func ServeChatHistory(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if req.Role != "user" && req.Role != "assistant" {
-			model.WriteErrorf(w, http.StatusBadRequest, "Invalid role")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "InvalidRole")
 			return
 		}
 		sessionID := req.SessionID
@@ -77,17 +77,17 @@ func ServeChatHistory(w http.ResponseWriter, r *http.Request) {
 		}
 		backend := service.GetSessionBackend(sessionID)
 		if backend == "" {
-			model.WriteErrorf(w, http.StatusBadRequest, "session not found")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "SessionNotFound")
 			return
 		}
-		if _, err := service.AddChatMessage(projectPath, backend, sessionID, req.Role, req.Content, req.Files, false); err != nil {
+		if _, err := service.AddChatMessage(projectPath, backend, sessionID, req.Role, req.Content, req.Files, false, T(r, "NewSession")); err != nil {
 			model.WriteError(w, model.Internal(fmt.Errorf("failed to save message")))
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "savedAt": "now"})
 
 	default:
-		model.WriteErrorf(w, http.StatusMethodNotAllowed, "Method not allowed")
+		writeLocalizedErrorf(w, r, http.StatusMethodNotAllowed, "MethodNotAllowed")
 	}
 }
 
@@ -118,7 +118,7 @@ func ServeChatMessageUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.MessageID == 0 {
-		model.WriteErrorf(w, http.StatusBadRequest, "messageId required")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "MessageIdRequired")
 		return
 	}
 	if err := service.UpdateMessageContent(int(req.MessageID), req.Content); err != nil {
