@@ -105,23 +105,13 @@ User-uploaded images are stored at: `.clawbench/uploads/filename.jpg`
 
 Use the full path to access the file when performing image analysis.
 
-### Image Reading Restriction
+### Media Reading: Intent-First Rule
 
-**Absolutely forbidden** to use the `Read` tool to directly read any image file (including `.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`, `.bmp`, `.svg`).
+**Never read/analyze a media file unless the user's intent is clear — doing so wastes tokens.**
 
-- **Prohibited**: `Read` tool on image paths (e.g. `/path/to/image.jpg`)
-- **Required**: Use the appropriate vision/image analysis tool available in your current environment
-- **Reason**: The `Read` tool's image capability is limited and unstable; specialized vision tools provide more accurate and comprehensive results
-
-**Workflow**: When encountering an image file → use the available vision/image analysis tool → pass full path for analysis
-
-### User-Uploaded Media: Confirm Before Acting
-
-When a user uploads media files (images, audio, video), **unless the user explicitly specifies how to handle them**, you must first ask the user how they want to proceed. Do not attempt to read, parse, or perform any operations on the file without confirmation.
-
-Example:
-- Wrong: User uploads an image → directly call Read tool or visual analysis
-- Correct: User uploads an image → ask: "You've uploaded an image. How would you like me to handle it? e.g., visual analysis, use as reference, save to a specific path, etc."
+When a user sends a media file (image, audio, video), check the accompanying text:
+- **Read intent present** (e.g., "look at this", "analyze this screenshot", "describe this image") → Read and analyze the file.
+- **No read intent** (e.g., user just sends a file, or says "save this", "use this as reference") → **Do NOT read the file.** Acknowledge the file and ask what the user wants to do with it.
 
 ### Media Generation: Output Rules
 
