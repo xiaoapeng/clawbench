@@ -123,21 +123,25 @@ cd clawbench
 
 ### 配置智能体
 
-`config/agents/` 目录下的 YAML 文件定义了可用的 AI 智能体。最简配置示例：
+`config/agents/` 目录下的 YAML 文件定义了可用的 AI 智能体。每个后端提供独立的示例文件，复制后修改即可：
 
-```yaml
-id: my-agent
-name: 我的助手
-icon: 🤖
-specialty: 通用问答、代码编写
-backend: claude
-# model: claude-sonnet-4-20250514  # 可选，省略则使用 CLI 默认模型
-# command: /path/to/custom-cli     # 可选，自定义 CLI 路径或参数
-# system_prompt: |                 # 可选，省略则使用 agent_common_prompt.md
-#   你是一名专业的编程助手。
+| 示例文件 | 后端 | 说明 |
+|----------|------|------|
+| `claude.yaml.example` | claude | Claude Code CLI |
+| `codebuddy.yaml.example` | codebuddy | CodeBuddy CLI，支持多模型 |
+| `opencode.yaml.example` | opencode | OpenCode CLI |
+| `gemini.yaml.example` | gemini | Gemini CLI |
+| `codex.yaml.example` | codex | Codex CLI，支持 profile |
+| `qoder.yaml.example` | qoder | Qoder CLI，自动模型路由 |
+| `vecli.yaml.example` | vecli | VeCLI（火山引擎） |
+
+```bash
+# 示例：创建一个 Claude 智能体
+cp config/agents/claude.yaml.example config/agents/my-claude.yaml
+# 编辑 id、name、model 等字段后重启服务即可
 ```
 
-完整字段说明请参阅 [config/agents/agent.yaml.example](config/agents/agent.yaml.example)。
+每个示例文件包含该后端的完整配置字段和说明，`.yaml.example` 文件不会被加载，仅作为参考模板。
 
 ### 启动服务
 

@@ -122,18 +122,25 @@ cd clawbench
 
 ### Configure Agents
 
-YAML files in the `config/agents/` directory define available AI agents. Create your agents based on the example template:
+YAML files in the `config/agents/` directory define available AI agents. Each backend provides a separate example file — copy and modify to create your own agent:
+
+| Example File | Backend | Description |
+|--------------|---------|-------------|
+| `claude.yaml.example` | claude | Claude Code CLI |
+| `codebuddy.yaml.example` | codebuddy | CodeBuddy CLI, multi-model support |
+| `opencode.yaml.example` | opencode | OpenCode CLI |
+| `gemini.yaml.example` | gemini | Gemini CLI |
+| `codex.yaml.example` | codex | Codex CLI, profile support |
+| `qoder.yaml.example` | qoder | Qoder CLI, auto model routing |
+| `vecli.yaml.example` | vecli | VeCLI (Volcengine) |
 
 ```bash
-# View the example template (includes detailed field descriptions)
-cat config/agents/agent.yaml.example
-
-# Copy and modify to create your own agent
-cp config/agents/agent.yaml.example config/agents/my-agent.yaml
-# Edit id, name, icon, specialty, backend, model, system_prompt, etc.
+# Example: create a Claude agent
+cp config/agents/claude.yaml.example config/agents/my-claude.yaml
+# Edit id, name, model, etc. and restart the server
 ```
 
-Each YAML file corresponds to one agent and requires at minimum: `id` (unique identifier), `name` (display name), `icon` (emoji icon), `specialty` (specialty description), `backend` (AI backend type). Optional fields: `model` (specific model), `command` (custom CLI path or arguments), `system_prompt` (role prompt — omitted by default uses `agent_common_prompt.md` content).
+Each example file contains complete configuration fields and descriptions for that backend. Files with the `.yaml.example` extension are not loaded — they serve as reference templates only.
 
 ### Start the Server
 
