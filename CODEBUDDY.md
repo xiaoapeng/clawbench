@@ -4,7 +4,7 @@ This file provides guidance to CodeBuddy Code when working with code in this rep
 
 ## Project Overview
 
-ClawBench is a mobile-first AI workstation that wraps AI CLI tools (CodeBuddy, Claude Code, OpenCode, Gemini CLI, Codex, Qoder CLI) into a web-accessible platform. Go backend shells out to CLI tools and streams JSON output via SSE; Vue 3 frontend renders the streamed events in real time. Supports SSH tunnel-based port forwarding for remote/mobile access and a scheduled task (cron) system for recurring AI execution.
+ClawBench is a mobile-first AI workstation that wraps AI CLI tools (CodeBuddy, Claude Code, OpenCode, Gemini CLI, Codex, Qoder CLI, VeCLI) into a web-accessible platform. Go backend shells out to CLI tools and streams JSON output via SSE; Vue 3 frontend renders the streamed events in real time. Supports SSH tunnel-based port forwarding for remote/mobile access and a scheduled task (cron) system for recurring AI execution.
 
 ## Build & Run Commands
 
@@ -53,10 +53,10 @@ npx vitest run web/src/components/__tests__/gitGraphUtils.test.ts  # Single test
 **Layered structure:**
 - `internal/handler/` — HTTP handlers (routes registered in `handler.go`). SSE streaming in `chat_stream.go`, scheduled task CRUD in `scheduler.go`, port forwarding API in `proxy_api.go`, SSH info in `ssh_info.go`, session CRUD in `chat_session.go`.
 - `internal/service/` — Business logic: `chat.go` (history/persistence), `scheduler.go` (cron-based AI task execution via `robfig/cron/v3`), `database.go` (SQLite), `proxy.go` (ProxyRegistry: port forwarding with health checks, auto-detection, TLS probing), `session_runtime.go` (active session tracking, stream channels, cancel functions with reason tracking).
-- `internal/ai/` — AI backend abstraction. `AIBackend` interface (`interface.go`) with `ExecuteStream()`. `CLIBackend` (`cli_backend.go`) is the shared base that shells out to CLI tools; each backend (claude/codebuddy/opencode/gemini/codex/qoder) provides CLI args and a `LineParser` for its JSON output format. Stream parsers are in `*__stream.go` files. `AutoResumeBackend` (`auto_resume.go`) wraps claude, codebuddy, and qoder backends — detects ExitPlanMode tool_use and automatically resumes with "继续". `CodexBackend` (`codex.go`) provides full Codex CLI integration with resume support. `NewBackend()` factory in `factory.go`. Qoder backend (`qoder.go`) reuses the shared `StreamParser` since its `--output-format stream-json` produces the same NDJSON format as Claude/Codebuddy.
+- `internal/ai/` — AI backend abstraction. `AIBackend` interface (`interface.go`) with `ExecuteStream()`. `CLIBackend` (`cli_backend.go`) is the shared base that shells out to CLI tools; each backend (claude/codebuddy/opencode/gemini/codex/qoder/vecli) provides CLI args and a `LineParser` for its JSON output format. Stream parsers are in `*__stream.go` files. `AutoResumeBackend` (`auto_resume.go`) wraps claude, codebuddy, and qoder backends — detects ExitPlanMode tool_use and automatically resumes with "继续". `CodexBackend` (`codex.go`) provides full Codex CLI integration with resume support. `VeCLIBackend` (`vecli.go`) wraps CLIBackend to add post-stream session-summary parsing — VeCLI outputs plain text (not JSON Lines), so metadata (token counts, duration, model) is extracted from a `--session-summary` JSON file after process exit. `NewBackend()` factory in `factory.go`. Qoder backend (`qoder.go`) reuses the shared `StreamParser` since its `--output-format stream-json` produces the same NDJSON format as Claude/Codebuddy.
 - `internal/model/` — Data models, config structs, path validation, structured error types (`errors.go`: `NotFound`, `Forbidden`, `Internal`, etc.), scheduled task model, proxy/SSH config models.
 - `internal/middleware/` — Auth, request logging, panic recovery, request ID.
-- `internal/speech/` — TTS abstraction (`SpeechProvider` interface). Implementations: MiniMax (cloud), Edge TTS (cloud, free), Piper (local offline), Kokoro (local ONNX-based). `summarizer.go` provides TTS summarization via multiple AI backends (mmx-cli, claude, codebuddy, gemini, opencode, codex, ollama) for long-text compression before speech. `ollama_summarizer.go` calls Ollama HTTP API (`/api/chat`, stream:false) — the first direct HTTP client in the Go backend (all others shell out to CLI tools).
+- `internal/speech/` — TTS abstraction (`SpeechProvider` interface). Implementations: MiniMax (cloud), Edge TTS (cloud, free), Piper (local offline), Kokoro (local ONNX-based). `summarizer.go` provides TTS summarization via multiple AI backends (mmx-cli, claude, codebuddy, gemini, opencode, codex, qoder, vecli, ollama) for long-text compression before speech. `ollama_summarizer.go` calls Ollama HTTP API (`/api/chat`, stream:false) — the first direct HTTP client in the Go backend (all others shell out to CLI tools).
 - `internal/ssh/` — SSH tunnel server (`server.go`). Supports direct-tcpip channels (-L port forwarding), password auth, ECDSA host key generation/persistence. Integrates with ProxyRegistry for port validation.
 - `internal/platform/` — Platform-specific adaptations (Windows paths).
 
@@ -186,7 +186,7 @@ npx vitest run web/src/components/__tests__/gitGraphUtils.test.ts  # Single test
 | Chat UI | `chat.initial_messages`, `chat.page_size`, `chat.collapsed_height`, `chat.quick_send` |
 | Session | `session.max_count` |
 | TLS | `tls.enabled`, `tls.cert_file`, `tls.key_file` |
-| TTS | `tts.engine` (minimax/edge/piper/kokoro/moss-nano), `tts.summarize_backend` (mmx-cli/claude/codebuddy/gemini/opencode/codex/ollama), `tts.summarize_model`, `tts.speed`, `tts.voice`, engine-specific sub-configs, `tts.ollama.base_url` |
+| TTS | `tts.engine` (minimax/edge/piper/kokoro/moss-nano), `tts.summarize_backend` (mmx-cli/claude/codebuddy/gemini/opencode/codex/qoder/vecli/ollama), `tts.summarize_model`, `tts.speed`, `tts.voice`, engine-specific sub-configs, `tts.ollama.base_url` |
 | Proxy | `proxy.enabled`, `proxy.allowed_ports` |
 | SSH | `ssh.enabled`, `ssh.port`, `ssh.host_key` |
 | Dev | `dev.port`, `dev.frontend_port`, `dev.host` |

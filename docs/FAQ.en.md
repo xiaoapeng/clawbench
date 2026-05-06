@@ -8,7 +8,7 @@ A: Linux (x86_64 / ARM64) and Windows (x86_64) are supported. The backend is wri
 
 **Q: Which AI backends are supported?**
 
-A: Five CLI backends are supported: CodeBuddy, Claude Code, OpenCode, Gemini CLI, and Codex. You can switch between them in real time via the Web UI, with isolated session data. Just make sure the corresponding CLI is installed and available in your PATH.
+A: Seven CLI backends are supported: CodeBuddy, Claude Code, OpenCode, Gemini CLI, Codex, Qoder CLI, and VeCLI. You can switch between them in real time via the Web UI, with isolated session data. Just make sure the corresponding CLI is installed and available in your PATH.
 
 **Q: How do I add a new agent?**
 
@@ -16,7 +16,7 @@ A: Create a YAML file in the `config/agents/` directory, defining id, name, icon
 
 **Q: Do I need to configure an API Key?**
 
-A: No. ClawBench implements AI functionality by calling local CLIs (CodeBuddy, Claude Code, OpenCode, Gemini CLI, or Codex), which already handle API Key configuration and management.
+A: No. ClawBench implements AI functionality by calling local CLIs (CodeBuddy, Claude Code, OpenCode, Gemini CLI, Codex, Qoder CLI, or VeCLI), which already handle API Key configuration and management.
 
 **Q: Can TTS speech synthesis use local models?**
 

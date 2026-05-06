@@ -10,7 +10,7 @@ import (
 )
 
 // AIBackendSummarizer implements Summarizer using an existing AI backend
-// (claude, codebuddy, gemini, opencode, codex) via AIBackend.ExecuteStream().
+// (claude, codebuddy, gemini, opencode, codex, qoder, vecli) via AIBackend.ExecuteStream().
 type AIBackendSummarizer struct {
 	backend ai.AIBackend
 	// Model is the model ID override for the AI backend (empty = use backend default).

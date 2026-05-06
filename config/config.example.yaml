@@ -111,6 +111,8 @@ tts:
   #   "gemini"    — Gemini CLI / 使用 Gemini CLI
   #   "opencode"  — OpenCode CLI / 使用 OpenCode CLI
   #   "codex"     — Codex CLI / 使用 Codex CLI
+  #   "qoder"     — Qoder CLI (Alibaba) / 使用 Qoder CLI（阿里编码智能体）
+  #   "vecli"     — VeCLI (Volcengine Doubao) / 使用 VeCLI（火山引擎 Doubao）
   #   "ollama"    — Ollama HTTP API (local inference) / 使用 Ollama HTTP API（本地推理）
   summarize_backend: "simple"
   summarize_model: "MiniMax-M2.7"                        # Summarization model (leave empty for backend default)

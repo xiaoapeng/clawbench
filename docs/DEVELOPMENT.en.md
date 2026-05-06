@@ -96,7 +96,7 @@ cd clawbench
 
 | Dependency | Description |
 |------------|-------------|
-| **CodeBuddy CLI** or **Claude Code CLI** | AI backend (install and authenticate in advance; OpenCode / Gemini / Codex optional) |
+| **CodeBuddy CLI** or **Claude Code CLI** | AI backend (install and authenticate in advance; OpenCode / Gemini / Codex / Qoder / VeCLI optional) |
 
 ### Configuration File
 
@@ -246,11 +246,15 @@ ClawBench interacts with AI programming tools by calling local CLIs, no extra AP
 
 **Codex backend**: Install OpenAI Codex CLI and complete authentication, ensure the `codex` command is available in PATH.
 
-All five backends can be switched in real time on the ClawBench Web UI, with isolated session data.
+**Qoder backend**: Install Qoder CLI (Alibaba coding agent) and complete authentication, ensure the `qoder` command is available in PATH. Qoder supports automatic model routing without specifying a specific model.
+
+**VeCLI backend**: Install VeCLI (Volcengine Doubao) and complete authentication, ensure the `vecli` command is available in PATH. VeCLI outputs plain text (not JSON Lines), does not support session resume, and metadata is extracted from a `--session-summary` file after the process exits.
+
+All seven backends can be switched in real time on the ClawBench Web UI, with isolated session data.
 
 ### TTS Speech Synthesis Configuration
 
-ClawBench supports TTS speech synthesis, automatically summarizing and reading aloud AI replies. Supports 5 TTS engines and 8 summarization backends.
+ClawBench supports TTS speech synthesis, automatically summarizing and reading aloud AI replies. Supports 5 TTS engines and 10 summarization backends.
 
 | TTS Engine | Description | Network Requirement |
 |------------|-------------|---------------------|
@@ -322,6 +326,8 @@ config/agents/
 ├── codex.yaml         # Codex — OpenAI Codex CLI coding assistant
 ├── gemini.yaml        # Gemini CLI — Google Gemini-powered general assistant
 ├── gpt54.yaml         # GPT — via CodeBuddy calling GPT models
+├── qoder.yaml         # Qoder — Alibaba coding agent, auto model routing
+├── vecli.yaml         # VeCLI — Volcengine Doubao-powered coding assistant
 └── handyman.yaml      # Handyman — scheduled tasks, simple coding, daily operations
 ```
 
@@ -332,7 +338,7 @@ config/agents/
 - **Transparent Tool Calls**: AI tool calls (file read/write, Bash commands, code editing) are visualized in real time
 - **Cron Scheduled Execution**: AI generates `<schedule-proposal>` proposals; after confirmation, Cron scheduler executes them automatically
 - **Cron Governance**: Claude backend disables built-in scheduling tools via `--disallowedTools`, routing all scheduling through ClawBench
-- **Multi-Backend Switching**: The same platform simultaneously supports CodeBuddy, Claude Code, OpenCode, Gemini CLI, and Codex backends with isolated session data
+- **Multi-Backend Switching**: The same platform simultaneously supports CodeBuddy, Claude Code, OpenCode, Gemini CLI, Codex, Qoder CLI, and VeCLI backends with isolated session data
 
 ### Project Structure
 
@@ -376,7 +382,9 @@ clawbench/
 │       ├── codebuddy.go / codebuddy_stream.go
 │       ├── opencode.go / opencode_stream.go
 │       ├── gemini.go / gemini_stream.go
-│       └── codex.go / codex_stream.go
+│       ├── codex.go / codex_stream.go
+│       ├── qoder.go / qoder_stream.go
+│       └── vecli.go / vecli_stream.go
 │   └── speech/                  # TTS speech synthesis & summarization
 │       ├── summarizer.go        # Summarizer interface + genericSummarizer shared pipeline
 │       ├── mmx_summarizer.go    # MMXSummarizer (mmx-cli text chat)
@@ -392,6 +400,8 @@ clawbench/
 │   │   ├── codex.yaml           # Codex CLI
 │   │   ├── gemini.yaml          # Gemini CLI
 │   │   ├── gpt54.yaml           # GPT (via CodeBuddy)
+│   │   ├── qoder.yaml           # Qoder CLI
+│   │   ├── vecli.yaml           # VeCLI
 │   │   └── handyman.yaml        # Handyman
 ├── web/                         # Vue 3 frontend source
 │   └── src/
@@ -421,7 +431,7 @@ clawbench/
 | Chart Rendering | Mermaid.js |
 | Math Formulas | KaTeX |
 | HTML Sanitization | DOMPurify |
-| AI Backend | CodeBuddy CLI / Claude Code CLI / OpenCode CLI / Gemini CLI / Codex CLI (streaming JSON output → SSE push) |
+| AI Backend | CodeBuddy CLI / Claude Code CLI / OpenCode CLI / Gemini CLI / Codex CLI / Qoder CLI / VeCLI (streaming output → SSE push) |
 | TTS Summarization | Ollama HTTP API (local inference, small models like gemma3:270m, zero external Go dependencies) |
 | SSH Tunnel | golang.org/x/crypto/ssh (embedded SSH server, direct-tcpip port forwarding) |
 | Scheduled Scheduling | robfig/cron |

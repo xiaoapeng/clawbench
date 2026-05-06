@@ -221,7 +221,7 @@ GitHub 官方 AI 编程助手，支持移动端。
 
 1. **唯一的全功能移动端工作台**：其他产品全是"遥控器"——远程操控电脑上的会话。ClawBench 本身就是完整开发环境：文件、代码、Git、AI、定时任务、TTS、媒体预览，手机上直接干活。
 
-2. **5 种 AI 后端**：Happy/Yep Anywhere 只有 2 种，Claude Dispatch/Remote 只有 1 种。ClawBench 支持 CodeBuddy、Claude Code、OpenCode、Gemini CLI、Codex，覆盖最广。（注：Operit 支持 10+ 后端但以 API 调用为主，ClawBench 是唯一支持 CLI Agent 的多后端工作台）
+2. **7 种 AI 后端**：Happy/Yep Anywhere 只有 2 种，Claude Dispatch/Remote 只有 1 种。ClawBench 支持 CodeBuddy、Claude Code、OpenCode、Gemini CLI、Codex、Qoder CLI、VeCLI，覆盖最广。（注：Operit 支持 10+ 后端但以 API 调用为主，ClawBench 是唯一支持 CLI Agent 的多后端工作台）
 
 3. **不依赖电脑在线**：Happy/Dispatch/Remote/AnyCoding/AI Agent Remote/Yep Anywhere 都需要电脑在线运行 CLI。ClawBench 部署在服务器上，手机随时连上就用，服务器挂机即可。
 
@@ -233,7 +233,7 @@ GitHub 官方 AI 编程助手，支持移动端。
 
 7. **SSH 隧道端口转发**：内嵌 SSH 服务器，Android App 可直接访问服务器上任意端口。其他产品均无此能力。
 
-8. **TTS 语音合成**：5 种引擎 + 8 种总结后端，AI 回复自动朗读。竞品均无。
+8. **TTS 语音合成**：5 种引擎 + 10 种总结后端，AI 回复自动朗读。竞品均无。
 
 9. **跨平台访问**：浏览器 + Android WebView 双端，任何设备都能访问。Operit 仅限 Android 原生 App，AnyCoding 仅限 Android App，AI Agent Remote 仅限浏览器终端。
 

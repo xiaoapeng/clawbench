@@ -220,7 +220,7 @@ GitHub's official AI programming assistant, with mobile support.
 
 1. **The only full-featured mobile workstation**: All other products are "remote controllers" — they remotely control sessions on a PC. ClawBench itself is a complete development environment: files, code, Git, AI, scheduled tasks, TTS, media preview — get work done directly on your phone.
 
-2. **5 AI backends**: Happy/Yep Anywhere has only 2, Claude Dispatch/Remote has only 1. ClawBench supports CodeBuddy, Claude Code, OpenCode, Gemini CLI, and Codex — the broadest coverage. (Note: Operit supports 10+ backends but primarily via API calls; ClawBench is the only multi-backend workstation supporting CLI Agents)
+2. **7 AI backends**: Happy/Yep Anywhere has only 2, Claude Dispatch/Remote has only 1. ClawBench supports CodeBuddy, Claude Code, OpenCode, Gemini CLI, Codex, Qoder CLI, and VeCLI — the broadest coverage. (Note: Operit supports 10+ backends but primarily via API calls; ClawBench is the only multi-backend workstation supporting CLI Agents)
 
 3. **No dependency on PC being online**: Happy/Dispatch/Remote/AnyCoding/AI Agent Remote/Yep Anywhere all require a PC online running the CLI. ClawBench is deployed on a server — connect from your phone anytime; just leave the server running.
 
@@ -232,7 +232,7 @@ GitHub's official AI programming assistant, with mobile support.
 
 7. **SSH tunnel port forwarding**: Built-in SSH server; the Android App can directly access any port on the server. No other product offers this capability.
 
-8. **TTS speech synthesis**: 5 engines + 8 summarization backends, automatic reading of AI responses. No competitor has this.
+8. **TTS speech synthesis**: 5 engines + 10 summarization backends, automatic reading of AI responses. No competitor has this.
 
 9. **Cross-platform access**: Browser + Android WebView dual client, accessible from any device. Operit is limited to Android native App, AnyCoding to Android App, AI Agent Remote to browser terminal only.
 
