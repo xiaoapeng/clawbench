@@ -56,3 +56,4 @@ android/local.properties
 *.jks
 clawbench-release
 .playwright-cli/
+config/config.yaml

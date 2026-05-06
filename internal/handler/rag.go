@@ -42,6 +42,11 @@ func RAGSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if ragGlobalStore == nil || ragGlobalEmbedder == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "RAG is not enabled"})
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 

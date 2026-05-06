@@ -209,10 +209,9 @@ func (s *Store) CheckDimensionMismatch(expectedDim int) (int, bool, error) {
 	err := s.db.QueryRow(`
 		SELECT CASE
 			WHEN COUNT(*) = 0 THEN 0
-			ELSE array_length(embedding)
+			ELSE ANY_VALUE(array_length(embedding))
 		END
 		FROM chat_chunks
-		LIMIT 1
 	`).Scan(&dim)
 	if err != nil {
 		return 0, false, fmt.Errorf("check dimension: %w", err)
