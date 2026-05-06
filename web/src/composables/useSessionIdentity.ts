@@ -14,6 +14,8 @@ const currentSessionId = ref('')
 const currentSessionTitle = ref('')
 const currentBackend = ref('')
 const currentAgentId = ref('')
+const currentModelId = ref('')
+const currentModelName = ref('')
 const runningSessions = ref(new Set<string>())
 
 // ───────────────────────────────────────────────────────────
@@ -71,6 +73,11 @@ export async function initSessionFromAPI() {
         currentSessionTitle.value = data.sessionTitle || ''
         currentBackend.value = data.backend || ''
         currentAgentId.value = data.agentId || ''
+        // Initialize model from agent default
+        currentModelId.value = agents.getDefaultModelId(data.agentId || '')
+        const models = agents.getAgentModels(data.agentId || '')
+        const defaultModel = models.find(m => m.id === currentModelId.value)
+        currentModelName.value = defaultModel?.name || currentModelId.value
       }
     }
   } catch (_) {
@@ -128,6 +135,11 @@ export function useSessionIdentity() {
         currentSessionTitle.value = data.title || ''
         currentBackend.value = data.backend || ''
         currentAgentId.value = data.agentId || agentId || ''
+        // Initialize model from agent default
+        currentModelId.value = agents.getDefaultModelId(currentAgentId.value)
+        const models = agents.getAgentModels(currentAgentId.value)
+        const defaultModel = models.find(m => m.id === currentModelId.value)
+        currentModelName.value = defaultModel?.name || currentModelId.value
       }
     } catch (err) {
       console.error('Failed to create session:', err)
@@ -173,7 +185,7 @@ export function useSessionIdentity() {
       await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text, filePaths: filePaths || [] }),
+        body: JSON.stringify({ message: text, filePaths: filePaths || [], modelId: currentModelId.value || undefined }),
       })
     } catch (err) {
       console.error('Failed to send message:', err)
@@ -196,6 +208,8 @@ export function useSessionIdentity() {
     currentSessionTitle,
     currentBackend,
     currentAgentId,
+    currentModelId,
+    currentModelName,
     runningSessions,
     agentHeaderTitle,
     // Action proxies

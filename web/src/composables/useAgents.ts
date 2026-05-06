@@ -41,6 +41,26 @@ function isDefaultAgent(agentId: string): boolean {
     return agentId === defaultAgentId.value
 }
 
+/** Get the default model ID for an agent (first model with default:true, or first in list). */
+function getDefaultModelId(agentId: string): string {
+    const agent = agents.value.find(a => a.id === agentId)
+    if (!agent?.models?.length) return ''
+    const defaultModel = agent.models.find(m => m.default)
+    return defaultModel ? defaultModel.id : agent.models[0].id
+}
+
+/** Get the models list for an agent. */
+function getAgentModels(agentId: string): { id: string; name: string; default: boolean }[] {
+    const agent = agents.value.find(a => a.id === agentId)
+    return agent?.models || []
+}
+
+/** Check if an agent has multiple models (show model switcher chip). */
+function isMultiModel(agentId: string): boolean {
+    const agent = agents.value.find(a => a.id === agentId)
+    return (agent?.models?.length || 0) > 1
+}
+
 export function useAgents() {
     return {
         agents,
@@ -49,5 +69,8 @@ export function useAgents() {
         getAgentIcon,
         getAgentName,
         isDefaultAgent,
+        getDefaultModelId,
+        getAgentModels,
+        isMultiModel,
     }
 }

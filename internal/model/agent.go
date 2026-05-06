@@ -10,16 +10,37 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Agent represents an AI agent with its own system prompt, backend, and model.
+// AgentModel represents a model option for an agent.
+type AgentModel struct {
+	ID      string `yaml:"id" json:"id"`
+	Name    string `yaml:"name" json:"name"`
+	Default bool   `yaml:"default" json:"default"`
+}
+
+// Agent represents an AI agent with its own system prompt, backend, and models.
 type Agent struct {
-	ID           string `yaml:"id" json:"id"`
-	Name         string `yaml:"name" json:"name"`
-	Icon         string `yaml:"icon" json:"icon"`
-	Specialty    string `yaml:"specialty" json:"specialty"`
-	Backend      string `yaml:"backend" json:"backend"`
-	Model        string `yaml:"model" json:"model"`
-	Command      string `yaml:"command" json:"command"`           // optional: custom command path for the AI backend CLI
-	SystemPrompt string `yaml:"system_prompt" json:"systemPrompt"`
+	ID           string       `yaml:"id" json:"id"`
+	Name         string       `yaml:"name" json:"name"`
+	Icon         string       `yaml:"icon" json:"icon"`
+	Specialty    string       `yaml:"specialty" json:"specialty"`
+	Backend      string       `yaml:"backend" json:"backend"`
+	Models       []AgentModel `yaml:"models" json:"models"`
+	Command      string       `yaml:"command" json:"command"`           // optional: custom command path for the AI backend CLI
+	SystemPrompt string       `yaml:"system_prompt" json:"systemPrompt"`
+}
+
+// DefaultModelID returns the default model ID for this agent.
+// Returns the first model with Default:true, or the first model in the list, or empty string.
+func (a *Agent) DefaultModelID() string {
+	for _, m := range a.Models {
+		if m.Default {
+			return m.ID
+		}
+	}
+	if len(a.Models) > 0 {
+		return a.Models[0].ID
+	}
+	return ""
 }
 
 var (

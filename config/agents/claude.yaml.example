@@ -14,7 +14,10 @@ name: Claude
 icon: 🛠️
 specialty: Claude 驱动的通用助手
 backend: claude
-model: claude-sonnet-4-6
+models:
+  - id: claude-sonnet-4-6
+    name: Claude Sonnet 4.6
+    default: true
 system_prompt: |
   You are a versatile assistant powered by Claude, capable of handling code, documentation, operations, research, and various tasks.
 

@@ -121,7 +121,7 @@ backend: claude
 
 func TestLoadAgents_AvailableAgentsPlaceholder(t *testing.T) {
 	dir := t.TempDir()
-	yaml1 := "id: assistant\nname: Assistant\nicon: \"A\"\nspecialty: General\nbackend: codebuddy\nsystem_prompt: \"You are assistant. Available agents: {{AVAILABLE_AGENTS}}\"\n"
+	yaml1 := "id: codebuddy\nname: CodeBuddy\nicon: \"A\"\nspecialty: General\nbackend: codebuddy\nsystem_prompt: \"You are codebuddy. Available agents: {{AVAILABLE_AGENTS}}\"\n"
 	yaml2 := `id: coder
 name: Coder
 icon: "C"
@@ -129,16 +129,16 @@ specialty: Code
 backend: claude
 system_prompt: You are coder.
 `
-	os.WriteFile(filepath.Join(dir, "assistant.yaml"), []byte(yaml1), 0644)
+	os.WriteFile(filepath.Join(dir, "codebuddy.yaml"), []byte(yaml1), 0644)
 	os.WriteFile(filepath.Join(dir, "coder.yaml"), []byte(yaml2), 0644)
 
-	// Set DefaultAgentID so assistant is excluded from {{AVAILABLE_AGENTS}}
-	model.DefaultAgentID = "assistant"
+	// Set DefaultAgentID so codebuddy is excluded from {{AVAILABLE_AGENTS}}
+	model.DefaultAgentID = "codebuddy"
 	t.Cleanup(func() { model.DefaultAgentID = "" })
 
 	err := model.LoadAgents(dir)
 	assert.NoError(t, err)
-	agent := model.Agents["assistant"]
+	agent := model.Agents["codebuddy"]
 	require.NotNil(t, agent)
 	assert.NotContains(t, agent.SystemPrompt, "{{AVAILABLE_AGENTS}}")
 	assert.Contains(t, agent.SystemPrompt, "coder")
@@ -173,8 +173,8 @@ func TestGetDefaultAgentID_Configured(t *testing.T) {
 
 func TestGetDefaultAgentID_ConfiguredNotFound(t *testing.T) {
 	model.DefaultAgentID = "nonexistent"
-	model.Agents = map[string]*model.Agent{"assistant": {ID: "assistant"}}
-	model.AgentList = []*model.Agent{{ID: "assistant"}}
+	model.Agents = map[string]*model.Agent{"codebuddy": {ID: "codebuddy"}}
+	model.AgentList = []*model.Agent{{ID: "codebuddy"}}
 	t.Cleanup(func() {
 		model.DefaultAgentID = ""
 		model.Agents = nil
@@ -182,7 +182,7 @@ func TestGetDefaultAgentID_ConfiguredNotFound(t *testing.T) {
 	})
 
 	// Configured agent not found, fallback to first in list
-	assert.Equal(t, "assistant", model.GetDefaultAgentID())
+	assert.Equal(t, "codebuddy", model.GetDefaultAgentID())
 }
 
 func TestGetDefaultAgentID_FallbackFirst(t *testing.T) {

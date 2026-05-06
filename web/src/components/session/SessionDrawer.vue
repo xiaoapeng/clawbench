@@ -66,7 +66,7 @@
           <span class="agent-option-specialty">{{ agent.specialty }}</span>
           <div class="agent-option-tags">
             <span class="agent-tag backend-tag">{{ agent.backend }}</span>
-            <span v-if="agent.model" class="agent-tag model-tag">{{ agent.model }}</span>
+            <span v-if="agentDefaultModelName(agent.id)" class="agent-tag model-tag">{{ agentDefaultModelName(agent.id) }}</span>
           </div>
         </div>
       </button>
@@ -98,7 +98,16 @@ const emit = defineEmits(['close', 'select', 'create', 'delete'])
 const bottomSheetRef = ref(null)
 const sessions = ref([])
 const loading = ref(false)
-const { agents, loadAgents, getAgentIcon, getAgentName, isDefaultAgent } = useAgents()
+const { agents, loadAgents, getAgentIcon, getAgentName, isDefaultAgent, getDefaultModelId } = useAgents()
+
+/** Get the display name of an agent's default model. */
+function agentDefaultModelName(agentId) {
+  const agent = agents.value.find(a => a.id === agentId)
+  if (!agent?.models?.length) return ''
+  const modelId = getDefaultModelId(agentId)
+  const model = agent.models.find(m => m.id === modelId)
+  return model?.name || modelId
+}
 const selectedAgentId = ref('')
 const showAgentSelector = ref(false)
 // Guard against accidental clicks right after opening the agent selector

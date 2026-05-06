@@ -261,7 +261,7 @@ func (s *Scheduler) executeTask(task *model.ScheduledTask, projectPath string, t
 		SessionID:          "", // no session — standalone execution
 		WorkDir:            projectPath,
 		SystemPrompt:       agent.SystemPrompt,
-		Model:              agent.Model,
+		Model:              agent.DefaultModelID(),
 		Command:            agent.Command,
 		AgentID:            task.AgentID,
 		Resume:             false,

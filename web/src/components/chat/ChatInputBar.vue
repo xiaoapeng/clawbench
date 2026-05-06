@@ -3,11 +3,13 @@
     <!-- Top action bar (above input box) -->
     <div class="chat-top-actions">
       <div class="chat-action-group">
+        <span class="chat-group-label" :title="t('chat.actions.session')">
+          <MessageSquare :size="12" />
+        </span>
         <button class="chat-action-btn" :class="{ 'has-unread': chatUnread, 'has-running': chatRunning && !chatUnread }"
           @click="$emit('open-session-tab', 'sessions')"
           :title="t('chat.actions.session')">
-          <MessageSquare :size="14" />
-          <span class="chat-action-label">{{ t('chat.actions.session') }}</span>
+          <List :size="14" />
         </button>
         <button class="chat-action-btn"
           @click="handleCreateClick"
@@ -18,26 +20,28 @@
           @contextmenu.prevent="onCreateContextMenu"
           :title="t('chat.create.selectAgentOrLongPress')">
           <Plus :size="14" />
-          <span class="chat-action-label">{{ t('chat.actions.newSession') }}</span>
         </button>
         <button class="chat-action-btn chat-action-btn-delete" :class="{ disabled: !currentSessionId }"
           @click="handleDelete"
           :title="currentSessionId ? t('chat.actions.deleteCurrentSession') : t('chat.actions.noSessionToDelete')">
           <Trash2 :size="14" />
-          <span class="chat-action-label">{{ t('chat.actions.deleteSession') }}</span>
         </button>
       </div>
       <button class="chat-action-btn" :class="{ 'has-unread': taskUnread }"
         @click="$emit('open-session-tab', 'tasks')"
         :title="t('chat.actions.scheduledTasks')">
-        <Clock :size="14" />
-        <span class="chat-action-label">{{ t('chat.actions.scheduled') }}</span>
+        <Calendar :size="14" />
       </button>
       <button class="chat-action-btn" :class="{ active: autoSpeechEnabled }"
         @click="$emit('toggle-auto-speech')"
         :title="t('chat.actions.autoSpeech')">
         <Volume2 :size="14" />
-        <span class="chat-action-label">{{ t('chat.actions.readAloud') }}</span>
+      </button>
+      <!-- Model switcher chip (only for multi-model agents) -->
+      <button v-if="showModelChip" class="chat-action-btn model-chip" @click.stop="toggleModelMenu" :title="t('chat.actions.switchModel')">
+        <Cpu :size="14" />
+        <span class="chat-action-label">{{ currentModelName }}</span>
+        <ChevronDown :size="10" />
       </button>
     </div>
     <!-- Input container -->
@@ -137,6 +141,17 @@
           </button>
         </div>
       </Teleport>
+      <!-- Teleported model switcher menu -->
+      <Teleport to="body">
+        <div v-if="showModelMenu" class="model-menu" :style="modelMenuStyle" @click.stop>
+          <div class="model-menu-title">{{ t('chat.modelSwitcher.title') }}</div>
+          <button v-for="m in agentModels" :key="m.id" class="model-menu-item" :class="{ active: m.id === currentModelId }" @click="selectModel(m)">
+            <Check v-if="m.id === currentModelId" :size="14" />
+            <span v-else class="model-menu-check-spacer"></span>
+            <span>{{ m.name }}</span>
+          </button>
+        </div>
+      </Teleport>
     </div>
   </div>
 </template>
@@ -144,7 +159,7 @@
 <script setup>
 import { ref, computed, nextTick, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { MessageSquare, Plus, Trash2, Clock, Volume2, Upload, Paperclip, FileImage, FileText, XCircle, Inbox, Send, Square } from 'lucide-vue-next'
+import { MessageSquare, List, Plus, Trash2, Calendar, Volume2, Upload, Paperclip, FileImage, FileText, XCircle, Inbox, Send, Square, Cpu, ChevronDown, Check } from 'lucide-vue-next'
 import { baseName } from '@/utils/path.ts'
 
 const { t } = useI18n()
@@ -162,6 +177,10 @@ const props = defineProps({
   chatRunning: Boolean,
   taskUnread: Boolean,
   quickSend: { type: Object, default: () => ({}) },
+  currentModelId: String,
+  currentModelName: String,
+  agentModels: { type: Array, default: () => [] },
+  showModelChip: Boolean,
 })
 
 const emit = defineEmits([
@@ -178,6 +197,7 @@ const emit = defineEmits([
   'create-session',
   'show-agent-selector',
   'delete-session',
+  'switch-model',
 ])
 
 const inputText = ref('')
@@ -190,6 +210,8 @@ const attachMenuRef = ref(null)
 const menuStyle = ref({})
 const showQuickMenu = ref(false)
 const quickMenuStyle = ref({})
+const showModelMenu = ref(false)
+const modelMenuStyle = ref({})
 
 // Stop button two-click confirmation state
 const stopPrimed = ref(false)
@@ -464,6 +486,28 @@ function toggleQuickMenu() {
   showQuickMenu.value = true
 }
 
+function toggleModelMenu() {
+  if (showModelMenu.value) {
+    showModelMenu.value = false
+    return
+  }
+  const chipEl = document.querySelector('.model-chip')
+  if (chipEl) {
+    const rect = chipEl.getBoundingClientRect()
+    modelMenuStyle.value = {
+      position: 'fixed',
+      bottom: `${window.innerHeight - rect.top + 4}px`,
+      left: `${rect.left}px`,
+    }
+  }
+  showModelMenu.value = true
+}
+
+function selectModel(model) {
+  showModelMenu.value = false
+  emit('switch-model', model)
+}
+
 // Close menu on outside click
 function handleClickOutside(e) {
   // The teleported menu is outside attachMenuRef, so check both
@@ -474,6 +518,9 @@ function handleClickOutside(e) {
   const quickMenuEl = document.querySelector('.quick-send-menu')
   if (quickMenuEl && quickMenuEl.contains(e.target)) return
   showQuickMenu.value = false
+  const modelMenuEl = document.querySelector('.model-menu')
+  if (modelMenuEl && modelMenuEl.contains(e.target)) return
+  showModelMenu.value = false
 }
 
 onMounted(() => {
@@ -539,7 +586,19 @@ defineExpose({
 }
 
 .chat-action-group .chat-action-btn:first-child {
-    border-radius: 999px 0 0 999px;
+    border-radius: 0;
+}
+
+/* Group label: subtle icon identifying the button group */
+.chat-group-label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 5px 0 7px;
+    color: var(--text-muted, #999);
+    opacity: 0.5;
+    pointer-events: none;
+    user-select: none;
 }
 
 .chat-action-group .chat-action-btn:last-child {
@@ -1113,5 +1172,80 @@ defineExpose({
 @keyframes stop-heartbeat {
   0%, 100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.5); }
   50%      { box-shadow: 0 0 0 8px rgba(220, 53, 69, 0); }
+}
+
+/* Model switcher chip */
+.model-chip {
+  font-variant-numeric: tabular-nums;
+}
+
+.model-chip .chat-action-label {
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Model switcher menu (teleported to body) */
+.model-menu {
+  position: fixed;
+  background: var(--bg-secondary, #fff);
+  border: 1px solid var(--border-color, #e5e5e5);
+  border-radius: 8px;
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.12);
+  z-index: 9999;
+  min-width: 140px;
+  max-width: 220px;
+  padding: 3px 0;
+}
+
+.model-menu-title {
+  padding: 4px 10px 1px;
+  font-size: 10px;
+  color: var(--text-muted, #999);
+  font-weight: 500;
+  letter-spacing: 0.3px;
+}
+
+.model-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  width: 100%;
+  border: none;
+  background: none;
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.model-menu-item:hover {
+  background: var(--accent-color, #0066cc);
+  color: #fff;
+}
+
+.model-menu-item.active {
+  color: var(--accent-color, #0066cc);
+  font-weight: 500;
+}
+
+.model-menu-item.active:hover {
+  color: #fff;
+}
+
+.model-menu-item svg {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+}
+
+.model-menu-check-spacer {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
 }
 </style>

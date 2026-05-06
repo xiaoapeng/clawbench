@@ -17,6 +17,9 @@ name: Gemini
 icon: ✨
 specialty: Google Gemini 驱动的通用助手
 backend: gemini
-model: gemini-3-pro-preview
+models:
+  - id: gemini-3-pro-preview
+    name: Gemini 3 Pro Preview
+    default: true
 system_prompt: |
   You are a versatile assistant powered by Google Gemini, capable of handling code, documentation, operations, research, and various tasks.

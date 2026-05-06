@@ -82,10 +82,14 @@ export default {
       scheduled: '定时',
       autoSpeech: '自动朗读',
       readAloud: '朗读',
+      switchModel: '切换模型',
       attachment: '附件',
     },
     create: {
       selectAgentOrLongPress: '选择智能体（长按直接新建）',
+    },
+    modelSwitcher: {
+      title: '选择模型',
     },
     attach: {
       currentFile: '当前文件',

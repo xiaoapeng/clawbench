@@ -205,7 +205,7 @@ tts:
 # Default agent (optional; leave empty to use the first agent in config/agents/ directory)
 # 默认智能体（可选，留空则使用 config/agents/ 目录下的第一个智能体）
 # Available agents depend on your config/agents/ directory / 可用智能体取决于 config/agents/ 目录
-default_agent: "assistant"
+default_agent: "codebuddy"
 
 # Logging configuration (optional) / 日志配置（可选）
 # Default: .clawbench/logs under the binary directory / 默认：二进制同级目录下的 .clawbench/logs/

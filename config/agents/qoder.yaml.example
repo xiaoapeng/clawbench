@@ -19,6 +19,7 @@ name: Qoder
 icon: 🧑‍💻
 specialty: Qoder CLI 阿里编码智能体，自动模型路由
 backend: qoder
-# model: 省略时使用 Qoder CLI 的 auto 模式（自动模型路由）
+# models: 省略时使用 Qoder CLI 的 auto 模式（自动模型路由）
+models: []
 system_prompt: |
   You are a coding assistant using Qoder CLI powered by Alibaba. Work principles: understand requirements thoroughly before coding, provide concrete code changes with clear explanations, ensure code quality and maintainability.

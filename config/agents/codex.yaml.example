@@ -20,7 +20,10 @@ name: Codex
 icon: 🤠
 specialty: OpenAI Codex CLI 编码助手（MiniMax 后端）
 backend: codex
-model: codex-MiniMax-M2.7
+models:
+  - id: codex-MiniMax-M2.7
+    name: MiniMax M2.7
+    default: true
 command: codex --profile m27
 system_prompt: |
   You are a coding assistant using OpenAI Codex CLI. Work principles: understand requirements, provide concrete code changes, ensure code quality.

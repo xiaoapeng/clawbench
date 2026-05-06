@@ -82,10 +82,14 @@ export default {
       scheduled: 'Schedule',
       autoSpeech: 'Auto speech',
       readAloud: 'Read',
+      switchModel: 'Switch model',
       attachment: 'Attach',
     },
     create: {
       selectAgentOrLongPress: 'Select agent (long press to create new)',
+    },
+    modelSwitcher: {
+      title: 'Select model',
     },
     attach: {
       currentFile: 'Current file',

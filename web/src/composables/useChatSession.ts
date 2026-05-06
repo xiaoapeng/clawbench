@@ -55,10 +55,19 @@ export function useChatSession(options: UseChatSessionOptions) {
 
   // ── Identity refs from singleton ──
   const identity = useSessionIdentity()
-  const { currentSessionTitle, currentBackend, currentAgentId, runningSessions } = identity
+  const { currentSessionTitle, currentBackend, currentAgentId, currentModelId, currentModelName, runningSessions } = identity
 
   // ── Agents from singleton ──
-  const { agents, loadAgents, getAgentIcon, getAgentName } = useAgents()
+  const { agents, loadAgents, getAgentIcon, getAgentName, getDefaultModelId } = useAgents()
+
+  // Helper: sync model state from agent config when agent changes
+  function syncModelFromAgent(agentId) {
+    const modelId = getDefaultModelId(agentId)
+    currentModelId.value = modelId
+    const agent = agents.value.find(a => a.id === agentId)
+    const model = agent?.models?.find(m => m.id === modelId)
+    currentModelName.value = model?.name || modelId
+  }
 
   // Switching state — true while a session switch is in progress (distinct from
   // "loading" which means "AI is generating"). Used to show a fade/placeholder
@@ -160,6 +169,7 @@ export function useChatSession(options: UseChatSessionOptions) {
       currentSessionTitle.value = data.sessionTitle || ''
       currentBackend.value = data.backend || ''
       currentAgentId.value = data.agentId || ''
+      syncModelFromAgent(currentAgentId.value)
       onExtractScheduleProposals(messages.value)
       onRenderUpdate(true)
       if (data.running) {
@@ -245,6 +255,7 @@ export function useChatSession(options: UseChatSessionOptions) {
       currentSessionTitle.value = data.sessionTitle || ''
       currentBackend.value = data.backend || ''
       currentAgentId.value = data.agentId || ''
+      syncModelFromAgent(currentAgentId.value)
       onExtractScheduleProposals(messages.value)
       onRenderUpdate(true)
       onScrollBottom(true)
@@ -288,6 +299,7 @@ export function useChatSession(options: UseChatSessionOptions) {
       currentSessionTitle.value = data.title || ''
       currentBackend.value = data.backend || ''
       currentAgentId.value = data.agentId || agentId || ''
+      syncModelFromAgent(currentAgentId.value)
       messages.value = []
       totalMessages.value = 0
       lastMessageSnapshot = ''  // New session — no messages yet

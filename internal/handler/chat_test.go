@@ -584,7 +584,7 @@ func TestServeSessions_Post_CustomTitleAndBackend(t *testing.T) {
 	body := map[string]string{
 		"title":   "My Custom Session",
 		"backend": "claude",
-		"agentId": "handyman",
+		"agentId": "claude",
 	}
 	req := newRequest(t, http.MethodPost, "/api/ai/sessions", body)
 	withProjectCookie(req, env.ProjectDir)

@@ -104,7 +104,7 @@ func validateAndResolvePath(w http.ResponseWriter, r *http.Request, basePath, re
 }
 
 // resolveAgentConfig resolves agent configuration from model.Agents.
-// Returns (backend, agentModel, systemPrompt, command, ok).
+// Returns (backend, defaultModelID, systemPrompt, command, ok).
 func resolveAgentConfig(agentID string) (string, string, string, string, bool) {
 	if agentID == "" {
 		agentID = model.GetDefaultAgentID()
@@ -116,7 +116,7 @@ func resolveAgentConfig(agentID string) (string, string, string, string, bool) {
 	if !found {
 		return "", "", "", "", false
 	}
-	return agent.Backend, agent.Model, agent.SystemPrompt, agent.Command, true
+	return agent.Backend, agent.DefaultModelID(), agent.SystemPrompt, agent.Command, true
 }
 
 // requireSessionID extracts session ID from query param or cookie.

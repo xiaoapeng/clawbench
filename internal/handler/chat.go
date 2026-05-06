@@ -189,6 +189,7 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 		FilePaths []string `json:"filePaths"`
 		Files     []string `json:"files"`
 		AgentID   string   `json:"agentId"`
+		ModelID   string   `json:"modelId"`
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxChatBodySize)
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -329,7 +330,7 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 		defer service.UnregisterSessionCancel(sessionID)
 
 		// Build the first chat request
-		firstChatReq := buildChatRequest(prompt, sessionID, backendName, effectiveAgentID, fileDir)
+		firstChatReq := buildChatRequest(prompt, sessionID, backendName, effectiveAgentID, req.ModelID, fileDir)
 
 		// Execute first message
 		result := executeStreamRun(ctx, r, streamCh, projectPath, sessionID, backendName, effectiveAgentID, firstChatReq, fileDir)
@@ -740,7 +741,8 @@ saveRaw:
 }
 
 // buildChatRequest constructs an ai.ChatRequest from the given parameters.
-func buildChatRequest(prompt, sessionID, backendName, agentID, fileDir string) ai.ChatRequest {
+// modelOverride, if non-empty, takes precedence over the agent's default model.
+func buildChatRequest(prompt, sessionID, backendName, agentID, modelOverride, fileDir string) ai.ChatRequest {
 	systemPrompt := ""
 	agentModel := ""
 	agentCommand := ""
@@ -750,8 +752,10 @@ func buildChatRequest(prompt, sessionID, backendName, agentID, fileDir string) a
 	}
 	if agent, ok := model.Agents[agentID]; ok {
 		systemPrompt = agent.SystemPrompt
-		if agent.Model != "" {
-			agentModel = agent.Model
+		if modelOverride != "" {
+			agentModel = modelOverride
+		} else if defaultID := agent.DefaultModelID(); defaultID != "" {
+			agentModel = defaultID
 		}
 		if agent.Command != "" {
 			agentCommand = agent.Command
@@ -797,7 +801,7 @@ func buildChatRequestFromQueue(qMsg model.QueuedMessage, sessionID, projectPath,
 		prompt = fmt.Sprintf("[User uploaded %d file(s): %s]\n%s", len(qMsg.Files), strings.Join(qMsg.Files, ", "), prompt)
 	}
 
-	return buildChatRequest(prompt, sessionID, backendName, agentID, fileDir)
+	return buildChatRequest(prompt, sessionID, backendName, agentID, "", fileDir)
 }
 
 // CancelChat handles POST to cancel an ongoing AI stream for a session.

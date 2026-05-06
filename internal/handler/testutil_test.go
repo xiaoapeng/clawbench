@@ -139,10 +139,10 @@ func setupTestEnv(t *testing.T) (*testEnv, func()) {
 
 	// Register mock agents so GetDefaultAgentID() works
 	model.Agents = map[string]*model.Agent{
-		"assistant": {ID: "assistant", Name: "Test", Backend: "codebuddy", Model: "glm-5.1"},
-		"handyman":  {ID: "handyman", Name: "Handyman", Backend: "claude", Model: "claude-sonnet-4-6"},
+		"codebuddy": {ID: "codebuddy", Name: "Test", Backend: "codebuddy", Models: []model.AgentModel{{ID: "glm-5.1", Name: "GLM 5.1", Default: true}}},
+		"claude":  {ID: "claude", Name: "Claude", Backend: "claude", Models: []model.AgentModel{{ID: "claude-sonnet-4-6", Name: "Claude Sonnet", Default: true}}},
 	}
-	model.AgentList = []*model.Agent{model.Agents["assistant"], model.Agents["handyman"]}
+	model.AgentList = []*model.Agent{model.Agents["codebuddy"], model.Agents["claude"]}
 
 	env := &testEnv{
 		ProjectDir: projectDir,

@@ -77,6 +77,10 @@
       :chatRunning="store.state.chatRunning"
       :taskUnread="store.state.taskUnread"
       :quickSend="store.state.chatQuickSend"
+      :currentModelId="identity.currentModelId.value"
+      :currentModelName="identity.currentModelName.value"
+      :agentModels="agents.getAgentModels(identity.currentAgentId.value)"
+      :showModelChip="agents.isMultiModel(identity.currentAgentId.value)"
       @send="sendMessage"
       @cancel="stream.cancelStream"
       @file-select="handleFileSelect"
@@ -90,6 +94,7 @@
       @create-session="manager.createSession"
       @show-agent-selector="handleShowAgentSelector"
       @delete-session="(id) => manager.deleteCurrentSession((draftId) => inputBarRef.value?.deleteDraft(draftId))"
+      @switch-model="handleSwitchModel"
     />
 
   </BottomSheet>
@@ -173,7 +178,10 @@ const emit = defineEmits(['close', 'open', 'message'])
 
 // ── Singletons ──
 const identity = useSessionIdentity()
-const { agents: agentsList, getAgentIcon, getAgentName } = useAgents()
+const agentsComposable = useAgents()
+const { agents: agentsList, getAgentIcon, getAgentName, getAgentModels, isMultiModel, getDefaultModelId } = agentsComposable
+// Expose as `agents` for template access to getAgentModels/isMultiModel
+const agents = agentsComposable
 
 const messages = ref([])
 const inputDisabled = ref(false)
@@ -419,6 +427,11 @@ function handleShowAgentSelector() {
   sessionDrawerRef.value?.openAgentSelector()
 }
 
+function handleSwitchModel(model) {
+  identity.currentModelId.value = model.id
+  identity.currentModelName.value = model.name
+}
+
 async function sendMessage(text, extraFilePaths) {
     const inputText = text !== undefined ? text : (inputBarRef.value?.inputText?.trim() || '')
     const hasFiles = pendingFiles.value.length > 0 || attachedFiles.value.length > 0
@@ -469,7 +482,7 @@ async function sendMessageNow(text, filePaths, files) {
         const resp = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: text, filePaths, files: files || [], agentId: effectiveAgentId }),
+            body: JSON.stringify({ message: text, filePaths, files: files || [], agentId: effectiveAgentId, modelId: identity.currentModelId.value || undefined }),
         })
         const data = await resp.json()
         if (!resp.ok) {
