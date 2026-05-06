@@ -67,6 +67,7 @@ specialty: 复杂编码、架构设计、代码重构
 #   - "opencode"   → OpenCode CLI
 #   - "gemini"     → Gemini CLI (Google Gemini)
 #   - "codex"      → OpenAI Codex CLI
+#   - "qoder"      → Qoder CLI (Alibaba), supports AutoResume (same as claude), auto model routing
 backend: claude
 
 # ----- Optional Fields / 可选字段 -----
@@ -83,6 +84,7 @@ backend: claude
 #   backend=opencode  → "opencode/minimax-m2.5-free", "minimax-cn/MiniMax-M2.7"
 #   backend=gemini    → "gemini-3.1-pro"
 #   backend=codex     → "gpt-5.4"
+#   backend=qoder     → "auto" (default, auto-routing), or specific model names
 model: claude-sonnet-4-6
 
 # system_prompt [string, optional]

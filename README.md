@@ -14,7 +14,7 @@
 
 
 - **支持平台**：浏览器（PC / 平板 / 手机）、Android App、PWA
-- **AI 后端**：CodeBuddy、Claude Code、OpenCode、Gemini CLI、Codex
+- **AI 后端**：CodeBuddy、Claude Code、OpenCode、Gemini CLI、Codex、Qoder CLI
 
 ---
 
@@ -83,6 +83,7 @@ graph LR
     Server -->|CLI 调用 · 流式输出| OC["🤖 OpenCode CLI"]
     Server -->|CLI 调用 · 流式输出| GC["🤖 Gemini CLI"]
     Server -->|CLI 调用 · 流式输出| CX["🤖 Codex CLI"]
+    Server -->|CLI 调用 · 流式输出| QR["🤖 Qoder CLI"]
     Server -->|读写| DB[("💾 SQLite\n会话 · 历史 · 定时任务")]
     CB -->|原生支持| Tools["🔧 工具调用"]
     CB -->|原生支持| Think["🧠 深度思考"]
@@ -104,7 +105,7 @@ graph LR
 
 ### 前置准备
 
-- **一台 PC（Linux / macOS / Windows）**：用于运行 ClawBench 服务端，需已安装至少一种 AI 编程智能体 CLI（CodeBuddy、Claude Code、OpenCode、Gemini CLI、Codex 均可）
+- **一台 PC（Linux / macOS / Windows）**：用于运行 ClawBench 服务端，需已安装至少一种 AI 编程智能体 CLI（CodeBuddy、Claude Code、OpenCode、Gemini CLI、Codex、Qoder CLI 均可）
 - **一台手机**：安装 [ClawBench Android App](https://github.com/xulongzhe/clawbench/releases)，或使用手机浏览器（推荐 Chrome）访问服务端地址
 
 ### 下载与解压
@@ -177,12 +178,12 @@ backend: claude
 ### 🤖 AI 智能体
 - **流式响应**：SSE 实时推送，思维过程、工具调用全程可见
 - **多 Agent 支持**：全能助手、编码专家、勤杂工等，YAML 配置即插即用
-- **AI 后端切换**：CodeBuddy、Claude Code、OpenCode、Gemini CLI、Codex，会话级隔离
+- **AI 后端切换**：CodeBuddy、Claude Code、OpenCode、Gemini CLI、Codex、Qoder CLI，会话级隔离
 - **定时任务**：AI 提案后自动创建 Cron 调度，定时执行
 - **多会话管理**：创建、切换、删除独立会话，滑动切换
 - **图片上传**：支持上传图片与 AI 对话（多模态）
 - **断连保护**：消息立即落库，网络断开不丢失，60 秒超时自动重连（3 次后降级轮询）
-- **自动恢复**：Claude / CodeBuddy 退出 Plan Mode 后自动发送"继续"
+- **自动恢复**：Claude / CodeBuddy / Qoder 退出 Plan Mode 后自动发送"继续"
 - **消息队列**：AI 忙碌时消息排队，依次发送
 
 ### 🤖 AI 对话
