@@ -1,15 +1,20 @@
 package rag
 
 import (
+	"context"
 	"database/sql"
+	"database/sql/driver"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"clawbench/internal/model"
 
+	"github.com/marcboeker/go-duckdb"
 	_ "github.com/marcboeker/go-duckdb"
 )
 
@@ -104,29 +109,70 @@ func (s *Store) InsertChunks(chunks []Chunk) error {
 		return nil
 	}
 
-	tx, err := s.db.Begin()
-	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
+	// Get the current max id for auto-incrementing
+	var maxID int
+	row := s.db.QueryRow("SELECT COALESCE(MAX(id), 0) FROM chat_chunks")
+	if err := row.Scan(&maxID); err != nil {
+		return fmt.Errorf("get max id: %w", err)
 	}
-	defer tx.Rollback()
 
-	stmt, err := tx.Prepare(`
-		INSERT INTO chat_chunks (session_id, message_id, chunk_text, chunk_index, token_count, embedding, project_path, backend, role, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`)
+	// Use DuckDB Appender for FLOAT[1024] array support —
+	// standard sql.Exec cannot serialize []float64 into DuckDB array types.
+	conn, err := s.db.Conn(context.Background())
 	if err != nil {
-		return fmt.Errorf("prepare insert: %w", err)
+		return fmt.Errorf("get conn: %w", err)
 	}
-	defer stmt.Close()
+	defer conn.Close()
 
-	for _, c := range chunks {
-		_, err := stmt.Exec(c.SessionID, c.MessageID, c.ChunkText, c.ChunkIndex, c.TokenCount, c.Embedding, c.ProjectPath, c.Backend, c.Role, c.CreatedAt)
+	var driverConn driver.Conn
+	if err := conn.Raw(func(dc any) error {
+		var ok bool
+		driverConn, ok = dc.(driver.Conn)
+		if !ok {
+			return fmt.Errorf("unexpected driver connection type: %T", dc)
+		}
+		return nil
+	}); err != nil {
+		return fmt.Errorf("raw conn: %w", err)
+	}
+
+	app, err := duckdb.NewAppenderFromConn(driverConn, "main", "chat_chunks")
+	if err != nil {
+		return fmt.Errorf("create appender: %w", err)
+	}
+	defer app.Close()
+
+	for i, c := range chunks {
+		// Convert []float64 to [1024]float64 for DuckDB FLOAT[1024] column
+		var arr [1024]float64
+		copy(arr[:], c.Embedding)
+
+		// id column is included in AppendRow (DuckDB Appender requires all columns)
+		rowID := maxID + i + 1
+
+		err := app.AppendRow(
+			rowID,
+			c.SessionID,
+			c.MessageID,
+			c.ChunkText,
+			c.ChunkIndex,
+			c.TokenCount,
+			arr,
+			c.ProjectPath,
+			c.Backend,
+			c.Role,
+			c.CreatedAt,
+		)
 		if err != nil {
-			return fmt.Errorf("insert chunk (message_id=%d, chunk_index=%d): %w", c.MessageID, c.ChunkIndex, err)
+			return fmt.Errorf("append chunk (message_id=%d, chunk_index=%d): %w", c.MessageID, c.ChunkIndex, err)
 		}
 	}
 
-	return tx.Commit()
+	if err := app.Flush(); err != nil {
+		return fmt.Errorf("flush appender: %w", err)
+	}
+
+	return nil
 }
 
 // SearchSimple performs vector similarity search without JOIN to SQLite
@@ -134,9 +180,13 @@ func (s *Store) InsertChunks(chunks []Chunk) error {
 // sessionID limits results to that session; excludeSessionID excludes that session.
 // role filters by message role ("user" or "assistant") if non-empty.
 func (s *Store) SearchSimple(queryEmbedding []float64, limit int, projectPath, backend, role, sessionID, excludeSessionID, fromTime, toTime string) ([]SearchHit, error) {
-	query := `
+	// Build embedding as SQL array literal since go-duckdb cannot bind []float64
+	// as a parameter for FLOAT[1024] columns.
+	embeddingLiteral := embeddingToSQLArray(queryEmbedding)
+
+	query := fmt.Sprintf(`
 		SELECT chunk_text,
-		       array_cosine_similarity(embedding, ?::FLOAT[1024]) AS score,
+		       array_cosine_similarity(embedding, %s) AS score,
 		       session_id,
 		       message_id,
 		       role,
@@ -145,8 +195,8 @@ func (s *Store) SearchSimple(queryEmbedding []float64, limit int, projectPath, b
 		       created_at
 		FROM chat_chunks
 		WHERE embedding IS NOT NULL
-	`
-	args := []any{queryEmbedding}
+	`, embeddingLiteral)
+	args := []any{}
 
 	if projectPath != "" {
 		query += " AND project_path = ?"
@@ -261,4 +311,19 @@ func (s *Store) RecoverFromCorruption() error {
 	}
 	s.db = db
 	return s.initSchema()
+}
+
+// embeddingToSQLArray converts a float64 slice to a DuckDB array literal string.
+// e.g., [0.1, 0.2, 0.3] → "array[0.1, 0.2, 0.3]::FLOAT[1024]"
+func embeddingToSQLArray(vec []float64) string {
+	var buf strings.Builder
+	buf.WriteString("array[")
+	for i, v := range vec {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		buf.WriteString(strconv.FormatFloat(v, 'f', -1, 64))
+	}
+	buf.WriteString("]::FLOAT[1024]")
+	return buf.String()
 }
