@@ -5,7 +5,6 @@ import (
 	"log/slog"
 
 	"clawbench/internal/model"
-	"clawbench/internal/service"
 )
 
 var (
@@ -46,18 +45,6 @@ func Init(cfg model.RAGConfig) error {
 
 	GlobalStore = store
 	GlobalEmbedder = embedder
-
-	// First-time initialization: mark all existing messages as indexed
-	// so the indexer only processes new messages going forward (no backfill).
-	if !store.IsInitialized() {
-		count, err := service.MarkAllMessagesIndexed()
-		if err != nil {
-			slog.Warn("rag: failed to mark existing messages as indexed", slog.String("err", err.Error()))
-		} else {
-			slog.Info("rag: first-time init, marked existing messages as indexed", slog.Int("count", count))
-			store.SetInitialized()
-		}
-	}
 
 	slog.Info("rag initialized",
 		slog.String("ollama_url", cfg.OllamaBaseURL),

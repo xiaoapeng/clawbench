@@ -420,15 +420,3 @@ func MarkMessageIndexed(messageID int64) error {
 	_, err := DB.Exec("UPDATE chat_history SET indexed = 1 WHERE id = ?", messageID)
 	return err
 }
-
-// MarkAllMessagesIndexed marks all existing messages as indexed.
-// Used on first RAG initialization to prevent backfilling historical data.
-// Returns the number of rows updated.
-func MarkAllMessagesIndexed() (int, error) {
-	result, err := DB.Exec("UPDATE chat_history SET indexed = 1 WHERE indexed = 0")
-	if err != nil {
-		return 0, err
-	}
-	affected, _ := result.RowsAffected()
-	return int(affected), nil
-}
