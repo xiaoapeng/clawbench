@@ -94,6 +94,11 @@ func (s *Store) initSchema() error {
 		CREATE INDEX IF NOT EXISTS idx_chunks_project ON chat_chunks(project_path);
 		CREATE INDEX IF NOT EXISTS idx_chunks_created ON chat_chunks(created_at);
 		CREATE INDEX IF NOT EXISTS idx_chunks_message ON chat_chunks(message_id);
+
+		CREATE TABLE IF NOT EXISTS rag_meta (
+			key TEXT PRIMARY KEY,
+			value TEXT NOT NULL
+		);
 	`)
 	return err
 }
@@ -257,4 +262,23 @@ func (s *Store) RecoverFromCorruption() error {
 	}
 	s.db = db
 	return s.initSchema()
+}
+
+// IsInitialized returns true if RAG has been initialized before
+// (i.e., existing messages have been marked as indexed).
+func (s *Store) IsInitialized() bool {
+	var count int
+	err := s.db.QueryRow("SELECT COUNT(*) FROM rag_meta WHERE key = 'initialized'").Scan(&count)
+	if err != nil {
+		return false
+	}
+	return count > 0
+}
+
+// SetInitialized marks RAG as initialized in the meta table.
+func (s *Store) SetInitialized() {
+	_, err := s.db.Exec("INSERT OR REPLACE INTO rag_meta (key, value) VALUES ('initialized', 'true')")
+	if err != nil {
+		slog.Error("rag: failed to set initialized flag", slog.String("err", err.Error()))
+	}
 }
