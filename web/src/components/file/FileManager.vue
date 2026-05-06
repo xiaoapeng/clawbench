@@ -286,15 +286,26 @@ async function doPaste() {
     ctxMenu.visible = false
     const destDir = getDestDir(ctxMenu.entry)
     const destPath = (destDir ? destDir + '/' : '') + clipboard.entry.name
+    const api = clipboard.isCut ? '/api/file/move' : '/api/file/copy'
     try {
-        const api = clipboard.isCut ? '/api/file/move' : '/api/file/copy'
-        const resp = await fetch(api, {
+        let finalDest = destPath
+        let resp = await fetch(api, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ path: clipboard.entry.path, dest: destPath }),
+            body: JSON.stringify({ path: clipboard.entry.path, dest: finalDest }),
         })
+        // Name conflict: prompt user for a new name
+        if (resp.status === 409) {
+            const newName = await dialog.prompt(t('file.prompt.pasteNewName', { name: clipboard.entry.name }), { value: clipboard.entry.name })
+            if (!newName || !newName.trim()) return
+            finalDest = (destDir ? destDir + '/' : '') + newName.trim()
+            resp = await fetch(api, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: clipboard.entry.path, dest: finalDest }),
+            })
+        }
         if (resp.ok) {
-            // Only clear clipboard after cut (move), not after copy
             if (clipboard.isCut) {
                 clipboard.entry = null
             }

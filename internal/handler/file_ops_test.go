@@ -529,6 +529,66 @@ func TestServeFileCopy(t *testing.T) {
 		w := callHandler(ServeFileCopy, req)
 		assertStatus(t, w, http.StatusInternalServerError)
 	})
+
+	t.Run("DestAlreadyExists_Returns409", func(t *testing.T) {
+		env, teardown := setupTestEnv(t)
+		defer teardown()
+
+		createTestFile(t, env.ProjectDir, "original.txt", "content")
+		createTestFile(t, env.ProjectDir, "original (1).txt", "existing copy")
+
+		req := newRequest(t, http.MethodPost, "/api/file/copy", map[string]string{
+			"path": "original.txt",
+			"dest": "original.txt",
+		})
+		withProjectCookie(req, env.ProjectDir)
+
+		w := callHandler(ServeFileCopy, req)
+		assertStatus(t, w, http.StatusConflict)
+
+		// Original file should remain unchanged
+		data, err := os.ReadFile(filepath.Join(env.ProjectDir, "original.txt"))
+		assert.NoError(t, err)
+		assert.Equal(t, "content", string(data))
+	})
+
+	t.Run("DestDirAlreadyExists_Returns409", func(t *testing.T) {
+		env, teardown := setupTestEnv(t)
+		defer teardown()
+
+		createTestFile(t, env.ProjectDir, "mydir/a.txt", "aaa")
+		createTestFile(t, env.ProjectDir, "mydir-copy/b.txt", "bbb")
+
+		req := newRequest(t, http.MethodPost, "/api/file/copy", map[string]string{
+			"path": "mydir",
+			"dest": "mydir-copy",
+		})
+		withProjectCookie(req, env.ProjectDir)
+
+		w := callHandler(ServeFileCopy, req)
+		assertStatus(t, w, http.StatusConflict)
+	})
+
+	t.Run("CopyToDifferentDir_NoConflict_Succeeds", func(t *testing.T) {
+		env, teardown := setupTestEnv(t)
+		defer teardown()
+
+		createTestFile(t, env.ProjectDir, "src.txt", "content")
+		os.MkdirAll(filepath.Join(env.ProjectDir, "subdir"), 0755)
+
+		req := newRequest(t, http.MethodPost, "/api/file/copy", map[string]string{
+			"path": "src.txt",
+			"dest": "subdir/src.txt",
+		})
+		withProjectCookie(req, env.ProjectDir)
+
+		w := callHandler(ServeFileCopy, req)
+		assertOK(t, w)
+
+		data, err := os.ReadFile(filepath.Join(env.ProjectDir, "subdir", "src.txt"))
+		assert.NoError(t, err)
+		assert.Equal(t, "content", string(data))
+	})
 }
 
 // splitLines splits a string by newline, matching the handler's behavior.

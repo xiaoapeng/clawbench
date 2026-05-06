@@ -351,6 +351,12 @@ func ServeFileCopy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check if destination already exists
+	if _, err := os.Stat(destAbsPath); err == nil {
+		writeLocalizedErrorf(w, r, http.StatusConflict, "FileAlreadyExists")
+		return
+	}
+
 	// Copy file or directory
 	srcInfo, err := os.Stat(srcAbsPath)
 	if err != nil {
@@ -359,10 +365,8 @@ func ServeFileCopy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if srcInfo.IsDir() {
-		// Copy directory recursively
 		err = copyDir(srcAbsPath, destAbsPath)
 	} else {
-		// Copy single file
 		err = copyFile(srcAbsPath, destAbsPath)
 	}
 
