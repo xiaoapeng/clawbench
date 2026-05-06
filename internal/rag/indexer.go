@@ -123,7 +123,7 @@ func (idx *Indexer) indexBatch() {
 	}
 	idx.modelWarn = false // Reset warning flag
 
-	// Fetch unindexed messages from SQLite
+	// Fetch unindexed messages from SQLite (newest first)
 	messages, err := service.GetUnindexedMessages(idx.cfg.BatchSize)
 	if err != nil {
 		slog.Error("rag: failed to fetch unindexed messages", slog.String("err", err.Error()))
@@ -133,12 +133,24 @@ func (idx *Indexer) indexBatch() {
 		return
 	}
 
-	slog.Info("rag: indexing batch", slog.Int("messages", len(messages)))
+	// Get total unindexed count for progress tracking
+	totalRemaining, _ := service.UnindexedCount()
+
+	slog.Info("rag: indexing batch",
+		slog.Int("batch_size", len(messages)),
+		slog.Int("remaining", totalRemaining),
+	)
+
+	batchStart := time.Now()
+	indexed := 0
+	skipped := 0
 
 	for _, msg := range messages {
+		msgStart := time.Now()
 		if err := idx.indexMessage(ctx, msg); err != nil {
 			slog.Error("rag: failed to index message",
 				slog.Int64("message_id", msg.ID),
+				slog.String("session_id", msg.SessionID),
 				slog.String("err", err.Error()),
 			)
 			// Continue with next message — don't let one failure stop the batch
@@ -152,7 +164,30 @@ func (idx *Indexer) indexBatch() {
 				slog.String("err", err.Error()),
 			)
 		}
+
+		text := ExtractTextFromContent(msg.Content, msg.Role)
+		if text == "" {
+			skipped++
+		} else {
+			indexed++
+			slog.Debug("rag: indexed message",
+				slog.Int64("message_id", msg.ID),
+				slog.String("session_id", msg.SessionID),
+				slog.String("role", msg.Role),
+				slog.Duration("elapsed", time.Since(msgStart)),
+			)
+		}
 	}
+
+	slog.Info("rag: batch complete",
+		slog.Int("indexed", indexed),
+		slog.Int("skipped", skipped),
+		slog.Duration("elapsed", time.Since(batchStart)),
+		slog.Int("remaining", func() int {
+			remaining, _ := service.UnindexedCount()
+			return remaining
+		}()),
+	)
 }
 
 // indexMessage processes a single message: extract text, chunk, embed, store.
@@ -161,6 +196,10 @@ func (idx *Indexer) indexMessage(ctx context.Context, msg service.UnindexedMessa
 	text := ExtractTextFromContent(msg.Content, msg.Role)
 	if text == "" {
 		// No text content (e.g., only tool_use blocks) — mark as indexed to skip
+		slog.Debug("rag: skipping message with no text content",
+			slog.Int64("message_id", msg.ID),
+			slog.String("role", msg.Role),
+		)
 		return nil
 	}
 
@@ -180,6 +219,12 @@ func (idx *Indexer) indexMessage(ctx context.Context, msg service.UnindexedMessa
 		)
 		textChunks = textChunks[:maxChunks]
 	}
+
+	slog.Debug("rag: embedding message",
+		slog.Int64("message_id", msg.ID),
+		slog.Int("chunks", len(textChunks)),
+		slog.String("session_id", msg.SessionID),
+	)
 
 	// Generate embeddings for all chunks
 	texts := make([]string, len(textChunks))

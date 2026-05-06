@@ -393,10 +393,10 @@ type UnindexedMessage struct {
 }
 
 // GetUnindexedMessages fetches chat messages that have not been indexed by RAG.
-// Returns up to limit messages ordered by creation time.
+// Returns up to limit messages ordered by creation time DESC (newest first).
 func GetUnindexedMessages(limit int) ([]UnindexedMessage, error) {
 	rows, err := DB.Query(
-		"SELECT id, content, role, session_id, project_path, backend, created_at FROM chat_history WHERE indexed = 0 AND streaming = 0 ORDER BY created_at ASC LIMIT ?",
+		"SELECT id, content, role, session_id, project_path, backend, created_at FROM chat_history WHERE indexed = 0 AND streaming = 0 ORDER BY created_at DESC LIMIT ?",
 		limit,
 	)
 	if err != nil {
@@ -419,4 +419,11 @@ func GetUnindexedMessages(limit int) ([]UnindexedMessage, error) {
 func MarkMessageIndexed(messageID int64) error {
 	_, err := DB.Exec("UPDATE chat_history SET indexed = 1 WHERE id = ?", messageID)
 	return err
+}
+
+// UnindexedCount returns the number of messages waiting to be indexed by RAG.
+func UnindexedCount() (int, error) {
+	var count int
+	err := DB.QueryRow("SELECT COUNT(*) FROM chat_history WHERE indexed = 0 AND streaming = 0").Scan(&count)
+	return count, err
 }
