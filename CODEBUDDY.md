@@ -58,7 +58,7 @@ npx vitest run web/src/components/__tests__/gitGraphUtils.test.ts  # Single test
 - `internal/middleware/` — Auth, request logging, panic recovery, request ID.
 - `internal/speech/` — TTS abstraction (`SpeechProvider` interface). Implementations: MiniMax (cloud), Edge TTS (cloud, free), Piper (local offline), Kokoro (local ONNX-based). `summarizer.go` provides TTS summarization via multiple AI backends (mmx-cli, claude, codebuddy, gemini, opencode, codex, qoder, vecli, ollama) for long-text compression before speech. `ollama_summarizer.go` calls Ollama HTTP API (`/api/chat`, stream:false) — the first direct HTTP client in the Go backend (all others shell out to CLI tools).
 - `internal/ssh/` — SSH tunnel server (`server.go`). Supports direct-tcpip channels (-L port forwarding), password auth, ECDSA host key generation/persistence. Integrates with ProxyRegistry for port validation.
-- `internal/rag/` — RAG history memory system. DuckDB vector store (`store.go`), text chunker (`chunker.go`), Ollama embedding client (`embedding.go`), indexer worker (`indexer.go`), search (`search.go`), entry point (`rag.go`). When `rag.enabled`, indexes chat messages after finalization and provides semantic search API.
+- `internal/rag/` — RAG history memory system. DuckDB vector store (`store.go`), text chunker (`chunker.go`), Ollama embedding client (`embedding.go`), indexer worker (`indexer.go`), search (`search.go`), cleanup worker (`cleanup.go`), entry point (`rag.go`). When `rag.enabled`, indexes chat messages after finalization and provides semantic search API. Cleanup worker runs regardless of RAG enablement to purge soft-deleted data past retention.
 - `internal/platform/` — Platform-specific adaptations (Windows paths).
 
 **Agent system:** YAML files in `config/agents/` define agents with id, backend, model, system_prompt, and optional `command` (custom CLI path). `agent_common_prompt.md` is prepended to all agents. `{{AVAILABLE_AGENTS}}` placeholder is replaced with the agent list. Loaded at startup by `model.LoadAgents()`. Agent prompts may include `<schedule-proposal>` tag format for the scheduled task system.
@@ -88,7 +88,14 @@ npx vitest run web/src/components/__tests__/gitGraphUtils.test.ts  # Single test
 3. Text blocks are extracted (excluding thinking/tool_use), chunked with 512-token sliding window, embedded via Ollama BGE-M3
 4. AI agents can search history via `GET /api/rag/search` (no auth, localhost only)
 5. System prompt includes RAG skill description from `config/rag_prompt.md` when enabled
-4. Frontend browses forwarded ports via `PortForwardBrowser` component
+6. Frontend browses forwarded ports via `PortForwardBrowser` component
+
+**Soft-delete & cleanup:**
+1. Session deletion sets `deleted=1` on `chat_sessions` and `chat_history` instead of `DELETE FROM` — data stays in DB for RAG search
+2. User-facing queries filter `AND deleted = 0`; RAG-specific queries (`GetMessageByID`, `GetMessagesBySessionID`, `GetUnindexedMessages`) intentionally skip the filter so deleted content remains searchable
+3. `DeleteSession` also sets `updated_at = CURRENT_TIMESTAMP` to track deletion time
+4. `AddChatMessage` rejects inserts into deleted sessions as a defensive guard
+5. `CleanupWorker` (always runs, regardless of `rag.enabled`) periodically purges soft-deleted data older than `rag.retention_days` (default: 90). Cascade order: DuckDB `chat_chunks` → SQLite `ai_raw_responses` → `chat_history` → `chat_sessions`
 
 **Session runtime management** (`session_runtime.go`):
 - Mutex-protected active session tracking, stream channels via `sync.Map`
@@ -197,7 +204,7 @@ npx vitest run web/src/components/__tests__/gitGraphUtils.test.ts  # Single test
 | TTS | `tts.engine` (minimax/edge/piper/kokoro/moss-nano), `tts.summarize_backend` (mmx-cli/claude/codebuddy/gemini/opencode/codex/qoder/vecli/ollama), `tts.summarize_model`, `tts.speed`, `tts.voice`, engine-specific sub-configs, `tts.ollama.base_url` |
 | Proxy | `proxy.enabled`, `proxy.allowed_ports` |
 | SSH | `ssh.enabled`, `ssh.port`, `ssh.host_key` |
-| RAG | `rag.enabled`, `rag.ollama_base_url`, `rag.ollama_model` (bge-m3), `rag.chunk_size` (512), `rag.chunk_overlap` (64), `rag.poll_interval` (10s), `rag.batch_size` (10), `rag.search_limit` (5) |
+| RAG | `rag.enabled`, `rag.ollama_base_url`, `rag.ollama_model` (bge-m3), `rag.chunk_size` (512), `rag.chunk_overlap` (64), `rag.poll_interval` (10s), `rag.batch_size` (10), `rag.search_limit` (5), `rag.retention_days` (90) |
 | Dev | `dev.port`, `dev.frontend_port`, `dev.host` |
 | Logging | `log_dir`, `log_max_days`, `default_agent` |
 
@@ -208,4 +215,4 @@ Dev mode uses separate port (20002) and database (`ClawBench-dev.db`).
 - Go tests use `testify/assert`. Test files colocated with source (`*_test.go`). 40 test files across 8 packages.
 - Frontend tests use Vitest + `@vue/test-utils`. Located in `web/src/components/__tests__/`.
 - Many handler tests need a running test server — see `testutil_test.go` in handler package.
-- Key test packages: `ai/` (stream parsers, auto-resume, factory), `handler/` (auth, chat, files, git, proxy, scheduler, SSH info, TTS), `service/` (chat, proxy, scheduler, stream, uuid), `speech/` (minimax, piper, kokoro, moss_tts_nano, ollama), `ssh/` (server), `rag/` (chunker, store).
+- Key test packages: `ai/` (stream parsers, auto-resume, factory), `handler/` (auth, chat, files, git, proxy, scheduler, SSH info, TTS), `service/` (chat, proxy, scheduler, stream, uuid, soft-delete, cleanup), `speech/` (minimax, piper, kokoro, moss_tts_nano, ollama), `ssh/` (server), `rag/` (chunker, store, cleanup).
