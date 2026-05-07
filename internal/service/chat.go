@@ -296,6 +296,24 @@ func GetSessionBackend(sessionID string) string {
 	return backend
 }
 
+// GetSessionModel returns the model ID of a session, or empty string if not found or deleted.
+func GetSessionModel(sessionID string) string {
+	var modelID string
+	err := DB.QueryRow("SELECT model FROM chat_sessions WHERE id = ? AND deleted = 0", sessionID).Scan(&modelID)
+	if err != nil {
+		return ""
+	}
+	return modelID
+}
+
+// UpdateSessionModel updates the model field for a session.
+// Called when the user selects a different model so that subsequent loads
+// restore the user's choice instead of the agent default.
+func UpdateSessionModel(sessionID, modelID string) error {
+	_, err := DB.Exec("UPDATE chat_sessions SET model = ? WHERE id = ?", modelID, sessionID)
+	return err
+}
+
 // CreateSession creates a new chat session and returns its ID.
 // agentSource tracks how the agent was chosen: "default" (auto-assigned) or "user" (manually selected).
 func CreateSession(projectPath, backend, title, agentID, modelName, agentSource string) (string, error) {

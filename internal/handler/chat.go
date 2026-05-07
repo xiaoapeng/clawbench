@@ -138,12 +138,13 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 		// Get session title and agent info
 		sessionTitle, _ := service.GetSessionTitle(sessionID)
 		sessionAgentID := service.GetSessionAgentID(sessionID)
+		sessionModelID := service.GetSessionModel(sessionID)
 		running := service.IsSessionRunning(sessionID)
 		if err != nil {
-			writeJSON(w, http.StatusOK, map[string]any{"messages": []any{}, "running": running, "sessionId": sessionID, "sessionTitle": sessionTitle, "backend": sessionBackend, "agentId": sessionAgentID, "total": totalCount})
+			writeJSON(w, http.StatusOK, map[string]any{"messages": []any{}, "running": running, "sessionId": sessionID, "sessionTitle": sessionTitle, "backend": sessionBackend, "agentId": sessionAgentID, "modelId": sessionModelID, "total": totalCount})
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"messages": messages, "running": running, "sessionId": sessionID, "sessionTitle": sessionTitle, "backend": sessionBackend, "agentId": sessionAgentID, "total": totalCount})
+		writeJSON(w, http.StatusOK, map[string]any{"messages": messages, "running": running, "sessionId": sessionID, "sessionTitle": sessionTitle, "backend": sessionBackend, "agentId": sessionAgentID, "modelId": sessionModelID, "total": totalCount})
 		return
 	}
 
@@ -255,6 +256,13 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 	effectiveAgentID := req.AgentID
 	if effectiveAgentID == "" {
 		effectiveAgentID = model.GetDefaultAgentID()
+	}
+
+	// Persist user's model selection to session so that subsequent GET requests
+	// return the correct modelId. This ensures the frontend can restore the
+	// user's choice after stream completion instead of resetting to agent default.
+	if req.ModelID != "" {
+		service.UpdateSessionModel(sessionID, req.ModelID)
 	}
 
 	// Prevent concurrent sessions for the same session ID

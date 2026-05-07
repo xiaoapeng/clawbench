@@ -69,6 +69,19 @@ export function useChatSession(options: UseChatSessionOptions) {
     currentModelName.value = model?.name || modelId
   }
 
+  // Helper: sync model state from server data, preferring the persisted modelId
+  // over the agent default. Falls back to agent default when server has no model.
+  function syncModelFromData(agentId, modelIdFromServer) {
+    if (modelIdFromServer) {
+      currentModelId.value = modelIdFromServer
+      const agent = agents.value.find(a => a.id === agentId)
+      const model = agent?.models?.find(m => m.id === modelIdFromServer)
+      currentModelName.value = model?.name || modelIdFromServer
+    } else {
+      syncModelFromAgent(agentId)
+    }
+  }
+
   // Switching state — true while a session switch is in progress (distinct from
   // "loading" which means "AI is generating"). Used to show a fade/placeholder
   // transition so the user sees immediate feedback instead of a frozen UI.
@@ -169,7 +182,7 @@ export function useChatSession(options: UseChatSessionOptions) {
       currentSessionTitle.value = data.sessionTitle || ''
       currentBackend.value = data.backend || ''
       currentAgentId.value = data.agentId || ''
-      syncModelFromAgent(currentAgentId.value)
+      syncModelFromData(currentAgentId.value, data.modelId)
       onExtractScheduleProposals(messages.value)
       onRenderUpdate(true)
       if (data.running) {
@@ -255,7 +268,7 @@ export function useChatSession(options: UseChatSessionOptions) {
       currentSessionTitle.value = data.sessionTitle || ''
       currentBackend.value = data.backend || ''
       currentAgentId.value = data.agentId || ''
-      syncModelFromAgent(currentAgentId.value)
+      syncModelFromData(currentAgentId.value, data.modelId)
       onExtractScheduleProposals(messages.value)
       onRenderUpdate(true)
       onScrollBottom(true)
