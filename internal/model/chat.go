@@ -11,6 +11,7 @@ type ChatMessage struct {
 	SessionID string    `json:"sessionId,omitempty"`
 	Backend   string    `json:"backend,omitempty"`
 	Streaming bool      `json:"streaming,omitempty"`
+	Indexed   bool      `json:"indexed,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 }
 

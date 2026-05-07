@@ -58,6 +58,8 @@ func InitDB() error {
 			session_id TEXT,
 			backend TEXT NOT NULL DEFAULT 'claude',
 			streaming INTEGER NOT NULL DEFAULT 0,
+			indexed INTEGER NOT NULL DEFAULT 0,
+			deleted INTEGER NOT NULL DEFAULT 0,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		);
 		CREATE TABLE IF NOT EXISTS chat_sessions (
@@ -68,6 +70,7 @@ func InitDB() error {
 			agent_id TEXT DEFAULT '',
 			agent_source TEXT DEFAULT 'default',
 			model TEXT DEFAULT '',
+			deleted INTEGER NOT NULL DEFAULT 0,
 			last_read_at DATETIME,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -159,6 +162,42 @@ func InitDB() error {
 	if hasAgentSource == 0 {
 		if _, err := DB.Exec("ALTER TABLE chat_sessions ADD COLUMN agent_source TEXT DEFAULT 'default'"); err != nil {
 			return fmt.Errorf("failed to add agent_source column: %w", err)
+		}
+	}
+
+	// Add indexed column if it doesn't exist (for RAG history memory indexing)
+	var hasIndexed int
+	row = DB.QueryRow("SELECT COUNT(*) FROM pragma_table_info('chat_history') WHERE name = 'indexed'")
+	if err := row.Scan(&hasIndexed); err != nil {
+		return fmt.Errorf("failed to check indexed column: %w", err)
+	}
+	if hasIndexed == 0 {
+		if _, err := DB.Exec("ALTER TABLE chat_history ADD COLUMN indexed INTEGER NOT NULL DEFAULT 0"); err != nil {
+			return fmt.Errorf("failed to add indexed column: %w", err)
+		}
+	}
+
+	// Add deleted column if it doesn't exist (soft delete: 0=active, 1=deleted)
+	// Deleted messages/sessions remain in DB for RAG search but are hidden from UI.
+	var hasDeletedHistory int
+	row = DB.QueryRow("SELECT COUNT(*) FROM pragma_table_info('chat_history') WHERE name = 'deleted'")
+	if err := row.Scan(&hasDeletedHistory); err != nil {
+		return fmt.Errorf("failed to check deleted column on chat_history: %w", err)
+	}
+	if hasDeletedHistory == 0 {
+		if _, err := DB.Exec("ALTER TABLE chat_history ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0"); err != nil {
+			return fmt.Errorf("failed to add deleted column to chat_history: %w", err)
+		}
+	}
+
+	var hasDeletedSessions int
+	row = DB.QueryRow("SELECT COUNT(*) FROM pragma_table_info('chat_sessions') WHERE name = 'deleted'")
+	if err := row.Scan(&hasDeletedSessions); err != nil {
+		return fmt.Errorf("failed to check deleted column on chat_sessions: %w", err)
+	}
+	if hasDeletedSessions == 0 {
+		if _, err := DB.Exec("ALTER TABLE chat_sessions ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0"); err != nil {
+			return fmt.Errorf("failed to add deleted column to chat_sessions: %w", err)
 		}
 	}
 

@@ -206,6 +206,11 @@ func RegisterRoutes(mux *http.ServeMux) {
 	// SSH tunnel info (no auth required — port number and fingerprint are not sensitive)
 	register("/api/ssh/info", ServeSSHInfo)
 
+	// RAG history memory search (no auth required — localhost only, AI self-calls)
+	register("/api/rag/search", RAGSearch)
+	register("/api/rag/message", RAGMessage)
+	register("/api/rag/session", RAGSession)
+
 	if _, err := os.Stat("public"); err == nil {
 		mux.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(http.Dir("public"))))
 	} else {
