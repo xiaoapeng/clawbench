@@ -1003,8 +1003,19 @@ func convertAskQuestionBlocks(blocks []model.ContentBlock) []model.ContentBlock 
 			continue
 		}
 
+		// Strip markdown code fences (```json ... ```) that some models wrap around the JSON
+		jsonContent := strings.TrimSpace(matches[1])
+		if strings.HasPrefix(jsonContent, "```") {
+			if nl := strings.Index(jsonContent, "\n"); nl != -1 {
+				jsonContent = strings.TrimSpace(jsonContent[nl+1:])
+			}
+			if idx := strings.LastIndex(jsonContent, "```"); idx != -1 {
+				jsonContent = strings.TrimSpace(jsonContent[:idx])
+			}
+		}
+
 		var input map[string]any
-		if err := json.Unmarshal([]byte(strings.TrimSpace(matches[1])), &input); err != nil {
+		if err := json.Unmarshal([]byte(jsonContent), &input); err != nil {
 			slog.Error("failed to parse ask-question JSON", slog.String("error", err.Error()))
 			continue
 		}

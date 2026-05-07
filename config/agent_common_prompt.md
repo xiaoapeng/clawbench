@@ -22,6 +22,12 @@ ANY output that expects or invites a user response, including but not limited to
 
 Both use the same schema: `{ questions: [{ question, header (max 12 chars), options: [{ label, description }], multiSelect }] }`
 
+<ask-question>
+{"questions":[{"header":"Approach","multiSelect":false,"options":[{"label":"Option A","description":"Fast but less safe"},{"label":"Option B","description":"Safe but slower"}],"question":"Which approach do you prefer?"}]}
+</ask-question>
+
+**Important:** Put raw JSON inside the tag — do NOT wrap it in markdown code fences (```json).
+
 ### The ONLY exception
 
 Pure informational statements that require ZERO user action or response may be plain text. Example: "I've saved the file to /tmp/output.txt." If you add any request for feedback to that statement, it becomes a question.

@@ -104,7 +104,15 @@ export function useChatRender(options) {
       const askKey = `${msgId}-${blockIdx}`
       if (!blockAskQuestions[askKey]) {
         try {
-          const questions = JSON.parse(askMatch[1].trim())
+          let askContent = askMatch[1].trim()
+          // Strip markdown code fences (```json ... ```) that some models wrap around the JSON
+          if (askContent.startsWith('```')) {
+            const nlIdx = askContent.indexOf('\n')
+            if (nlIdx !== -1) askContent = askContent.slice(nlIdx + 1).trim()
+            const lastFence = askContent.lastIndexOf('```')
+            if (lastFence !== -1) askContent = askContent.slice(0, lastFence).trim()
+          }
+          const questions = JSON.parse(askContent)
           if (questions.questions && Array.isArray(questions.questions)) {
             blockAskQuestions[askKey] = questions
           }
@@ -195,7 +203,15 @@ export function useChatRender(options) {
               const askMatch = block.text.match(/<ask-question\b[^>]*>([\s\S]*?)<\/ask-question>/)
               if (askMatch) {
                 try {
-                  const questions = JSON.parse(askMatch[1].trim())
+                  let askContent = askMatch[1].trim()
+                  // Strip markdown code fences (```json ... ```) that some models wrap around the JSON
+                  if (askContent.startsWith('```')) {
+                    const nlIdx = askContent.indexOf('\n')
+                    if (nlIdx !== -1) askContent = askContent.slice(nlIdx + 1).trim()
+                    const lastFence = askContent.lastIndexOf('```')
+                    if (lastFence !== -1) askContent = askContent.slice(0, lastFence).trim()
+                  }
+                  const questions = JSON.parse(askContent)
                   if (questions.questions && Array.isArray(questions.questions)) {
                     blockAskQuestions[askKey] = questions
                   }
