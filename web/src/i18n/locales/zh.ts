@@ -622,5 +622,6 @@ export default {
     connected: '已连接',
     disconnected: '已断开',
     resetFontSize: '重置字体大小',
+    gestures: '手势',
   },
 } as const

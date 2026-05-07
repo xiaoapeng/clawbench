@@ -38,6 +38,9 @@
         <button class="toolbar-btn arrow" @pointerdown.prevent="terminalKeys.sendArrowDown(); focusTerminal()">↓</button>
         <button class="toolbar-btn arrow" @pointerdown.prevent="terminalKeys.sendArrowUp(); focusTerminal()">↑</button>
         <button class="toolbar-btn arrow" @pointerdown.prevent="terminalKeys.sendArrowRight(); focusTerminal()">→</button>
+        <button class="toolbar-btn modifier" :class="{ active: gestures.enabled.value }" @pointerdown.prevent="gestures.toggle(); focusTerminal()" @contextmenu.prevent :title="t('terminal.gestures')">
+          <HandIcon :size="14" />
+        </button>
         <button v-if="quickCommands.length > 0" class="toolbar-btn" @click="showCommands = !showCommands" :title="t('terminal.quickCommands')">
           <ListIcon :size="14" />
         </button>
@@ -76,7 +79,7 @@ import { useTerminalGestures } from '@/composables/useTerminalGestures'
 import { useToast } from '@/composables/useToast'
 import { store } from '@/stores/app'
 
-import { Terminal as TerminalIcon, Copy as CopyIcon, X as XIcon, List as ListIcon } from 'lucide-vue-next'
+import { Terminal as TerminalIcon, Copy as CopyIcon, X as XIcon, List as ListIcon, Hand as HandIcon } from 'lucide-vue-next'
 
 const props = defineProps<{
   open: boolean
@@ -266,6 +269,9 @@ function initTerminal() {
       term.write(data)
     },
     onReplay: (data) => {
+      // Clear terminal before replaying to avoid conflicts between
+      // stale buffer content and ANSI sequences in the replay data
+      term.clear()
       term.write(data)
     },
     onStatus: (status) => {

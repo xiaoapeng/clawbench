@@ -622,5 +622,6 @@ export default {
     connected: 'Connected',
     disconnected: 'Disconnected',
     resetFontSize: 'Reset font size',
+    gestures: 'Gestures',
   },
 } as const
