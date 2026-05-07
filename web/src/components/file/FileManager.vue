@@ -488,8 +488,9 @@ function doOpenAsProject() {
 function doOpenTerminal() {
     if (!ctxMenu.entry || ctxMenu.entry.type !== 'dir') return
     ctxMenu.visible = false
-    // Navigate to the directory first so computeCwd() picks it up
-    store.state.currentDir = ctxMenu.entry.path
+    // Navigate into the directory first (updates currentDir + dirEntries properly)
+    // then open the terminal — computeCwd() reads store.state.currentDir
+    emit('navigateDir', ctxMenu.entry.path)
     emit('openTerminal', ctxMenu.entry.path)
 }
 
