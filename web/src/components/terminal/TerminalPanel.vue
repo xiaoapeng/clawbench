@@ -24,6 +24,11 @@
           <button v-if="canReconnect" class="terminal-reconnect-btn" @click="handleReconnect">{{ t('terminal.reconnect') }}</button>
         </div>
 
+        <!-- Gesture hint overlay -->
+        <Transition name="gesture-hint">
+          <div v-if="gestureHint" class="gesture-hint">{{ gestureHint }}</div>
+        </Transition>
+
         <!-- xterm.js will mount here -->
       </div>
 
@@ -124,6 +129,8 @@ function applyFontSize(size: number) {
 // Refs
 const bottomSheetRef = ref<InstanceType<typeof BottomSheet> | null>(null)
 const terminalContainer = ref<HTMLElement | null>(null)
+const gestureHint = ref('')
+let gestureHintTimer: ReturnType<typeof setTimeout> | null = null
 const xterm = ref<Terminal | null>(null)
 const fitAddon = ref<FitAddon | null>(null)
 const showCommands = ref(false)
@@ -166,6 +173,11 @@ const gestures = useTerminalGestures(terminalContainer, {
   sendArrowLeft: terminalKeys.sendArrowLeft,
   sendArrowRight: terminalKeys.sendArrowRight,
   onPinchZoom: (delta: number) => applyFontSize(fontSize.value + delta),
+  onGestureHint: (symbol: string) => {
+    gestureHint.value = symbol
+    if (gestureHintTimer) clearTimeout(gestureHintTimer)
+    gestureHintTimer = setTimeout(() => { gestureHint.value = '' }, 600)
+  },
 })
 
 // Computed
@@ -516,6 +528,31 @@ function executeCommand(cmd: { label: string; command: string }) {
 
 :root:not([data-theme="dark"]) .terminal-container {
   background: #eff1f5;
+}
+
+.gesture-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 48px;
+  color: rgba(255, 255, 255, 0.7);
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  z-index: 5;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.gesture-hint-enter-active {
+  transition: opacity 0.1s ease;
+}
+.gesture-hint-leave-active {
+  transition: opacity 0.4s ease;
+}
+.gesture-hint-enter-from,
+.gesture-hint-leave-to {
+  opacity: 0;
 }
 
 .terminal-error-overlay {

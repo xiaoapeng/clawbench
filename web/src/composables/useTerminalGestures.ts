@@ -6,6 +6,7 @@ export interface GestureCallbacks {
   sendArrowLeft: () => void
   sendArrowRight: () => void
   onPinchZoom?: (delta: number) => void
+  onGestureHint?: (symbol: string) => void
 }
 
 type Direction = 'up' | 'down' | 'left' | 'right'
@@ -56,6 +57,13 @@ export function useTerminalGestures(
     return Math.sqrt(dx * dx + dy * dy)
   }
 
+  const DIRECTION_SYMBOLS: Record<Direction, string> = {
+    up: '↑',
+    down: '↓',
+    left: '←',
+    right: '→',
+  }
+
   function sendArrow(dir: Direction) {
     switch (dir) {
       case 'up': callbacks.sendArrowUp(); break
@@ -63,6 +71,7 @@ export function useTerminalGestures(
       case 'left': callbacks.sendArrowLeft(); break
       case 'right': callbacks.sendArrowRight(); break
     }
+    callbacks.onGestureHint?.(DIRECTION_SYMBOLS[dir])
   }
 
   function startRepeat(dir: Direction) {
