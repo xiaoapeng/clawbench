@@ -70,7 +70,6 @@ func setupTestEnv(t *testing.T) (*testEnv, func()) {
 			project_path TEXT NOT NULL,
 			role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
 			content TEXT NOT NULL,
-			file_path TEXT,
 			files TEXT,
 			session_id TEXT,
 			backend TEXT NOT NULL DEFAULT 'claude',
@@ -138,7 +137,6 @@ func setupTestEnv(t *testing.T) (*testEnv, func()) {
 		CREATE TABLE IF NOT EXISTS tts_summaries (
 			cache_key TEXT PRIMARY KEY,
 			summary TEXT NOT NULL,
-			summarize_failed INTEGER NOT NULL DEFAULT 0,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		);
 	`)

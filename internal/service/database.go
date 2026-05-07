@@ -53,7 +53,6 @@ func InitDB() error {
 			project_path TEXT NOT NULL,
 			role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
 			content TEXT NOT NULL,
-			file_path TEXT,
 			files TEXT,
 			session_id TEXT,
 			backend TEXT NOT NULL DEFAULT 'claude',
@@ -70,6 +69,7 @@ func InitDB() error {
 			agent_id TEXT DEFAULT '',
 			agent_source TEXT DEFAULT 'default',
 			model TEXT DEFAULT '',
+			external_session_id TEXT DEFAULT '',
 			deleted INTEGER NOT NULL DEFAULT 0,
 			last_read_at DATETIME,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -139,66 +139,6 @@ func InitDB() error {
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to create tables: %w", err)
-	}
-
-	// Add external_session_id column if it doesn't exist (for OpenCode backend session mapping)
-	var hasExternalSessionID int
-	row := DB.QueryRow("SELECT COUNT(*) FROM pragma_table_info('chat_sessions') WHERE name = 'external_session_id'")
-	if err := row.Scan(&hasExternalSessionID); err != nil {
-		return fmt.Errorf("failed to check external_session_id column: %w", err)
-	}
-	if hasExternalSessionID == 0 {
-		if _, err := DB.Exec("ALTER TABLE chat_sessions ADD COLUMN external_session_id TEXT DEFAULT ''"); err != nil {
-			return fmt.Errorf("failed to add external_session_id column: %w", err)
-		}
-	}
-
-	// Add agent_source column if it doesn't exist (tracks whether agent was default or user-selected)
-	var hasAgentSource int
-	row = DB.QueryRow("SELECT COUNT(*) FROM pragma_table_info('chat_sessions') WHERE name = 'agent_source'")
-	if err := row.Scan(&hasAgentSource); err != nil {
-		return fmt.Errorf("failed to check agent_source column: %w", err)
-	}
-	if hasAgentSource == 0 {
-		if _, err := DB.Exec("ALTER TABLE chat_sessions ADD COLUMN agent_source TEXT DEFAULT 'default'"); err != nil {
-			return fmt.Errorf("failed to add agent_source column: %w", err)
-		}
-	}
-
-	// Add indexed column if it doesn't exist (for RAG history memory indexing)
-	var hasIndexed int
-	row = DB.QueryRow("SELECT COUNT(*) FROM pragma_table_info('chat_history') WHERE name = 'indexed'")
-	if err := row.Scan(&hasIndexed); err != nil {
-		return fmt.Errorf("failed to check indexed column: %w", err)
-	}
-	if hasIndexed == 0 {
-		if _, err := DB.Exec("ALTER TABLE chat_history ADD COLUMN indexed INTEGER NOT NULL DEFAULT 0"); err != nil {
-			return fmt.Errorf("failed to add indexed column: %w", err)
-		}
-	}
-
-	// Add deleted column if it doesn't exist (soft delete: 0=active, 1=deleted)
-	// Deleted messages/sessions remain in DB for RAG search but are hidden from UI.
-	var hasDeletedHistory int
-	row = DB.QueryRow("SELECT COUNT(*) FROM pragma_table_info('chat_history') WHERE name = 'deleted'")
-	if err := row.Scan(&hasDeletedHistory); err != nil {
-		return fmt.Errorf("failed to check deleted column on chat_history: %w", err)
-	}
-	if hasDeletedHistory == 0 {
-		if _, err := DB.Exec("ALTER TABLE chat_history ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0"); err != nil {
-			return fmt.Errorf("failed to add deleted column to chat_history: %w", err)
-		}
-	}
-
-	var hasDeletedSessions int
-	row = DB.QueryRow("SELECT COUNT(*) FROM pragma_table_info('chat_sessions') WHERE name = 'deleted'")
-	if err := row.Scan(&hasDeletedSessions); err != nil {
-		return fmt.Errorf("failed to check deleted column on chat_sessions: %w", err)
-	}
-	if hasDeletedSessions == 0 {
-		if _, err := DB.Exec("ALTER TABLE chat_sessions ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0"); err != nil {
-			return fmt.Errorf("failed to add deleted column to chat_sessions: %w", err)
-		}
 	}
 
 	// Clean up orphaned streaming messages from previous crashes/restarts.

@@ -22,7 +22,6 @@ CREATE TABLE IF NOT EXISTS chat_history (
 	project_path TEXT NOT NULL,
 	role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
 	content TEXT NOT NULL,
-	file_path TEXT,
 	files TEXT,
 	session_id TEXT,
 	backend TEXT NOT NULL DEFAULT 'claude',

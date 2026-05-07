@@ -24,8 +24,8 @@ func GetChatHistoryPaged(projectPath, backend, sessionID string, limit int, befo
 
 	if limit > 0 && beforeTime != "" {
 		// Cursor-based: load messages older than beforeTime
-		query := `SELECT id, role, content, file_path, files, backend, streaming, created_at, indexed FROM (
-			SELECT id, role, content, file_path, files, backend, streaming, created_at, indexed FROM chat_history
+		query := `SELECT id, role, content, files, backend, streaming, created_at, indexed FROM (
+			SELECT id, role, content, files, backend, streaming, created_at, indexed FROM chat_history
 			WHERE project_path = ? AND session_id = ? AND created_at < ? AND deleted = 0
 			ORDER BY created_at DESC LIMIT ?
 		) sub ORDER BY created_at ASC`
@@ -39,8 +39,8 @@ func GetChatHistoryPaged(projectPath, backend, sessionID string, limit int, befo
 
 	if limit > 0 {
 		// Initial load: get the most recent (limit) messages
-		query := `SELECT id, role, content, file_path, files, backend, streaming, created_at, indexed FROM (
-			SELECT id, role, content, file_path, files, backend, streaming, created_at, indexed FROM chat_history
+		query := `SELECT id, role, content, files, backend, streaming, created_at, indexed FROM (
+			SELECT id, role, content, files, backend, streaming, created_at, indexed FROM chat_history
 			WHERE project_path = ? AND session_id = ? AND deleted = 0
 			ORDER BY created_at DESC LIMIT ?
 		) sub ORDER BY created_at ASC`
@@ -53,7 +53,7 @@ func GetChatHistoryPaged(projectPath, backend, sessionID string, limit int, befo
 	}
 
 	// No limit: return all messages in chronological order
-	query := `SELECT id, role, content, file_path, files, backend, streaming, created_at, indexed FROM chat_history WHERE project_path = ? AND session_id = ? AND deleted = 0 ORDER BY created_at ASC`
+	query := `SELECT id, role, content, files, backend, streaming, created_at, indexed FROM chat_history WHERE project_path = ? AND session_id = ? AND deleted = 0 ORDER BY created_at ASC`
 	rows, err := DB.Query(query, projectPath, sessionID)
 	if err != nil {
 		return messages, err
@@ -63,7 +63,6 @@ func GetChatHistoryPaged(projectPath, backend, sessionID string, limit int, befo
 }
 
 // scanMessages scans rows into ChatMessage slice.
-// The file_path column is a legacy field — scanned into a throwaway variable.
 func scanMessages(rows *sql.Rows, sessionID string) ([]model.ChatMessage, error) {
 	messages := []model.ChatMessage{}
 	for rows.Next() {
@@ -71,8 +70,7 @@ func scanMessages(rows *sql.Rows, sessionID string) ([]model.ChatMessage, error)
 		var filesJSON sql.NullString
 		var streaming int
 		var indexed int
-		var filePath string // legacy column, ignored after migration
-		if err := rows.Scan(&msg.ID, &msg.Role, &msg.Content, &filePath, &filesJSON, &msg.Backend, &streaming, &msg.CreatedAt, &indexed); err != nil {
+		if err := rows.Scan(&msg.ID, &msg.Role, &msg.Content, &filesJSON, &msg.Backend, &streaming, &msg.CreatedAt, &indexed); err != nil {
 			return nil, err
 		}
 		msg.Streaming = streaming != 0
@@ -100,13 +98,12 @@ func GetMessageByID(id int64) (*model.ChatMessage, error) {
 	var filesJSON sql.NullString
 	var streaming int
 	var indexed int
-	var filePath string
 	var sessionID string
 
 	err := DB.QueryRow(
-		"SELECT id, role, content, file_path, files, backend, streaming, created_at, indexed, session_id FROM chat_history WHERE id = ?",
+		"SELECT id, role, content, files, backend, streaming, created_at, indexed, session_id FROM chat_history WHERE id = ?",
 		id,
-	).Scan(&msg.ID, &msg.Role, &msg.Content, &filePath, &filesJSON, &msg.Backend, &streaming, &msg.CreatedAt, &indexed, &sessionID)
+	).Scan(&msg.ID, &msg.Role, &msg.Content, &filesJSON, &msg.Backend, &streaming, &msg.CreatedAt, &indexed, &sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +121,7 @@ func GetMessageByID(id int64) (*model.ChatMessage, error) {
 // Returns messages in chronological order with all content blocks (text, thinking, tool_use).
 func GetMessagesBySessionID(sessionID string) ([]model.ChatMessage, error) {
 	rows, err := DB.Query(
-		"SELECT id, role, content, file_path, files, backend, streaming, created_at, indexed FROM chat_history WHERE session_id = ? AND streaming = 0 ORDER BY created_at ASC",
+		"SELECT id, role, content, files, backend, streaming, created_at, indexed FROM chat_history WHERE session_id = ? AND streaming = 0 ORDER BY created_at ASC",
 		sessionID,
 	)
 	if err != nil {
@@ -161,7 +158,7 @@ func AddChatMessage(projectPath, backend, sessionID, role, content string, files
 	defer tx.Rollback()
 
 	result, err := tx.Exec(
-		"INSERT INTO chat_history (project_path, backend, session_id, role, content, file_path, files, streaming, indexed) VALUES (?, ?, ?, ?, ?, '', ?, ?, 0)",
+		"INSERT INTO chat_history (project_path, backend, session_id, role, content, files, streaming, indexed) VALUES (?, ?, ?, ?, ?, ?, ?, 0)",
 		projectPath, backend, sessionID, role, content, filesJSON, streamingInt,
 	)
 	if err != nil {

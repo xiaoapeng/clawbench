@@ -23,7 +23,6 @@ CREATE TABLE IF NOT EXISTS chat_history (
 	project_path TEXT NOT NULL,
 	role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
 	content TEXT NOT NULL,
-	file_path TEXT,
 	files TEXT,
 	session_id TEXT,
 	backend TEXT NOT NULL DEFAULT 'claude',
@@ -40,6 +39,7 @@ CREATE TABLE IF NOT EXISTS chat_sessions (
 	agent_id TEXT DEFAULT '',
 	agent_source TEXT DEFAULT 'default',
 	model TEXT DEFAULT '',
+	external_session_id TEXT DEFAULT '',
 	deleted INTEGER NOT NULL DEFAULT 0,
 	created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 	updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -1109,10 +1109,7 @@ func TestUpdateMessageContent_NonExistent(t *testing.T) {
 // ---------- UpdateExternalSessionID / GetExternalSessionID ----------
 
 func TestUpdateAndGetExternalSessionID(t *testing.T) {
-	db := setupDB(t)
-	// Add external_session_id column (not in base schema)
-	_, err := db.Exec("ALTER TABLE chat_sessions ADD COLUMN external_session_id TEXT DEFAULT ''")
-	assert.NoError(t, err)
+	setupDB(t)
 
 	sid := helperCreateSession(t, "/project", "opencode", "Test")
 
@@ -1120,7 +1117,7 @@ func TestUpdateAndGetExternalSessionID(t *testing.T) {
 	assert.Equal(t, "", service.GetExternalSessionID(sid))
 
 	// Set external ID
-	err = service.UpdateExternalSessionID(sid, "ext-session-123")
+	err := service.UpdateExternalSessionID(sid, "ext-session-123")
 	assert.NoError(t, err)
 
 	// Get external ID

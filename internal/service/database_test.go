@@ -28,7 +28,6 @@ func setupTestDBForTTS(t *testing.T) (*sql.DB, func()) {
 		CREATE TABLE IF NOT EXISTS tts_summaries (
 			cache_key TEXT PRIMARY KEY,
 			summary TEXT NOT NULL,
-			summarize_failed INTEGER DEFAULT 0,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		);
 		CREATE TABLE IF NOT EXISTS chat_history (
@@ -36,11 +35,12 @@ func setupTestDBForTTS(t *testing.T) (*sql.DB, func()) {
 			project_path TEXT NOT NULL,
 			role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
 			content TEXT NOT NULL,
-			file_path TEXT,
 			files TEXT,
 			session_id TEXT,
 			backend TEXT NOT NULL DEFAULT 'claude',
 			streaming INTEGER NOT NULL DEFAULT 0,
+			indexed INTEGER NOT NULL DEFAULT 0,
+			deleted INTEGER NOT NULL DEFAULT 0,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		);
 		CREATE TABLE IF NOT EXISTS chat_sessions (
@@ -52,6 +52,7 @@ func setupTestDBForTTS(t *testing.T) (*sql.DB, func()) {
 			agent_source TEXT DEFAULT 'default',
 			model TEXT DEFAULT '',
 			external_session_id TEXT DEFAULT '',
+			deleted INTEGER NOT NULL DEFAULT 0,
 			last_read_at DATETIME,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -86,32 +87,6 @@ func TestInitDB_CreatesTables(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, 1, count, "table %s should exist", table)
 	}
-}
-
-// ---------- Migration tests ----------
-
-func TestInitDB_MigrationExternalSessionID(t *testing.T) {
-	db, teardown := setupTestDBForTTS(t)
-	defer teardown()
-
-	var count int
-	err := db.QueryRow(
-		"SELECT COUNT(*) FROM pragma_table_info('chat_sessions') WHERE name = 'external_session_id'",
-	).Scan(&count)
-	assert.NoError(t, err)
-	assert.Equal(t, 1, count, "external_session_id column should exist")
-}
-
-func TestInitDB_MigrationAgentSource(t *testing.T) {
-	db, teardown := setupTestDBForTTS(t)
-	defer teardown()
-
-	var count int
-	err := db.QueryRow(
-		"SELECT COUNT(*) FROM pragma_table_info('chat_sessions') WHERE name = 'agent_source'",
-	).Scan(&count)
-	assert.NoError(t, err)
-	assert.Equal(t, 1, count, "agent_source column should exist")
 }
 
 // ---------- Orphaned streaming message cleanup ----------
