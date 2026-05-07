@@ -209,28 +209,6 @@ func TestGenericSummarize_PassFnError(t *testing.T) {
 	assert.Error(t, err)
 }
 
-// --- loadSummarizeBasePrompt ---
-
-func TestLoadSummarizeBasePrompt_Default(t *testing.T) {
-	// Reset cache
-	cachedSummarizeBasePrompt = ""
-
-	prompt := loadSummarizeBasePrompt()
-	assert.Contains(t, prompt, "Condense AI replies into spoken-language text")
-	assert.Contains(t, prompt, "TTS synthesis")
-	// Should be cached now
-	assert.Equal(t, prompt, cachedSummarizeBasePrompt)
-}
-
-func TestLoadSummarizeBasePrompt_Cached(t *testing.T) {
-	// Set a cached value
-	cachedSummarizeBasePrompt = "cached prompt"
-	defer func() { cachedSummarizeBasePrompt = "" }()
-
-	prompt := loadSummarizeBasePrompt()
-	assert.Equal(t, "cached prompt", prompt)
-}
-
 // --- prepareTextForSummarization ---
 
 func TestPrepareTextForSummarization_ShortText(t *testing.T) {
@@ -276,9 +254,6 @@ func TestNeedsSummarization(t *testing.T) {
 // --- NewGenericSummarizer ---
 
 func TestNewGenericSummarizer(t *testing.T) {
-	// Reset cache so it loads the default prompt
-	cachedSummarizeBasePrompt = ""
-
 	passFn := func(ctx context.Context, text, systemPrompt string, pass int) (string, error) {
 		return "", nil
 	}

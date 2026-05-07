@@ -1,3 +1,14 @@
+---
+name: rag-search
+description: Search historical conversations for past decisions and analyses
+condition: rag.enabled
+triggers:
+  - Searching past conversations or discussions
+  - Finding previously handled issues or decisions
+  - User mentions "before", "last time", "previously discussed"
+  - Needing historical context to understand a current issue
+---
+
 ## RAG History Memory
 
 You can search all historical conversations to find past discussions, analyses, and solutions.

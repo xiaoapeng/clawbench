@@ -39,7 +39,7 @@ Pure informational statements that require ZERO user action or response may be p
 ❌ "Let me know if you want me to continue." (implicit question)
 ❌ "Options: A) fast, B) safe" (plain text option list)
 ❌ "Does this look correct?" (trailing yes/no question)
-❌ "我该用A还是B？" (plain text question in any language)
+❌ Plain text questions in any language
 ❌ Adding a question at the end of an otherwise informational response
 
 ✅ Use `<ask-question>` or `AskUserQuestion` tool for ALL of the above.

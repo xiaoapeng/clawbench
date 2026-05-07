@@ -3,8 +3,6 @@ package speech
 import (
 	"context"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -87,7 +85,7 @@ type genericSummarizer struct {
 func NewGenericSummarizer(passFn summarizePassFunc) genericSummarizer {
 	return genericSummarizer{
 		passFn:     passFn,
-		basePrompt: loadSummarizeBasePrompt(),
+		basePrompt: defaultSummarizePrompt,
 	}
 }
 
@@ -153,40 +151,6 @@ func languageName(code string) string {
 	default:
 		return code
 	}
-}
-
-// loadSummarizeBasePrompt returns the language-independent base system prompt
-// for summarization. The language directive is appended per-request in Summarize.
-// Priority: summarize_prompt.md next to binary > defaultSummarizePrompt.
-// The result is loaded once and cached.
-var cachedSummarizeBasePrompt string
-
-func loadSummarizeBasePrompt() string {
-	if cachedSummarizeBasePrompt != "" {
-		return cachedSummarizeBasePrompt
-	}
-
-	var raw string
-
-	// Try to read from summarize_prompt.md in the config directory next to the running binary
-	exePath, err := os.Executable()
-	if err == nil {
-		promptPath := filepath.Join(filepath.Dir(exePath), "config", "summarize_prompt.md")
-		if data, err := os.ReadFile(promptPath); err == nil {
-			prompt := strings.TrimSpace(string(data))
-			if prompt != "" {
-				raw = prompt
-				slog.Info("loaded summarize prompt from file", slog.String("path", promptPath))
-			}
-		}
-	}
-
-	if raw == "" {
-		raw = defaultSummarizePrompt
-	}
-
-	cachedSummarizeBasePrompt = raw
-	return raw
 }
 
 // prepareTextForSummarization cleans and truncates text before sending to a summarizer.

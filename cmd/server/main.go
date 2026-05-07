@@ -350,40 +350,6 @@ func main() {
 		}
 	}
 
-	// Load agent configurations
-	agentsDir := filepath.Join(model.BinDir, "config", "agents")
-	if _, err := os.Stat(agentsDir); os.IsNotExist(err) {
-		agentsDir = filepath.Join("config", "agents")
-	}
-	if err := model.LoadAgents(agentsDir); err != nil {
-		slog.Warn("failed to load agents", slog.String("err", err.Error()))
-	}
-	slog.Info("agents loaded", slog.Int("count", len(model.AgentList)))
-
-	// Set default agent ID from config, or fall back to first agent
-	if cfg.DefaultAgent != "" {
-		if _, ok := model.Agents[cfg.DefaultAgent]; ok {
-			model.DefaultAgentID = cfg.DefaultAgent
-		} else {
-			// List available agent IDs to help the user fix the config
-			availableIDs := make([]string, 0, len(model.AgentList))
-			for _, a := range model.AgentList {
-				availableIDs = append(availableIDs, a.ID)
-			}
-			slog.Warn("configured default_agent not found, using first agent",
-				slog.String("configured", cfg.DefaultAgent),
-				slog.Any("available", availableIDs))
-		}
-	}
-	if model.DefaultAgentID == "" && len(model.AgentList) > 0 {
-		model.DefaultAgentID = model.AgentList[0].ID
-	}
-	if model.DefaultAgentID != "" {
-		slog.Info("default agent", slog.String("id", model.DefaultAgentID))
-	} else {
-		slog.Warn("no agents available, session creation will fail")
-	}
-
 	// Print auto-generated password info
 	if autoPassword != "" {
 		slog.Info("auto-generated password (no password configured)",
@@ -445,6 +411,57 @@ func main() {
 	if cliPort > 0 {
 		port = cliPort
 	}
+
+	// Load skills (must be before LoadAgents so skills data is available)
+	skillsDir := filepath.Join(model.BinDir, "config", "skills")
+	if _, err := os.Stat(skillsDir); os.IsNotExist(err) {
+		skillsDir = filepath.Join("config", "skills")
+	}
+	if err := model.LoadSkills(skillsDir, port); err != nil {
+		slog.Warn("failed to load skills", slog.String("err", err.Error()))
+	} else {
+		// Filter out skills whose runtime conditions are not met
+		model.RemoveSkillsByCondition(map[string]bool{
+			"rag.enabled": cfg.RAG.Enabled,
+		})
+		slog.Info("skills loaded", slog.Int("count", len(model.Skills)))
+	}
+
+	// Load agent configurations (set ServerPort first for {{PORT}} replacement)
+	model.ServerPort = port
+	agentsDir := filepath.Join(model.BinDir, "config", "agents")
+	if _, err := os.Stat(agentsDir); os.IsNotExist(err) {
+		agentsDir = filepath.Join("config", "agents")
+	}
+	if err := model.LoadAgents(agentsDir); err != nil {
+		slog.Warn("failed to load agents", slog.String("err", err.Error()))
+	}
+	slog.Info("agents loaded", slog.Int("count", len(model.AgentList)))
+
+	// Set default agent ID from config, or fall back to first agent
+	if cfg.DefaultAgent != "" {
+		if _, ok := model.Agents[cfg.DefaultAgent]; ok {
+			model.DefaultAgentID = cfg.DefaultAgent
+		} else {
+			// List available agent IDs to help the user fix the config
+			availableIDs := make([]string, 0, len(model.AgentList))
+			for _, a := range model.AgentList {
+				availableIDs = append(availableIDs, a.ID)
+			}
+			slog.Warn("configured default_agent not found, using first agent",
+				slog.String("configured", cfg.DefaultAgent),
+				slog.Any("available", availableIDs))
+		}
+	}
+	if model.DefaultAgentID == "" && len(model.AgentList) > 0 {
+		model.DefaultAgentID = model.AgentList[0].ID
+	}
+	if model.DefaultAgentID != "" {
+		slog.Info("default agent", slog.String("id", model.DefaultAgentID))
+	} else {
+		slog.Warn("no agents available, session creation will fail")
+	}
+
 	host := ""
 	if devMode && cfg.Dev.Host != "" {
 		host = cfg.Dev.Host
@@ -456,21 +473,8 @@ func main() {
 		slog.Bool("auth_enabled", model.SessionToken != ""),
 	)
 
-	// Initialize RAG prompt and indexer (needs final port number)
+	// Initialize RAG indexer (needs final port number)
 	if cfg.RAG.Enabled && rag.GlobalStore != nil {
-		// Load RAG prompt template with port substitution
-		configDir := filepath.Join(model.BinDir, "config")
-		if _, err := os.Stat(configDir); os.IsNotExist(err) {
-			configDir = "config"
-		}
-		if err := model.LoadRAGPrompt(configDir, port); err != nil {
-			slog.Warn("failed to load RAG prompt, RAG search will work but AI won't know about it",
-				slog.String("err", err.Error()),
-			)
-		} else {
-			slog.Info("rag prompt loaded", slog.Int("port", port))
-		}
-
 		// Start RAG indexer
 		rag.StartIndexer(cfg.RAG)
 

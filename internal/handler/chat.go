@@ -762,27 +762,6 @@ func buildChatRequest(prompt, sessionID, projectPath, backendName, agentID, mode
 		}
 	}
 
-	// Inject RAG prompt if enabled
-	if model.RAGPrompt != "" {
-		ragPrompt := model.RAGPrompt
-		// Append current context so AI can use RAG search with correct filters
-		var contextParts []string
-		if sessionID != "" {
-			contextParts = append(contextParts, fmt.Sprintf("**Current session ID:** %s — use this as exclude_session_id when searching.", sessionID))
-		}
-		if projectPath != "" {
-			contextParts = append(contextParts, fmt.Sprintf("**Current project path:** %s — use this as the project parameter when searching.", projectPath))
-		}
-		if len(contextParts) > 0 {
-			ragPrompt += "\n\n" + strings.Join(contextParts, "\n")
-		}
-		if systemPrompt != "" {
-			systemPrompt = systemPrompt + "\n\n" + ragPrompt
-		} else {
-			systemPrompt = ragPrompt
-		}
-	}
-
 	// For OpenCode/Codex backends, resolve external session ID when resuming
 	effectiveSessionID := sessionID
 	resume := service.SessionHasAssistant(sessionID)
