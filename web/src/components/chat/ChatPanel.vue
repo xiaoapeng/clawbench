@@ -429,7 +429,13 @@ watch(() => props.open, async (val) => {
   }
 })
 
-function handleShowAgentSelector() {
+async function handleShowAgentSelector() {
+  await agentsComposable.loadAgents()
+  // If only one agent exists, skip the selector and create directly
+  if (agentsList.value.length === 1) {
+    manager.createSession(agentsList.value[0].id)
+    return
+  }
   sessionDrawerRef.value?.openAgentSelector()
 }
 

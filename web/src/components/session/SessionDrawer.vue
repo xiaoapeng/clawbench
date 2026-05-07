@@ -3,7 +3,7 @@
     <template #header>
       <Bot :size="16" class="bs-header-icon" />
       <span class="bs-header-title">{{ t('session.title') }}</span>
-      <button class="create-btn" @click.stop="showAgentSelector = true" :title="t('session.newSession')">
+      <button class="create-btn" @click.stop="handleCreateClick" :title="t('session.newSession')">
         <Plus :size="16" />
       </button>
     </template>
@@ -125,7 +125,26 @@ const sessionsWithStatus = computed(() => {
 
 defineExpose({ loadSessions, openAgentSelector })
 
-function openAgentSelector() {
+async function openAgentSelector() {
+  await loadAgents()
+  // If only one agent exists, skip the selector and create directly
+  if (agents.value.length === 1) {
+    emit('create', agents.value[0].id)
+    bottomSheetRef.value?.close()
+    return
+  }
+  showAgentSelector.value = true
+  agentSelectorOpenTime = Date.now()
+}
+
+async function handleCreateClick() {
+  await loadAgents()
+  // If only one agent exists, skip the selector and create directly
+  if (agents.value.length === 1) {
+    emit('create', agents.value[0].id)
+    bottomSheetRef.value?.close()
+    return
+  }
   showAgentSelector.value = true
   agentSelectorOpenTime = Date.now()
 }
