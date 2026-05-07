@@ -171,6 +171,9 @@ func ApplyDefaults(cfg *Config, presence map[string]bool) string {
 	if cfg.RAG.SearchLimit <= 0 {
 		cfg.RAG.SearchLimit = 5
 	}
+	if cfg.RAG.RetentionDays <= 0 {
+		cfg.RAG.RetentionDays = 90
+	}
 
 	return autoPassword
 }

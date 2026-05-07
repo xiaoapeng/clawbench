@@ -62,6 +62,7 @@ type RAGConfig struct {
 	PollInterval  string `yaml:"poll_interval"`     // Indexer poll interval (default: "10s")
 	BatchSize     int    `yaml:"batch_size"`        // Messages per indexer batch (default: 10)
 	SearchLimit   int    `yaml:"search_limit"`      // Default search result limit (default: 5)
+	RetentionDays int    `yaml:"retention_days"`    // Soft-deleted data retention days (0=keep forever, default: 90)
 }
 
 // PiperConfig holds configuration for the Piper TTS engine.

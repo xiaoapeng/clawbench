@@ -416,8 +416,9 @@ func main() {
 			slog.Error("failed to initialize RAG system", slog.String("err", err.Error()))
 			os.Exit(1)
 		}
-		defer rag.Shutdown()
 	}
+	// Always defer shutdown — cleanup worker may be running even without RAG
+	defer rag.Shutdown()
 
 	// Initialize and start scheduler
 	scheduler := service.NewScheduler()
@@ -476,6 +477,9 @@ func main() {
 		// Configure RAG search handler
 		handler.SetRAGService(rag.GlobalStore, rag.GlobalEmbedder, cfg.RAG.SearchLimit)
 	}
+
+	// Start cleanup worker for soft-deleted data (runs even without RAG)
+	rag.StartCleanupWorker(cfg.RAG)
 
 	// Initialize proxy service (port forwarding) — needs the final port number
 	proxyService := service.NewProxyRegistry(cfg.Proxy, port)

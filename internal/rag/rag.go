@@ -14,6 +14,8 @@ var (
 	GlobalIndexer *Indexer
 	// GlobalEmbedder is the singleton embedding client instance.
 	GlobalEmbedder *EmbeddingClient
+	// GlobalCleanupWorker is the singleton cleanup worker instance.
+	GlobalCleanupWorker *CleanupWorker
 )
 
 // Init initializes the RAG system: DuckDB store, embedding client, and dimension check.
@@ -65,8 +67,24 @@ func StartIndexer(cfg model.RAGConfig) {
 	GlobalIndexer.Start()
 }
 
+// StartCleanupWorker creates and starts the cleanup worker.
+// Starts regardless of whether RAG is enabled — soft-deleted SQLite data
+// accumulates even without RAG. When RAG is disabled, store is nil and
+// only SQLite cleanup runs.
+func StartCleanupWorker(cfg model.RAGConfig) {
+	if cfg.RetentionDays <= 0 {
+		return
+	}
+	GlobalCleanupWorker = NewCleanupWorker(GlobalStore, cfg)
+	GlobalCleanupWorker.Start()
+}
+
 // Shutdown gracefully stops the RAG system.
 func Shutdown() {
+	if GlobalCleanupWorker != nil {
+		GlobalCleanupWorker.Stop()
+		GlobalCleanupWorker = nil
+	}
 	if GlobalIndexer != nil {
 		GlobalIndexer.Stop()
 		GlobalIndexer = nil

@@ -247,3 +247,4 @@ ssh:
 #   poll_interval: "10s"             # Indexer poll interval (default: 10s) / 索引轮询间隔（默认: 10s）
 #   batch_size: 10                   # Messages per indexer batch (default: 10) / 每轮索引消息数（默认: 10）
 #   search_limit: 5                  # Default search result limit (default: 5) / 默认搜索结果数量（默认: 5）
+#   retention_days: 90               # Soft-deleted data retention days, 0=keep forever (default: 90) / 软删除数据保留天数，0=永久保留（默认: 90）

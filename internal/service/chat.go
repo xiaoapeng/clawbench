@@ -317,15 +317,16 @@ func CreateSession(projectPath, backend, title, agentID, modelName, agentSource 
 }
 
 // DeleteSession soft-deletes a chat session and all its messages.
-// Sets deleted=1 so data remains for RAG search but is hidden from UI.
+// Sets deleted=1 and updates updated_at so it serves as the deletion timestamp.
+// Data remains for RAG search but is hidden from UI; purged by cleanup worker after retention period.
 func DeleteSession(projectPath, backend, sessionID string) error {
 	// Soft-delete all messages in this session
 	_, err := DB.Exec("UPDATE chat_history SET deleted = 1 WHERE project_path = ? AND backend = ? AND session_id = ?", projectPath, backend, sessionID)
 	if err != nil {
 		return err
 	}
-	// Soft-delete the session record
-	_, err = DB.Exec("UPDATE chat_sessions SET deleted = 1 WHERE project_path = ? AND backend = ? AND id = ?", projectPath, backend, sessionID)
+	// Soft-delete the session record, update timestamp to mark deletion time
+	_, err = DB.Exec("UPDATE chat_sessions SET deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE project_path = ? AND backend = ? AND id = ?", projectPath, backend, sessionID)
 	return err
 }
 
@@ -476,4 +477,72 @@ func UnindexedCount() (int, error) {
 	var count int
 	err := DB.QueryRow("SELECT COUNT(*) FROM chat_history WHERE indexed = 0 AND streaming = 0").Scan(&count)
 	return count, err
+}
+
+// GetExpiredDeletedSessions returns session IDs of soft-deleted sessions
+// whose updated_at (set to deletion time) is older than the cutoff.
+func GetExpiredDeletedSessions(cutoff time.Time) ([]string, error) {
+	rows, err := DB.Query("SELECT id FROM chat_sessions WHERE deleted = 1 AND updated_at < ?", cutoff)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// PurgeDeletedData hard-deletes soft-deleted sessions and their associated data.
+// Deletes in order: ai_raw_responses → chat_history → chat_sessions.
+// Returns counts of purged sessions and messages.
+func PurgeDeletedData(sessionIDs []string) (sessionsPurged int64, messagesPurged int64, err error) {
+	if len(sessionIDs) == 0 {
+		return 0, 0, nil
+	}
+
+	tx, err := DB.Begin()
+	if err != nil {
+		return 0, 0, err
+	}
+	defer tx.Rollback()
+
+	// Build placeholders for IN clause: (?, ?, ...)
+	placeholders := ""
+	args := make([]any, len(sessionIDs))
+	for i, id := range sessionIDs {
+		if i > 0 {
+			placeholders += ","
+		}
+		placeholders += "?"
+		args[i] = id
+	}
+
+	// Delete ai_raw_responses for these sessions
+	_, _ = tx.Exec("DELETE FROM ai_raw_responses WHERE session_id IN ("+placeholders+")", args...)
+
+	// Delete chat_history for these sessions (includes deleted messages)
+	result, err := tx.Exec("DELETE FROM chat_history WHERE session_id IN ("+placeholders+")", args...)
+	if err != nil {
+		return 0, 0, err
+	}
+	messagesPurged, _ = result.RowsAffected()
+
+	// Delete the session records
+	result, err = tx.Exec("DELETE FROM chat_sessions WHERE id IN ("+placeholders+") AND deleted = 1", args...)
+	if err != nil {
+		return 0, 0, err
+	}
+	sessionsPurged, _ = result.RowsAffected()
+
+	if err := tx.Commit(); err != nil {
+		return 0, 0, err
+	}
+	return sessionsPurged, messagesPurged, nil
 }

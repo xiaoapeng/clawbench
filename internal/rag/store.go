@@ -289,6 +289,32 @@ func (s *Store) ChunkCount() (int, error) {
 	return count, err
 }
 
+// DeleteChunksBySessionIDs deletes all chunks belonging to the given session IDs.
+// Returns the total number of deleted chunks.
+func (s *Store) DeleteChunksBySessionIDs(sessionIDs []string) (int64, error) {
+	if len(sessionIDs) == 0 {
+		return 0, nil
+	}
+
+	// Build placeholders for IN clause
+	placeholders := ""
+	args := make([]any, len(sessionIDs))
+	for i, id := range sessionIDs {
+		if i > 0 {
+			placeholders += ","
+		}
+		placeholders += "?"
+		args[i] = id
+	}
+
+	result, err := s.db.Exec("DELETE FROM chat_chunks WHERE session_id IN ("+placeholders+")", args...)
+	if err != nil {
+		return 0, fmt.Errorf("delete chunks by session ids: %w", err)
+	}
+	affected, _ := result.RowsAffected()
+	return affected, nil
+}
+
 // Close closes the DuckDB connection.
 func (s *Store) Close() error {
 	if s.db != nil {
