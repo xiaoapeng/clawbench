@@ -6,24 +6,24 @@
     <div class="header-actions">
       <!-- TOC button (only for file types that support TOC) -->
       <button v-if="hasToc" class="file-header-btn" :class="{ active: tocOpen }" @click.stop="$emit('toggleToc')" :title="t('file.header.toc')">
-        <List :size="13" />
+        <List :size="12" />
       </button>
 
 
       <!-- Search button (only for file types that support search) -->
       <button v-if="hasToc" class="file-header-btn" :class="{ active: searchOpen }" :disabled="!file.content" @click.stop="$emit('toggleSearch')" :title="t('file.header.search')">
-        <Search :size="13" />
+        <Search :size="12" />
       </button>
 
       <!-- Refresh button -->
       <button class="file-header-btn" @click.stop="$emit('refresh')" :title="t('nav.refresh')">
-        <RotateCw :size="13" />
+        <RotateCw :size="12" />
       </button>
 
       <!-- More actions dropdown -->
       <div class="dropdown-wrapper" ref="dropdownRef">
         <button class="file-header-btn" @click.stop="menuOpen = !menuOpen" :title="t('file.header.more')">
-          <MoreVertical :size="13" />
+          <MoreVertical :size="12" />
         </button>
         <div v-if="menuOpen" class="dropdown-menu">
           <button v-if="file.isBinary" class="dropdown-item" @click="handleOpenAsText">
@@ -167,8 +167,8 @@ onBeforeUnmount(() => {
 .file-header-bar {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 8px 12px;
+    gap: 6px;
+    padding: 3px 8px;
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-left: none;
@@ -176,7 +176,7 @@ onBeforeUnmount(() => {
     border-radius: 0;
     z-index: 10;
     border-bottom: none;
-    font-size: 13px;
+    font-size: 12px;
     position: sticky;
     top: 0;
     left: 0;
@@ -225,7 +225,7 @@ onBeforeUnmount(() => {
 .header-actions {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 2px;
     margin-left: auto;
     flex-shrink: 0;
 }
@@ -233,12 +233,12 @@ onBeforeUnmount(() => {
 .file-header-btn {
     margin-left: auto;
     padding: 0;
-    width: 28px;
-    height: 28px;
+    width: 24px;
+    height: 24px;
     border: none;
     border-radius: 50%;
     background: var(--bg-tertiary);
-    font-size: 12px;
+    font-size: 11px;
     cursor: pointer;
     color: var(--text-secondary);
     flex-shrink: 0;
@@ -251,8 +251,8 @@ onBeforeUnmount(() => {
     color: var(--accent-color);
 }
 .file-header-btn svg {
-    width: 13px;
-    height: 13px;
+    width: 12px;
+    height: 12px;
 }
 .file-header-btn:disabled {
     opacity: 0.4;

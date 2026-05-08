@@ -60,6 +60,8 @@
             <button class="toolbar-btn modifier" :class="{ active: terminalKeys.activeModifiers.value.ctrl !== 'inactive', locked: terminalKeys.activeModifiers.value.ctrl === 'locked' }" @click="handleModifier('ctrl')" @contextmenu.prevent title="Ctrl">Ctl</button>
             <button class="toolbar-btn modifier" :class="{ active: terminalKeys.activeModifiers.value.alt !== 'inactive', locked: terminalKeys.activeModifiers.value.alt === 'locked' }" @click="handleModifier('alt')" @contextmenu.prevent title="Alt">Alt</button>
             <button class="toolbar-btn modifier" :class="{ active: terminalKeys.activeModifiers.value.shift !== 'inactive', locked: terminalKeys.activeModifiers.value.shift === 'locked' }" @click="handleModifier('shift')" @contextmenu.prevent title="Shift">⇧</button>
+            <button class="toolbar-btn shortcut" @click="terminalKeys.sendCtrlC(); focusTerminal()" title="Ctrl+C">C-C</button>
+            <button class="toolbar-btn shortcut" @click="terminalKeys.sendCtrlZ(); focusTerminal()" title="Ctrl+Z">C-Z</button>
           </div>
           <div class="key-divider"></div>
           <!-- Group: Navigation -->
@@ -90,12 +92,6 @@
             <button class="toolbar-btn" @click="session.sendInput('|'); focusTerminal()">|</button>
             <button class="toolbar-btn" @click="session.sendInput('_'); focusTerminal()">_</button>
             <button class="toolbar-btn" @click="session.sendInput('~'); focusTerminal()">~</button>
-          </div>
-          <div class="key-divider"></div>
-          <!-- Group: Shortcuts -->
-          <div class="key-group">
-            <button class="toolbar-btn shortcut" @click="terminalKeys.sendCtrlC(); focusTerminal()" title="Ctrl+C">C-C</button>
-            <button class="toolbar-btn shortcut" @click="terminalKeys.sendCtrlZ(); focusTerminal()" title="Ctrl+Z">C-Z</button>
           </div>
           <div class="key-divider"></div>
           <!-- Group: Actions -->
