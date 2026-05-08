@@ -110,6 +110,10 @@ type OllamaConfig struct {
 	BaseURL string `yaml:"base_url"` // Ollama API base URL (default: "http://localhost:11434")
 }
 
+// ConfigInstance holds the resolved configuration after ApplyDefaults.
+// Set once during startup, read-only afterwards.
+var ConfigInstance Config
+
 // Global application state
 var (
 	BinDir         string // Directory of the running binary

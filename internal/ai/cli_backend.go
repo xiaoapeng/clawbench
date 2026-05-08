@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -37,6 +38,11 @@ func (b *CLIBackend) ExecuteStream(ctx context.Context, req ChatRequest) (<-chan
 	}
 	cmd := exec.CommandContext(ctx, cmdName, args...)
 	cmd.Dir = req.WorkDir
+	// Inject CLAWBENCH_SCHEDULED=1 for anti-recursion: prevents AI from
+	// creating new scheduled tasks during a scheduled execution.
+	if req.ScheduledExecution {
+		cmd.Env = append(os.Environ(), "CLAWBENCH_SCHEDULED=1")
+	}
 	var stderrBuf bytes.Buffer
 	cmd.Stderr = &stderrBuf
 

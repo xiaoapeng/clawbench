@@ -16,6 +16,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"clawbench/internal/cli"
 	"clawbench/internal/handler"
 	"clawbench/internal/model"
 	"clawbench/internal/rag"
@@ -66,6 +67,11 @@ func (h *multiHandler) WithGroup(name string) slog.Handler {
 }
 
 func main() {
+	// Task subcommand dispatch (e.g., "clawbench task create --name ...")
+	if len(os.Args) > 1 && os.Args[1] == "task" {
+		os.Exit(cli.RunTaskCommand(os.Args[2:]))
+	}
+
 	// Parse CLI flags
 	devMode := false
 	cliPort := 0
@@ -131,6 +137,7 @@ func main() {
 
 	// Apply all defaults (returns auto-generated password if created)
 	autoPassword := model.ApplyDefaults(&cfg, presence)
+	model.ConfigInstance = cfg
 
 	// Set global variables from config
 	model.WatchDir = cfg.WatchDir
