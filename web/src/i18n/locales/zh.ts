@@ -164,6 +164,11 @@ export default {
       repeat: '重复：',
       prompt: '提示词：',
       cancelled: '已中断',
+      loading: '加载中...',
+      pause: '暂停',
+      resume: '恢复',
+      trigger: '立即执行',
+      delete: '删除',
       warningReasons: {
         user_cancel: '用户已中断',
         disconnect: '连接已断开，AI 响应中断',

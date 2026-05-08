@@ -164,6 +164,11 @@ export default {
       repeat: 'Repeat:',
       prompt: 'Prompt:',
       cancelled: 'Cancelled',
+      loading: 'Loading...',
+      pause: 'Pause',
+      resume: 'Resume',
+      trigger: 'Run Now',
+      delete: 'Delete',
       warningReasons: {
         user_cancel: 'User cancelled',
         disconnect: 'Connection lost, AI response interrupted',
