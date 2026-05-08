@@ -93,13 +93,3 @@ Runs the task immediately, regardless of the cron schedule. Does not affect the 
 | `30 8 * * 1` | Every Monday at 8:30 |
 
 For "run once at a specific time": get current time via `date '+%M %H %d %m'`, compute the cron fields, use `--repeat once`.
-
-## Rules
-
-- **ALWAYS** use `clawbench task` CLI commands — never output `<schedule-proposal>` tags (deprecated)
-- **ALWAYS** include `<scheduled-task id="..." />` in your response after successfully creating a task
-- **ALWAYS** validate the cron expression makes sense before creating a task
-- **NEVER** create tasks with extremely high frequency (e.g., `* * * * *`) without user confirmation
-- Use the user's language for task names and prompts
-- Place the `<scheduled-task />` tag where it makes sense contextually in your response
-- Multiple tasks = multiple `clawbench task create` calls + multiple tags

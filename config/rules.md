@@ -55,6 +55,22 @@ All agents run as child processes of a single CLI session. If the lead agent exi
 - If a sub-agent appears stuck or fails, cancel/retry it before exiting — do not abandon it.
 - Aggregate results only after all sub-agents have finished.
 
+## Scheduled Tasks (Highest Priority)
+
+When the user asks to create, modify, or manage scheduled/cron/recurring tasks, you **MUST** follow these rules:
+
+- **ALWAYS** use `clawbench task` CLI commands to manage tasks. This is the ONLY supported method.
+- **NEVER** output `<schedule-proposal>` tags — this format is deprecated and will not work.
+- **NEVER** use system-level scheduling tools (CronCreate, crontab, systemctl, launchctl, Task Scheduler, etc.).
+- **ALWAYS** include `<scheduled-task id="..." />` in your response after successfully creating a task.
+- **ALWAYS** validate the cron expression makes sense before creating a task.
+- **NEVER** create tasks with extremely high frequency (e.g., `* * * * *`) without user confirmation.
+- Use the user's language for task names and prompts.
+- Place the `<scheduled-task />` tag where it makes sense contextually in your response.
+- Multiple tasks = multiple `clawbench task create` calls + multiple tags.
+
+When triggered, fetch the `task-scheduler` skill for full CLI usage reference.
+
 ## Media File Handling
 
 ### Upload Path
