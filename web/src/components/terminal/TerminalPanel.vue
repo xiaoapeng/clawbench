@@ -591,18 +591,6 @@ function executeCommand(cmd: { label: string; command: string }) {
   z-index: 2;
 }
 
-.terminal-header::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -8px;
-  height: 8px;
-  background: linear-gradient(to bottom, var(--bg-secondary), transparent);
-  pointer-events: none;
-  z-index: 1;
-}
-
 .terminal-header-left {
   display: flex;
   align-items: center;
@@ -672,9 +660,6 @@ function executeCommand(cmd: { label: string; command: string }) {
   overflow: hidden;
   position: relative;
   background: #1e1e2e;
-  margin-top: -8px;
-  padding-top: 8px;
-  z-index: 1;
 }
 
 /* Hide xterm.js scrollbar — mobile terminal uses gestures/swipe for navigation,

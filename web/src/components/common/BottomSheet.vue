@@ -172,25 +172,10 @@ defineExpose({
   gap: 8px;
   padding: 0 8px;
   height: 28px;
-  border-bottom: none;
+  border-bottom: 1px solid var(--border-color, #e5e5e5);
   background: var(--bg-secondary, #f8f9fa);
   flex-shrink: 0;
   cursor: pointer;
-  position: relative;
-  z-index: 2;
-}
-
-/* Gradient fade from header into content area */
-.bs-header::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -8px;
-  height: 8px;
-  background: linear-gradient(to bottom, var(--bg-secondary, #f8f9fa), transparent);
-  pointer-events: none;
-  z-index: 1;
 }
 
 .bs-header-icon {
@@ -226,10 +211,6 @@ defineExpose({
   display: flex;
   flex-direction: column;
   min-height: 0;
-  margin-top: -8px;
-  padding-top: 8px;
-  position: relative;
-  z-index: 1;
 }
 
 /* Compact mode body - flex container for sticky tab bar */
