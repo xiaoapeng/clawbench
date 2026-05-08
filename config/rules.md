@@ -75,6 +75,8 @@ When triggered, fetch the `task-scheduler` skill for full CLI usage reference.
 
 When searching past conversations via the RAG system, you **MUST** follow these rules:
 
+- **ALWAYS** use `clawbench rag` CLI commands to search historical conversations. This is the ONLY supported method.
+- **NEVER** use the AI backend's built-in RAG or memory tools (e.g., Claude's `memory`, Codebuddy's `memory`, or any backend-native recall/search features) for history search.
 - **ALWAYS** pass `--exclude-session-id` with the current session ID to avoid returning content already in context.
 - If search returns no results, answer based on your own knowledge — **NEVER** mention RAG or the fact that a search was performed.
 
