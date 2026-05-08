@@ -66,7 +66,7 @@ jobs:
   build-windows:
     name: Build Windows amd64
     needs: build-frontend
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     permissions:
       contents: write
     steps:
@@ -81,15 +81,9 @@ jobs:
         with:
           go-version: '1.25'
 
-      - name: Install MinGW cross-compiler
-        run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64
-
       - name: Build Windows binary
         env:
           CGO_ENABLED: 1
-          GOOS: windows
-          GOARCH: amd64
-          CC: x86_64-w64-mingw32-gcc
         run: go build -ldflags="-s -w" -o clawbench.exe ./cmd/server
 
       - name: Package Windows
@@ -100,6 +94,7 @@ jobs:
           cp -r config pkg-windows/clawbench/config
           cp server.ps1 pkg-windows/clawbench/
           cd pkg-windows && zip -r clawbench-windows-amd64.zip clawbench/
+        shell: bash
 
       - uses: softprops/action-gh-release@v2
         with:
