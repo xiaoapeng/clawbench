@@ -80,8 +80,6 @@
           <div class="key-divider"></div>
           <!-- Group: Edit -->
           <div class="key-group">
-            <button class="toolbar-btn" @click="terminalKeys.sendEnter(); focusTerminal()" title="Enter">↵</button>
-            <button class="toolbar-btn" @click="terminalKeys.sendBackspace(); focusTerminal()" title="Backspace">⌫</button>
             <button class="toolbar-btn" @click="terminalKeys.sendDelete(); focusTerminal()" title="Delete">Del</button>
           </div>
           <div class="key-divider"></div>
@@ -668,6 +666,12 @@ function executeCommand(cmd: { label: string; command: string }) {
   overflow: hidden;
   position: relative;
   background: #1e1e2e;
+}
+
+/* Hide xterm.js scrollbar — mobile terminal uses gestures/swipe for navigation,
+   not a visible scrollbar. Prevents scrollbar flash when soft keyboard opens/closes. */
+.terminal-container :deep(.xterm-scrollbar) {
+  display: none !important;
 }
 
 [data-theme="dark"] .terminal-container {
