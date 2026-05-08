@@ -90,6 +90,10 @@ export function useTerminalKeys(sendInput: (data: string) => void) {
     sendInput('\x03')
   }
 
+  function sendCtrlZ() {
+    sendInput('\x1a')
+  }
+
   function sendEscape() {
     sendInput('\x1b')
   }
@@ -114,6 +118,34 @@ export function useTerminalKeys(sendInput: (data: string) => void) {
     sendInput('\x1b[D')
   }
 
+  function sendHome() {
+    sendInput('\x1b[H')
+  }
+
+  function sendEnd() {
+    sendInput('\x1b[F')
+  }
+
+  function sendPageUp() {
+    sendInput('\x1b[5~')
+  }
+
+  function sendPageDown() {
+    sendInput('\x1b[6~')
+  }
+
+  function sendEnter() {
+    sendInput('\r')
+  }
+
+  function sendBackspace() {
+    sendInput('\x7f')
+  }
+
+  function sendDelete() {
+    sendInput('\x1b[3~')
+  }
+
   function reset() {
     modifiers.ctrl = 'inactive'
     modifiers.alt = 'inactive'
@@ -127,12 +159,20 @@ export function useTerminalKeys(sendInput: (data: string) => void) {
     processInput,
     clearOnceModifiers,
     sendCtrlC,
+    sendCtrlZ,
     sendEscape,
     sendTab,
     sendArrowUp,
     sendArrowDown,
     sendArrowRight,
     sendArrowLeft,
+    sendHome,
+    sendEnd,
+    sendPageUp,
+    sendPageDown,
+    sendEnter,
+    sendBackspace,
+    sendDelete,
     reset,
   }
 }

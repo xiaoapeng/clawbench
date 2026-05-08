@@ -53,27 +53,68 @@
           <HandIcon :size="14" />
         </button>
         <div class="toolbar-scroll">
-          <button class="toolbar-btn" @click="terminalKeys.sendEscape(); focusTerminal()" :title="'Esc'">Esc</button>
-          <button class="toolbar-btn" @click="terminalKeys.sendTab(); focusTerminal()" :title="'Tab'">Tab</button>
-          <button class="toolbar-btn modifier" :class="{ active: terminalKeys.activeModifiers.value.ctrl !== 'inactive', locked: terminalKeys.activeModifiers.value.ctrl === 'locked' }" @click="handleModifier('ctrl')" @contextmenu.prevent>Ctl</button>
-          <button class="toolbar-btn modifier" :class="{ active: terminalKeys.activeModifiers.value.alt !== 'inactive', locked: terminalKeys.activeModifiers.value.alt === 'locked' }" @click="handleModifier('alt')" @contextmenu.prevent>Alt</button>
-          <button class="toolbar-btn" @click="terminalKeys.sendCtrlC(); focusTerminal()" :title="'Ctrl+C'">C-C</button>
-          <button class="toolbar-btn" @click="session.sendInput('/'); focusTerminal()">/</button>
-          <button class="toolbar-btn" @click="session.sendInput('-'); focusTerminal()">-</button>
-          <button class="toolbar-btn" @click="session.sendInput('|'); focusTerminal()">|</button>
-          <button class="toolbar-btn" @click="session.sendInput('_'); focusTerminal()">_</button>
-          <button v-if="quickCommands.length > 0" class="toolbar-btn" @click="showCommands = !showCommands" :title="t('terminal.quickCommands')">
-            <ListIcon :size="14" />
-          </button>
-          <button class="toolbar-btn" @click="handleCopyOutput" :title="t('terminal.copyOutput')">
-            <CopyIcon :size="14" />
-          </button>
-          <button class="toolbar-btn" @click="handleRebuild" :title="t('terminal.rebuildSession')">
-            <RefreshCwIcon :size="14" />
-          </button>
-          <button class="toolbar-btn danger" @click="handleClose" :title="t('terminal.closeProcess')">
-            <XIcon :size="14" />
-          </button>
+          <!-- Group: Modifiers -->
+          <div class="key-group">
+            <button class="toolbar-btn" @click="terminalKeys.sendEscape(); focusTerminal()" title="Esc">Esc</button>
+            <button class="toolbar-btn" @click="terminalKeys.sendTab(); focusTerminal()" title="Tab">Tab</button>
+            <button class="toolbar-btn modifier" :class="{ active: terminalKeys.activeModifiers.value.ctrl !== 'inactive', locked: terminalKeys.activeModifiers.value.ctrl === 'locked' }" @click="handleModifier('ctrl')" @contextmenu.prevent title="Ctrl">Ctl</button>
+            <button class="toolbar-btn modifier" :class="{ active: terminalKeys.activeModifiers.value.alt !== 'inactive', locked: terminalKeys.activeModifiers.value.alt === 'locked' }" @click="handleModifier('alt')" @contextmenu.prevent title="Alt">Alt</button>
+            <button class="toolbar-btn modifier" :class="{ active: terminalKeys.activeModifiers.value.shift !== 'inactive', locked: terminalKeys.activeModifiers.value.shift === 'locked' }" @click="handleModifier('shift')" @contextmenu.prevent title="Shift">⇧</button>
+          </div>
+          <div class="key-divider"></div>
+          <!-- Group: Navigation -->
+          <div class="key-group">
+            <button class="toolbar-btn" @click="terminalKeys.sendHome(); focusTerminal()" title="Home">Home</button>
+            <button class="toolbar-btn" @click="terminalKeys.sendEnd(); focusTerminal()" title="End">End</button>
+            <button class="toolbar-btn" @click="terminalKeys.sendPageUp(); focusTerminal()" title="Page Up">PgUp</button>
+            <button class="toolbar-btn" @click="terminalKeys.sendPageDown(); focusTerminal()" title="Page Down">PgDn</button>
+          </div>
+          <div class="key-divider"></div>
+          <!-- Group: Arrow keys -->
+          <div class="key-group">
+            <button class="toolbar-btn" @click="terminalKeys.sendArrowUp(); focusTerminal()" title="↑">↑</button>
+            <button class="toolbar-btn" @click="terminalKeys.sendArrowDown(); focusTerminal()" title="↓">↓</button>
+            <button class="toolbar-btn" @click="terminalKeys.sendArrowLeft(); focusTerminal()" title="←">←</button>
+            <button class="toolbar-btn" @click="terminalKeys.sendArrowRight(); focusTerminal()" title="→">→</button>
+          </div>
+          <div class="key-divider"></div>
+          <!-- Group: Edit -->
+          <div class="key-group">
+            <button class="toolbar-btn" @click="terminalKeys.sendEnter(); focusTerminal()" title="Enter">↵</button>
+            <button class="toolbar-btn" @click="terminalKeys.sendBackspace(); focusTerminal()" title="Backspace">⌫</button>
+            <button class="toolbar-btn" @click="terminalKeys.sendDelete(); focusTerminal()" title="Delete">Del</button>
+          </div>
+          <div class="key-divider"></div>
+          <!-- Group: Symbols -->
+          <div class="key-group">
+            <button class="toolbar-btn" @click="session.sendInput('/'); focusTerminal()">/</button>
+            <button class="toolbar-btn" @click="session.sendInput('-'); focusTerminal()">-</button>
+            <button class="toolbar-btn" @click="session.sendInput('|'); focusTerminal()">|</button>
+            <button class="toolbar-btn" @click="session.sendInput('_'); focusTerminal()">_</button>
+            <button class="toolbar-btn" @click="session.sendInput('~'); focusTerminal()">~</button>
+          </div>
+          <div class="key-divider"></div>
+          <!-- Group: Shortcuts -->
+          <div class="key-group">
+            <button class="toolbar-btn shortcut" @click="terminalKeys.sendCtrlC(); focusTerminal()" title="Ctrl+C">C-C</button>
+            <button class="toolbar-btn shortcut" @click="terminalKeys.sendCtrlZ(); focusTerminal()" title="Ctrl+Z">C-Z</button>
+          </div>
+          <div class="key-divider"></div>
+          <!-- Group: Actions -->
+          <div class="key-group">
+            <button v-if="quickCommands.length > 0" class="toolbar-btn" @click="showCommands = !showCommands" :title="t('terminal.quickCommands')">
+              <ListIcon :size="14" />
+            </button>
+            <button class="toolbar-btn" @click="handleCopyOutput" :title="t('terminal.copyOutput')">
+              <CopyIcon :size="14" />
+            </button>
+            <button class="toolbar-btn" @click="handleRebuild" :title="t('terminal.rebuildSession')">
+              <RefreshCwIcon :size="14" />
+            </button>
+            <button class="toolbar-btn danger" @click="handleClose" :title="t('terminal.closeProcess')">
+              <XIcon :size="14" />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -377,6 +418,14 @@ watch(() => props.open, async (isOpen) => {
     initTerminal()
     await nextTick()
     await mountTerminal()
+  } else {
+    // Drawer closed (user swipe-down, parent hides, etc.)
+    // Disconnect session and clean up so next open is fresh
+    session.disconnect()
+    terminalKeys.reset()
+    showCommands.value = false
+    showReopenPrompt.value = false
+    cleanupTerminal()
   }
 }, { immediate: true })
 
@@ -425,15 +474,7 @@ onBeforeUnmount(() => {
   viewport.stopWatching()
   gestures.detach()
   session.disconnect()
-  // Cleanup wheel handler and contextmenu handler
-  if (terminalContainer.value) {
-    const wheelH = (terminalContainer.value as any).__terminalWheelHandler
-    if (wheelH) terminalContainer.value.removeEventListener('wheel', wheelH)
-    const ctxH = (terminalContainer.value as any).__terminalContextMenuHandler
-    if (ctxH) terminalContainer.value.removeEventListener('contextmenu', ctxH)
-  }
-  xterm.value?.dispose()
-  xterm.value = null
+  cleanupTerminal()
 })
 
 // Actions
@@ -452,10 +493,31 @@ function handleReconnect() {
 }
 
 function handleClose() {
+  // Close PTY process on server
   session.sendClose()
+  session.disconnect()
+  // Reset state
   terminalKeys.reset()
   showCommands.value = false
   showReopenPrompt.value = false
+  // Clean up xterm instance so next open starts fresh
+  cleanupTerminal()
+  // Close the drawer
+  emit('close')
+}
+
+function cleanupTerminal() {
+  // Remove event handlers from container
+  if (terminalContainer.value) {
+    const wheelH = (terminalContainer.value as any).__terminalWheelHandler
+    if (wheelH) terminalContainer.value.removeEventListener('wheel', wheelH)
+    const ctxH = (terminalContainer.value as any).__terminalContextMenuHandler
+    if (ctxH) terminalContainer.value.removeEventListener('contextmenu', ctxH)
+  }
+  // Dispose xterm — next open will create a fresh instance
+  xterm.value?.dispose()
+  xterm.value = null
+  fitAddon.value = null
 }
 
 function dismissReopenPrompt() {
@@ -722,7 +784,7 @@ function executeCommand(cmd: { label: string; command: string }) {
 .toolbar-scroll {
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: 2px;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   flex: 1;
@@ -732,6 +794,21 @@ function executeCommand(cmd: { label: string; command: string }) {
 }
 .toolbar-scroll::-webkit-scrollbar {
   display: none;
+}
+
+.key-group {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.key-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border-color);
+  margin: 0 4px;
+  flex-shrink: 0;
+  opacity: 0.6;
 }
 
 .toolbar-btn {
@@ -771,6 +848,16 @@ function executeCommand(cmd: { label: string; command: string }) {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
   color: #fff;
+}
+
+.toolbar-btn.shortcut {
+  background: var(--bg-tertiary);
+  font-weight: 600;
+  font-size: 11px;
+}
+
+.toolbar-btn.shortcut:active {
+  background: var(--bg-key-active);
 }
 
 .toolbar-btn.danger {
@@ -828,6 +915,9 @@ function executeCommand(cmd: { label: string; command: string }) {
 @media (hover: none) {
   .toolbar-btn:hover {
     background: var(--bg-key);
+  }
+  .toolbar-btn.shortcut:hover {
+    background: var(--bg-tertiary);
   }
   .toolbar-btn:active {
     background: var(--bg-key-active);
