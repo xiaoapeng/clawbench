@@ -12,7 +12,7 @@
       </div>
       <!-- Tool use block -->
       <template v-else-if="block.type === 'tool_use'">
-        <div class="chat-tool-call" :class="{ done: block.done, incomplete: block.done && !hasToolResult(block), 'tool-error': block.status === 'error' }" :data-category="getToolIcon(block.name).category" @click.stop="$emit('toggle-tool', key(bi))">
+        <div class="chat-tool-call" :class="{ done: block.done, 'tool-error': block.status === 'error' }" :data-category="getToolIcon(block.name).category" @click.stop="$emit('toggle-tool', key(bi))">
           <component :is="getToolIcon(block.name).icon" :size="12" class="tool-icon" />
           <span class="tool-name">{{ block.name }}</span>
           <span v-if="toolCallSummary(block)" class="tool-summary">{{ toolCallSummary(block) }}</span>
@@ -20,10 +20,8 @@
           <span v-if="!block.done" class="tool-spinner"></span>
           <!-- Done with error: red X -->
           <XCircle v-else-if="block.status === 'error'" :size="14" color="#ef4444" class="tool-error-icon" />
-          <!-- Done with result: green check -->
-          <CheckCircle2 v-else-if="hasToolResult(block)" :size="14" color="#22c55e" class="tool-check" />
-          <!-- Done without result: yellow warning -->
-          <AlertCircle v-else :size="14" color="#f59e0b" class="tool-warn" />
+          <!-- Done (success or unknown): green check -->
+          <CheckCircle2 v-else :size="14" color="#22c55e" class="tool-check" />
         </div>
         <div v-if="expandedTools[key(bi)] || shouldAutoExpand(block)" class="tool-detail" :data-tool-name="block.name" @click="handleToolDetailClick">
           <div v-html="formatToolInput(block.input, block.name)"></div>
@@ -149,20 +147,6 @@ function getWarningText(block) {
   }
   // Fallback: no reason code or no matching i18n key (handles old DB records)
   return block.text || ''
-}
-
-function hasToolResult(block) {
-  if (!block.done) return false
-  if (!block.name) return false
-  // New: explicit output from tool_result event
-  if (block.output !== undefined && block.output !== '') return true
-  // Legacy: blocks without output field (old DB records) — treat as having result
-  if (block.output === undefined) {
-    if (block.input === null || block.input === undefined) return false
-    return true
-  }
-  // Explicit empty output means the tool ran but produced nothing
-  return false
 }
 
 function shouldAutoExpand(block) {
@@ -557,10 +541,6 @@ onUnmounted(() => {
 .chat-tool-call .tool-warn {
   flex-shrink: 0;
   margin-left: auto;
-}
-
-.chat-tool-call.incomplete {
-  --tool-accent: #f59e0b;
 }
 
 .chat-tool-call.tool-error {
