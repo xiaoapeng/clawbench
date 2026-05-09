@@ -627,7 +627,6 @@ export default {
     sessionClosed: '终端会话已关闭。',
     reconnecting: '连接断开，正在重连...',
     idleTimeoutClosed: '会话已因空闲超时关闭。',
-    closeProcess: '关闭进程',
     copyOutput: '复制输出',
     quickCommands: '快捷指令',
     editCommands: '编辑',

@@ -100,9 +100,6 @@
             <button class="toolbar-btn" @click="handleRebuild" :title="t('terminal.rebuildSession')">
               <RefreshCwIcon :size="14" />
             </button>
-            <button class="toolbar-btn danger" @click="handleClose" :title="t('terminal.closeProcess')">
-              <XIcon :size="14" />
-            </button>
           </div>
         </div>
       </div>
@@ -145,7 +142,7 @@ import { useQuickCommands } from '@/composables/useQuickCommands'
 import { store } from '@/stores/app'
 import { resolveTerminalCwd, shouldPromptForTerminalReopen } from './terminalCwd'
 
-import { Terminal as TerminalIcon, Copy as CopyIcon, X as XIcon, Zap as ZapIcon, Hand as HandIcon, RefreshCw as RefreshCwIcon } from 'lucide-vue-next'
+import { Terminal as TerminalIcon, Copy as CopyIcon, Zap as ZapIcon, Hand as HandIcon, RefreshCw as RefreshCwIcon } from 'lucide-vue-next'
 
 const props = defineProps<{
   open: boolean
@@ -493,19 +490,6 @@ function handleReconnect() {
   }).catch(() => {
     // Error will be shown via overlay
   })
-}
-
-function handleClose() {
-  // Close PTY process on server
-  session.sendClose()
-  // Reset state
-  terminalKeys.reset()
-  showCommands.value = false
-  showReopenPrompt.value = false
-  // Clean up xterm instance so next open starts fresh
-  cleanupTerminal()
-  // Close the drawer
-  emit('close')
 }
 
 function cleanupTerminal() {

@@ -627,7 +627,6 @@ export default {
     sessionClosed: 'Terminal session closed.',
     reconnecting: 'Connection lost, reconnecting...',
     idleTimeoutClosed: 'Session closed due to inactivity.',
-    closeProcess: 'Close Process',
     copyOutput: 'Copy Output',
     quickCommands: 'Quick Commands',
     editCommands: 'Edit',
