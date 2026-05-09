@@ -642,6 +642,8 @@ export default {
     commandSaved: '命令已保存',
     commandDeleted: '命令已删除',
     reorderFailed: '排序失败',
+    saveFailed: '保存失败',
+    deleteCommand: '删除',
     deleteConfirm: '确认删除此命令？',
     sessionInUse: '终端会话已有活跃连接。',
     directoryMismatch: '终端正在其他目录运行。',

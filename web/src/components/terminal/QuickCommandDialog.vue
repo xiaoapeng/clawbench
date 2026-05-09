@@ -1,12 +1,15 @@
 <template>
-  <ModalDialog :open="open" :title="t('terminal.quickCommands')" @close="$emit('close')">
+  <ModalDialog :open="open" :title="currentPage === 'list' ? t('terminal.quickCommands') : (editingCommand ? t('terminal.editCommand') : t('terminal.addCommand'))" @close="handleClose">
     <template #header>
-      <ListIcon :size="16" class="modal-header-icon" />
-      <span class="modal-title">{{ t('terminal.quickCommands') }}</span>
+      <span class="modal-header-icon" @click="goBackIfEdit">
+        <ChevronLeftIcon v-if="currentPage === 'edit'" :size="16" />
+        <ZapIcon v-else :size="16" />
+      </span>
+      <span class="modal-title">{{ currentPage === 'list' ? t('terminal.quickCommands') : (editingCommand ? t('terminal.editCommand') : t('terminal.addCommand')) }}</span>
     </template>
 
-    <div class="qc-content">
-      <!-- Command list with drag-to-reorder -->
+    <!-- Page: Command list -->
+    <div v-if="currentPage === 'list'" class="qc-content">
       <div v-if="commands.length > 0" class="qc-list">
         <draggable
           v-model="localCommands"
@@ -18,17 +21,23 @@
             <div class="qc-row" :class="{ 'qc-hidden': cmd.hidden }">
               <span class="drag-handle">≡</span>
               <span class="qc-label">
-                <span v-if="cmd.auto_execute" class="qc-badge auto">🚀</span>
-                <span v-if="cmd.hidden" class="qc-badge dim">👁</span>
+                <ZapIcon v-if="cmd.auto_execute" :size="12" class="qc-badge-auto" />
+                <EyeOffIcon v-if="cmd.hidden" :size="12" class="qc-badge-dim" />
                 {{ cmd.label }}
               </span>
               <span class="qc-cmd" :title="cmd.command">{{ cmd.command }}</span>
               <button class="qc-action" @click="editCommand(cmd)" :title="t('terminal.editCommand')">
                 <PencilIcon :size="14" />
               </button>
-              <button class="qc-action danger" @click="confirmDelete(cmd)" :title="t('terminal.commandDeleted')">
+              <button class="qc-action danger" @click="toggleDeleteConfirm(cmd.id)" :title="t('terminal.deleteCommand')">
                 <Trash2Icon :size="14" />
               </button>
+            </div>
+            <!-- Inline delete confirmation -->
+            <div v-if="deleteConfirmId === cmd.id" class="qc-delete-confirm">
+              <span>{{ t('terminal.deleteConfirm') }}</span>
+              <button class="qc-confirm-btn delete" @click="doDelete(cmd.id)">{{ t('common.confirm') }}</button>
+              <button class="qc-confirm-btn cancel" @click="deleteConfirmId = null">{{ t('common.cancel') }}</button>
             </div>
           </template>
         </draggable>
@@ -37,107 +46,121 @@
         {{ t('terminal.addCommand') }}
       </div>
 
-      <!-- Add button -->
       <button class="qc-add" @click="addNewCommand">
         <PlusIcon :size="16" />
         {{ t('terminal.addCommand') }}
       </button>
     </div>
 
-    <template #footer>
-      <button class="modal-btn" @click="$emit('close')">{{ t('common.close') }}</button>
-    </template>
-
-    <!-- Nested edit dialog -->
-    <ModalDialog :open="showItemDialog" :title="editingCommand ? t('terminal.editCommand') : t('terminal.addCommand')" :z-index="2200" @close="showItemDialog = false">
-      <template #header>
-        <TerminalIcon :size="16" class="modal-header-icon" />
-        <span class="modal-title">{{ editingCommand ? t('terminal.editCommand') : t('terminal.addCommand') }}</span>
-      </template>
-
-      <div class="qc-edit-content">
-        <div class="form-group">
-          <label class="form-label">{{ t('terminal.commandLabel') }} <span class="required">*</span></label>
-          <input type="text" class="form-input" v-model="form.label" :placeholder="t('terminal.commandLabel')" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">{{ t('terminal.commandText') }} <span class="required">*</span></label>
-          <input type="text" class="form-input" v-model="form.command" :placeholder="t('terminal.commandText')" />
-        </div>
-        <div v-if="formError" class="form-error">{{ formError }}</div>
-
-        <label class="form-checkbox">
-          <input type="checkbox" v-model="form.hidden" />
-          <span>{{ t('terminal.commandHidden') }}</span>
-        </label>
-        <label class="form-checkbox">
-          <input type="checkbox" v-model="form.auto_execute" @change="onAutoExecuteChange" />
-          <span>{{ t('terminal.commandAutoExecute') }}</span>
-        </label>
-        <div v-if="autoExecuteWarning" class="form-hint">{{ t('terminal.autoExecuteWarning') }}</div>
+    <!-- Page: Edit form (drill-down) -->
+    <div v-else class="qc-edit-content">
+      <div class="form-group">
+        <label class="form-label">{{ t('terminal.commandLabel') }} <span class="required">*</span></label>
+        <input type="text" class="form-input" v-model="form.label" :placeholder="t('terminal.commandLabel')" />
       </div>
+      <div class="form-group">
+        <label class="form-label">{{ t('terminal.commandText') }} <span class="required">*</span></label>
+        <input type="text" class="form-input" v-model="form.command" :placeholder="t('terminal.commandText')" />
+      </div>
+      <div v-if="formError" class="form-error">{{ formError }}</div>
 
-      <template #footer>
-        <button class="modal-btn" @click="showItemDialog = false">{{ t('common.cancel') }}</button>
-        <button class="modal-btn primary" @click="saveCommand">{{ t('common.save') }}</button>
+      <label class="form-checkbox">
+        <input type="checkbox" v-model="form.hidden" />
+        <span>{{ t('terminal.commandHidden') }}</span>
+      </label>
+      <label class="form-checkbox">
+        <input type="checkbox" v-model="form.auto_execute" />
+        <span>{{ t('terminal.commandAutoExecute') }}</span>
+      </label>
+      <div v-if="form.auto_execute && hasExistingAutoExec" class="form-hint">{{ t('terminal.autoExecuteWarning') }}</div>
+    </div>
+
+    <template #footer>
+      <template v-if="currentPage === 'list'">
+        <button class="modal-btn" @click="$emit('close')">{{ t('common.close') }}</button>
       </template>
-    </ModalDialog>
+      <template v-else>
+        <button class="modal-btn" @click="currentPage = 'list'">{{ t('common.cancel') }}</button>
+        <button class="modal-btn primary" :disabled="saving" @click="saveCommand">{{ saving ? '...' : t('common.save') }}</button>
+      </template>
+    </template>
   </ModalDialog>
 </template>
 
-<script setup>
-import { ref, watch } from 'vue'
+<script setup lang="ts">
+import { ref, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import draggable from 'vuedraggable'
 import ModalDialog from '@/components/common/ModalDialog.vue'
-import { ListIcon, PencilIcon, Trash2Icon, PlusIcon, Terminal as TerminalIcon } from 'lucide-vue-next'
-import { useQuickCommands } from '@/composables/useQuickCommands'
+import { ZapIcon, PencilIcon, Trash2Icon, PlusIcon, ChevronLeftIcon, EyeOffIcon } from 'lucide-vue-next'
+import { useQuickCommands, type QuickCommand } from '@/composables/useQuickCommands'
+import { useToast } from '@/composables/useToast'
 
 const props = defineProps({
   open: Boolean,
 })
 
-defineEmits(['close'])
+const emit = defineEmits(['close'])
 
 const { t } = useI18n()
+const toast = useToast()
 const { commands, reorderCommands, addCommand, updateCommand, deleteCommand } = useQuickCommands()
 
-const localCommands = ref([...commands.value])
+const localCommands = ref<QuickCommand[]>([...commands.value])
+const currentPage = ref<'list' | 'edit'>('list')
+const editingCommand = ref<QuickCommand | null>(null)
+const form = ref({ label: '', command: '', hidden: false, auto_execute: false })
+const formError = ref('')
+const saving = ref(false)
+const deleteConfirmId = ref<number | null>(null)
+
+// Whether another command already has auto_execute (for warning)
+const hasExistingAutoExec = computed(() => {
+  if (!editingCommand.value) {
+    return commands.value.some(c => c.auto_execute)
+  }
+  return commands.value.some(c => c.auto_execute && c.id !== editingCommand.value!.id)
+})
 
 // Sync local list when commands change
 watch(commands, (val) => {
   localCommands.value = [...val]
 }, { deep: true })
 
-// Edit dialog state
-const showItemDialog = ref(false)
-const editingCommand = ref(null)
-const form = ref({ label: '', command: '', hidden: false, auto_execute: false })
-const formError = ref('')
-const autoExecuteWarning = ref(false)
+// Reset state when dialog opens/closes
+watch(() => props.open, (isOpen) => {
+  if (isOpen) {
+    currentPage.value = 'list'
+    deleteConfirmId.value = null
+    formError.value = ''
+    editingCommand.value = null
+  }
+})
 
-function editCommand(cmd) {
+function handleClose() {
+  currentPage.value = 'list'
+  deleteConfirmId.value = null
+  emit('close')
+}
+
+function goBackIfEdit() {
+  if (currentPage.value === 'edit') {
+    currentPage.value = 'list'
+  }
+}
+
+function editCommand(cmd: QuickCommand) {
   editingCommand.value = cmd
   form.value = { label: cmd.label, command: cmd.command, hidden: cmd.hidden, auto_execute: cmd.auto_execute }
   formError.value = ''
-  autoExecuteWarning.value = false
-  showItemDialog.value = true
+  currentPage.value = 'edit'
 }
 
 function addNewCommand() {
   editingCommand.value = null
   form.value = { label: '', command: '', hidden: false, auto_execute: false }
   formError.value = ''
-  autoExecuteWarning.value = false
-  showItemDialog.value = true
-}
-
-function onAutoExecuteChange() {
-  if (form.value.auto_execute) {
-    autoExecuteWarning.value = true
-  } else {
-    autoExecuteWarning.value = false
-  }
+  currentPage.value = 'edit'
 }
 
 async function saveCommand() {
@@ -148,28 +171,46 @@ async function saveCommand() {
     return
   }
   formError.value = ''
+  saving.value = true
 
   try {
+    let ok: boolean
     if (editingCommand.value) {
-      await updateCommand(editingCommand.value.id, { label, command, hidden: form.value.hidden, auto_execute: form.value.auto_execute })
+      ok = await updateCommand(editingCommand.value.id, { label, command, hidden: form.value.hidden, auto_execute: form.value.auto_execute })
     } else {
-      await addCommand({ label, command, hidden: form.value.hidden, auto_execute: form.value.auto_execute })
+      ok = await addCommand({ label, command, hidden: form.value.hidden, auto_execute: form.value.auto_execute })
     }
-    showItemDialog.value = false
-  } catch {
-    // Error already handled in composable
+
+    if (ok) {
+      toast.show(t('terminal.commandSaved'), { type: 'success' })
+      currentPage.value = 'list'
+    } else {
+      formError.value = t('terminal.saveFailed')
+    }
+  } finally {
+    saving.value = false
   }
 }
 
-async function confirmDelete(cmd) {
-  if (confirm(t('terminal.deleteConfirm'))) {
-    await deleteCommand(cmd.id)
+function toggleDeleteConfirm(id: number) {
+  deleteConfirmId.value = deleteConfirmId.value === id ? null : id
+}
+
+async function doDelete(id: number) {
+  deleteConfirmId.value = null
+  const ok = await deleteCommand(id)
+  if (ok) {
+    toast.show(t('terminal.commandDeleted'), { type: 'success' })
   }
 }
 
-function onDragEnd() {
+async function onDragEnd() {
   const ids = localCommands.value.map(c => c.id)
-  reorderCommands(ids)
+  const ok = await reorderCommands(ids)
+  if (!ok) {
+    toast.show(t('terminal.reorderFailed'), { type: 'error' })
+    localCommands.value = [...commands.value] // Reset from source of truth
+  }
 }
 </script>
 
@@ -230,19 +271,19 @@ function onDragEnd() {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 3px;
 }
 
-.qc-badge {
-  font-size: 11px;
-  margin-right: 2px;
+.qc-badge-auto {
+  color: var(--accent-color, #0066cc);
+  flex-shrink: 0;
 }
 
-.qc-badge.auto {
-  /* 🚀 */
-}
-
-.qc-badge.dim {
-  /* 👁 */
+.qc-badge-dim {
+  color: var(--text-muted, #999);
+  flex-shrink: 0;
 }
 
 .qc-cmd {
@@ -275,6 +316,36 @@ function onDragEnd() {
 
 .qc-action.danger:hover {
   color: #e53e3e;
+}
+
+.qc-delete-confirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px 6px 28px;
+  background: color-mix(in srgb, #e53e3e 8%, transparent);
+  font-size: 12px;
+  color: var(--text-secondary, #666);
+}
+
+.qc-confirm-btn {
+  padding: 3px 10px;
+  border: 1px solid var(--border-color, #ddd);
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  background: var(--bg-primary, #fff);
+  color: var(--text-primary);
+}
+
+.qc-confirm-btn.delete {
+  background: #e53e3e;
+  color: #fff;
+  border-color: #e53e3e;
+}
+
+.qc-confirm-btn.cancel {
+  color: var(--text-muted, #999);
 }
 
 .qc-empty {
@@ -391,5 +462,10 @@ function onDragEnd() {
 
 .modal-btn.primary:hover {
   opacity: 0.9;
+}
+
+.modal-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

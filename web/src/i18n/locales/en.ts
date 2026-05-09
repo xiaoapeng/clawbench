@@ -642,6 +642,8 @@ export default {
     commandSaved: 'Command saved',
     commandDeleted: 'Command deleted',
     reorderFailed: 'Reorder failed',
+    saveFailed: 'Save failed',
+    deleteCommand: 'Delete',
     deleteConfirm: 'Delete this command?',
     sessionInUse: 'Terminal session already has an active connection.',
     directoryMismatch: 'Terminal is running in a different directory.',

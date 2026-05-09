@@ -1,6 +1,5 @@
 import { ref, computed } from 'vue'
 import { apiGet, apiPost, apiPut, apiDelete } from '@/utils/api'
-import { useToast } from '@/composables/useToast'
 
 export interface QuickCommand {
   id: number
@@ -18,8 +17,6 @@ const showEditDialog = ref(false)
 const autoExecFired = ref(false)
 
 export function useQuickCommands() {
-  const { toast } = useToast()
-
   const visibleCommands = computed(() => commands.value.filter(c => !c.hidden))
   const autoExecCommand = computed(() => commands.value.find(c => c.auto_execute) || null)
 
@@ -34,43 +31,37 @@ export function useQuickCommands() {
     }
   }
 
-  async function addCommand(cmd: { label: string; command: string; hidden?: boolean; auto_execute?: boolean }) {
+  async function addCommand(cmd: { label: string; command: string; hidden?: boolean; auto_execute?: boolean }): Promise<boolean> {
     try {
-      const result = await apiPost<QuickCommand & { id: number }>('/api/terminal/quick-commands', cmd)
+      await apiPost('/api/terminal/quick-commands', cmd)
       await fetchCommands(true)
-      toast('terminal.commandSaved', 'success')
-      return result
-    } catch (e: unknown) {
-      toast(String(e), 'error')
-      throw e
+      return true
+    } catch {
+      return false
     }
   }
 
-  async function updateCommand(id: number, cmd: { label: string; command: string; hidden?: boolean; auto_execute?: boolean }) {
+  async function updateCommand(id: number, cmd: { label: string; command: string; hidden?: boolean; auto_execute?: boolean }): Promise<boolean> {
     try {
       await apiPut(`/api/terminal/quick-commands/${id}`, cmd)
       await fetchCommands(true)
-      toast('terminal.commandSaved', 'success')
-    } catch (e: unknown) {
-      toast(String(e), 'error')
-      throw e
+      return true
+    } catch {
+      return false
     }
   }
 
-  async function deleteCommand(id: number) {
-    const oldCommands = [...commands.value]
-    // Optimistic update
-    commands.value = commands.value.filter(c => c.id !== id)
+  async function deleteCommand(id: number): Promise<boolean> {
     try {
       await apiDelete(`/api/terminal/quick-commands/${id}`)
-      toast('terminal.commandDeleted', 'success')
-    } catch (e: unknown) {
-      commands.value = oldCommands // Rollback
-      toast(String(e), 'error')
+      await fetchCommands(true)
+      return true
+    } catch {
+      return false
     }
   }
 
-  async function reorderCommands(ids: number[]) {
+  async function reorderCommands(ids: number[]): Promise<boolean> {
     const oldCommands = [...commands.value]
     // Optimistic reorder
     const reordered = ids.map((id, i) => {
@@ -80,9 +71,10 @@ export function useQuickCommands() {
     commands.value = reordered
     try {
       await apiPut('/api/terminal/quick-commands/reorder', { ids })
-    } catch (e: unknown) {
+      return true
+    } catch {
       commands.value = oldCommands // Rollback
-      toast('terminal.reorderFailed', 'error')
+      return false
     }
   }
 

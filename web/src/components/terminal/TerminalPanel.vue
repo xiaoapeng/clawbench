@@ -92,7 +92,7 @@
           <!-- Group: Actions -->
           <div class="key-group">
             <button ref="cmdBtnRef" class="toolbar-btn" @click="showCommands = !showCommands" :title="t('terminal.quickCommands')">
-              <ListIcon :size="14" />
+              <ZapIcon :size="14" />
             </button>
             <button class="toolbar-btn" @click="handleCopyOutput" :title="t('terminal.copyOutput')">
               <CopyIcon :size="14" />
@@ -145,7 +145,7 @@ import { useQuickCommands } from '@/composables/useQuickCommands'
 import { store } from '@/stores/app'
 import { resolveTerminalCwd, shouldPromptForTerminalReopen } from './terminalCwd'
 
-import { Terminal as TerminalIcon, Copy as CopyIcon, X as XIcon, List as ListIcon, Hand as HandIcon, RefreshCw as RefreshCwIcon } from 'lucide-vue-next'
+import { Terminal as TerminalIcon, Copy as CopyIcon, X as XIcon, Zap as ZapIcon, Hand as HandIcon, RefreshCw as RefreshCwIcon } from 'lucide-vue-next'
 
 const props = defineProps<{
   open: boolean
