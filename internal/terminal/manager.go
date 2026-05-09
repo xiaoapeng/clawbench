@@ -30,18 +30,11 @@ var GlobalManager *Manager
 // TerminalConfig holds the terminal configuration.
 // We define a local copy to avoid circular imports with the model package.
 type TerminalConfig struct {
-	Enabled       bool
-	IdleTimeout   string
-	BufferLines   int
-	MaxLineBytes  int
-	MaxBufferMB   int
-	QuickCommands []QuickCommand
-}
-
-// QuickCommand mirrors model.QuickCommand for the terminal package.
-type QuickCommand struct {
-	Label   string
-	Command string
+	Enabled      bool
+	IdleTimeout  string
+	BufferLines  int
+	MaxLineBytes int
+	MaxBufferMB  int
 }
 
 // NewManager creates a new terminal manager.
@@ -52,9 +45,6 @@ func NewManager(cfg model.TerminalConfig, port int) *Manager {
 		BufferLines:  cfg.BufferLines,
 		MaxLineBytes: cfg.MaxLineBytes,
 		MaxBufferMB:  cfg.MaxBufferMB,
-	}
-	for _, qc := range cfg.QuickCommands {
-		tc.QuickCommands = append(tc.QuickCommands, QuickCommand{Label: qc.Label, Command: qc.Command})
 	}
 	return &Manager{
 		cfg:  tc,

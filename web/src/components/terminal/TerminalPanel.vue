@@ -91,7 +91,7 @@
           <div class="key-divider"></div>
           <!-- Group: Actions -->
           <div class="key-group">
-            <button v-if="quickCommands.length > 0" class="toolbar-btn" @click="showCommands = !showCommands" :title="t('terminal.quickCommands')">
+            <button ref="cmdBtnRef" class="toolbar-btn" @click="showCommands = !showCommands" :title="t('terminal.quickCommands')">
               <ListIcon :size="14" />
             </button>
             <button class="toolbar-btn" @click="handleCopyOutput" :title="t('terminal.copyOutput')">
@@ -108,12 +108,19 @@
       </div>
 
       <!-- Quick commands popup -->
-      <div v-if="showCommands" class="terminal-commands-popup">
-        <div v-for="(cmd, i) in quickCommands" :key="i" class="command-item" @click="executeCommand(cmd)">
+      <PopupMenu v-model:show="showCommands" :target-element="cmdBtnRef" anchor="right" :max-width="220" :max-height="280" :menu-items-count="visibleCommands.length + 1">
+        <div class="quick-send-title">{{ t('terminal.quickCommands') }}</div>
+        <button v-for="cmd in visibleCommands" :key="cmd.id" class="quick-send-item" @click="executeCommand(cmd)">
           {{ cmd.label }}
-        </div>
-        <div v-if="quickCommands.length === 0" class="command-empty">{{ t('terminal.noQuickCommands') }}</div>
-      </div>
+        </button>
+        <div class="quick-send-divider" />
+        <button class="quick-send-item" @click="openEditDialog">
+          ⚙️ {{ t('terminal.editCommands') }}
+        </button>
+      </PopupMenu>
+
+      <!-- Quick command edit dialog -->
+      <QuickCommandDialog :open="showEditDialog" @close="showEditDialog = false" />
     </div>
   </BottomSheet>
 </template>
@@ -127,11 +134,14 @@ import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
 
 import BottomSheet from '@/components/common/BottomSheet.vue'
+import PopupMenu from '@/components/common/PopupMenu.vue'
+import QuickCommandDialog from '@/components/terminal/QuickCommandDialog.vue'
 import { useTerminalSession } from '@/composables/useTerminalSession'
 import { useTerminalViewport } from '@/composables/useTerminalViewport'
 import { useTerminalKeys } from '@/composables/useTerminalKeys'
 import { useTerminalGestures } from '@/composables/useTerminalGestures'
 import { useToast } from '@/composables/useToast'
+import { useQuickCommands } from '@/composables/useQuickCommands'
 import { store } from '@/stores/app'
 import { resolveTerminalCwd, shouldPromptForTerminalReopen } from './terminalCwd'
 
@@ -184,7 +194,7 @@ let gestureHintTimer: ReturnType<typeof setTimeout> | null = null
 const xterm = ref<Terminal | null>(null)
 const fitAddon = ref<FitAddon | null>(null)
 const showCommands = ref(false)
-const quickCommands = ref<{ label: string; command: string }[]>([])
+const cmdBtnRef = ref<HTMLElement | null>(null)
 const rebuilding = ref(false)
 const showReopenPrompt = ref(false)
 
@@ -212,6 +222,16 @@ const getWsUrl = () => {
 
 const session = useTerminalSession(getWsUrl)
 const { connectionState, errorMessage, errorCode, currentCwd } = session
+
+// Quick commands composable (module-level singleton)
+const {
+  visibleCommands,
+  autoExecCommand,
+  fetchCommands,
+  showEditDialog,
+  autoExecFired,
+  resetAutoExec,
+} = useQuickCommands()
 
 // Terminal viewport
 const viewport = useTerminalViewport(xterm, terminalContainer)
@@ -341,7 +361,11 @@ function initTerminal() {
       term.write(data)
     },
     onStatus: (status) => {
-      // Terminal is ready
+      // Auto-execute quick command on new PTY session
+      if (!autoExecFired.value && autoExecCommand.value) {
+        session.sendInput(autoExecCommand.value.command + '\r')
+        autoExecFired.value = true
+      }
     },
     onExit: (code) => {
       toast.show(t('terminal.ptyExited'))
@@ -436,16 +460,8 @@ watch([
 let themeObserver: MutationObserver | null = null
 
 onMounted(async () => {
-  // Load quick commands from config API
-  try {
-    const resp = await fetch('/api/terminal/config')
-    if (resp.ok) {
-      const data = await resp.json()
-      quickCommands.value = data.quick_commands || []
-    }
-  } catch {
-    // Config not available — no quick commands
-  }
+  // Load quick commands from API
+  await fetchCommands()
 
   // Watch for theme changes
   themeObserver = new MutationObserver(() => {
@@ -520,6 +536,7 @@ async function handleRebuild() {
   showCommands.value = false
   showReopenPrompt.value = false
   rebuilding.value = true
+  resetAutoExec() // Allow auto-execute on new PTY
 
   // Close session via HTTP API (synchronous — ensures PTY is dead and m.session = nil)
   try {
@@ -561,10 +578,15 @@ function handleCopyOutput() {
   focusTerminal()
 }
 
-function executeCommand(cmd: { label: string; command: string }) {
+function executeCommand(cmd: { id: number; label: string; command: string }) {
   session.sendInput(cmd.command + '\r')
   showCommands.value = false
   focusTerminal()
+}
+
+function openEditDialog() {
+  showCommands.value = false
+  showEditDialog.value = true
 }
 </script>
 
@@ -870,39 +892,6 @@ function executeCommand(cmd: { label: string; command: string }) {
   background: var(--bg-tertiary);
 }
 
-.terminal-commands-popup {
-  position: absolute;
-  bottom: 44px;
-  right: 6px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  box-shadow: var(--shadow-md);
-  z-index: 20;
-  min-width: 160px;
-  max-height: 200px;
-  overflow-y: auto;
-}
-
-.command-item {
-  padding: 8px 12px;
-  cursor: pointer;
-  font-size: 13px;
-  white-space: nowrap;
-  color: var(--text-primary);
-}
-
-.command-item:hover {
-  background: var(--bg-tertiary);
-}
-
-.command-empty {
-  padding: 12px;
-  color: var(--text-muted);
-  font-size: 13px;
-  text-align: center;
-}
-
 /* Mobile: adjust toolbar for soft keyboard */
 @media (max-width: 768px) {
   .terminal-toolbar {
@@ -921,5 +910,14 @@ function executeCommand(cmd: { label: string; command: string }) {
   .toolbar-btn:active {
     background: var(--bg-key-active);
   }
+}
+</style>
+
+<style>
+/* Quick commands popup divider (unscoped because PopupMenu teleports to body) */
+.quick-send-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 4px 0;
 }
 </style>

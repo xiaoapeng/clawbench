@@ -259,8 +259,3 @@ ssh:
 #   buffer_lines: 2000        # Replay buffer line count (default: 2000) / 回放缓冲行数（默认: 2000）
 #   max_line_bytes: 65536     # Per-line byte cap to prevent memory bloat (default: 64KB) / 单行字节上限（默认: 64KB）
 #   max_buffer_mb: 4          # Total buffer memory cap in MB (default: 4) / 缓冲总内存上限 MB（默认: 4）
-#   quick_commands:           # Quick commands shown in toolbar / 工具栏快捷指令
-#     - label: "Git Status"
-#       command: "git status"
-#     - label: "Build"
-#       command: "npm run build"

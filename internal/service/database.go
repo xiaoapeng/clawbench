@@ -139,6 +139,20 @@ func InitDB(runFromServer ...bool) error {
 			protocol TEXT NOT NULL DEFAULT 'http',
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		);
+
+		CREATE TABLE IF NOT EXISTS terminal_quick_commands (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			label TEXT NOT NULL,
+			command TEXT NOT NULL,
+			hidden INTEGER NOT NULL DEFAULT 0,
+			auto_execute INTEGER NOT NULL DEFAULT 0,
+			sort_order INTEGER NOT NULL DEFAULT 0,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);
+
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_quick_commands_auto_execute
+		ON terminal_quick_commands(auto_execute) WHERE auto_execute = 1;
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to create tables: %w", err)
@@ -224,4 +238,111 @@ func SaveTTSSummary(cacheKey, summary string) error {
 		cacheKey, summary,
 	)
 	return err
+}
+
+// QuickCommand represents a terminal quick command stored in the database.
+type QuickCommand struct {
+	ID          int64  `json:"id"`
+	Label       string `json:"label"`
+	Command     string `json:"command"`
+	Hidden      bool   `json:"hidden"`
+	AutoExecute bool   `json:"auto_execute"`
+	SortOrder   int    `json:"sort_order"`
+}
+
+// GetQuickCommands returns all quick commands ordered by sort_order.
+func GetQuickCommands() ([]QuickCommand, error) {
+	rows, err := DB.Query("SELECT id, label, command, hidden, auto_execute, sort_order FROM terminal_quick_commands ORDER BY sort_order")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var cmds []QuickCommand
+	for rows.Next() {
+		var cmd QuickCommand
+		var hidden, autoExec int
+		if err := rows.Scan(&cmd.ID, &cmd.Label, &cmd.Command, &hidden, &autoExec, &cmd.SortOrder); err != nil {
+			return nil, err
+		}
+		cmd.Hidden = hidden == 1
+		cmd.AutoExecute = autoExec == 1
+		cmds = append(cmds, cmd)
+	}
+	return cmds, nil
+}
+
+// AddQuickCommand inserts a new quick command and returns its ID.
+// If autoExecute is true, other commands' auto_execute flag is cleared first.
+func AddQuickCommand(label, command string, hidden, autoExecute bool) (int64, error) {
+	if autoExecute {
+		if _, err := DB.Exec("UPDATE terminal_quick_commands SET auto_execute = 0 WHERE auto_execute = 1"); err != nil {
+			return 0, err
+		}
+	}
+	var maxOrder sql.NullInt64
+	_ = DB.QueryRow("SELECT MAX(sort_order) FROM terminal_quick_commands").Scan(&maxOrder)
+	sortOrder := 0
+	if maxOrder.Valid {
+		sortOrder = int(maxOrder.Int64) + 1
+	}
+	hiddenInt := 0
+	if hidden {
+		hiddenInt = 1
+	}
+	autoExecInt := 0
+	if autoExecute {
+		autoExecInt = 1
+	}
+	result, err := DB.Exec(
+		"INSERT INTO terminal_quick_commands (label, command, hidden, auto_execute, sort_order) VALUES (?, ?, ?, ?, ?)",
+		label, command, hiddenInt, autoExecInt, sortOrder,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.LastInsertId()
+}
+
+// UpdateQuickCommand updates an existing quick command.
+// If autoExecute is true, other commands' auto_execute flag is cleared first.
+func UpdateQuickCommand(id int64, label, command string, hidden, autoExecute bool) error {
+	if autoExecute {
+		if _, err := DB.Exec("UPDATE terminal_quick_commands SET auto_execute = 0 WHERE auto_execute = 1 AND id != ?", id); err != nil {
+			return err
+		}
+	}
+	hiddenInt := 0
+	if hidden {
+		hiddenInt = 1
+	}
+	autoExecInt := 0
+	if autoExecute {
+		autoExecInt = 1
+	}
+	_, err := DB.Exec(
+		"UPDATE terminal_quick_commands SET label = ?, command = ?, hidden = ?, auto_execute = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+		label, command, hiddenInt, autoExecInt, id,
+	)
+	return err
+}
+
+// DeleteQuickCommand deletes a quick command by ID.
+func DeleteQuickCommand(id int64) error {
+	_, err := DB.Exec("DELETE FROM terminal_quick_commands WHERE id = ?", id)
+	return err
+}
+
+// ReorderQuickCommands updates sort_order for all commands based on the given ID order.
+func ReorderQuickCommands(ids []int64) error {
+	tx, err := DB.Begin()
+	if err != nil {
+		return err
+	}
+	for i, id := range ids {
+		if _, err := tx.Exec("UPDATE terminal_quick_commands SET sort_order = ? WHERE id = ?", i, id); err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit()
 }

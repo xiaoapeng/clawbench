@@ -22,6 +22,17 @@ export async function apiPost<T = unknown>(url: string, body: unknown): Promise<
     return data as T
 }
 
+export async function apiPut<T = unknown>(url: string, body: unknown): Promise<T> {
+    const resp = await fetch(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...localeHeaders() },
+        body: JSON.stringify(body),
+    })
+    const data = await resp.json().catch(() => ({})) as Record<string, unknown>
+    if (!resp.ok) throw new Error(data.error ? String(data.error) : resp.statusText)
+    return data as T
+}
+
 export async function apiDelete<T = unknown>(url: string): Promise<T> {
     const resp = await fetch(url, { method: 'DELETE', headers: localeHeaders() })
     if (!resp.ok) throw new Error(resp.statusText)
