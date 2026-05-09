@@ -170,9 +170,6 @@ func TestManagerConfig(t *testing.T) {
 		BufferLines:  2000,
 		MaxLineBytes: 65536,
 		MaxBufferMB:  4,
-		QuickCommands: []model.QuickCommand{
-			{Label: "Test", Command: "echo test"},
-		},
 	}
 
 	mgr := NewManager(cfg, 20000)
@@ -184,11 +181,5 @@ func TestManagerConfig(t *testing.T) {
 	}
 	if tc.BufferLines != 2000 {
 		t.Errorf("expected 2000 buffer lines, got %d", tc.BufferLines)
-	}
-	if len(tc.QuickCommands) != 1 {
-		t.Fatalf("expected 1 quick command, got %d", len(tc.QuickCommands))
-	}
-	if tc.QuickCommands[0].Label != "Test" {
-		t.Errorf("expected label 'Test', got %s", tc.QuickCommands[0].Label)
 	}
 }

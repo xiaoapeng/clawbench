@@ -72,6 +72,12 @@ export function useTerminalSession(getWsUrl: () => string) {
           connectionState.value = 'disconnected'
           tryReconnect()
         } else {
+          // If intentionally disconnected (disconnect() sets reconnectAttempts to max),
+          // don't set error state — just stay disconnected
+          if (reconnectAttempts >= maxReconnectAttempts) {
+            connectionState.value = 'disconnected'
+            return
+          }
           // Failed during connecting/reconnecting
           // WebSocket close code 1006 = abnormal closure (server rejected upgrade)
           // This typically means the backend returned HTTP 500 (e.g. PTY start failed)

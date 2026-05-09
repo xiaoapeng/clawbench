@@ -214,6 +214,8 @@ func RegisterRoutes(mux *http.ServeMux) {
 	register("/api/terminal/status", middleware.Auth(TerminalStatus))
 	register("/api/terminal/close", middleware.Auth(TerminalClose))
 	register("/api/terminal/config", middleware.Auth(TerminalConfigHandler))
+	register("/api/terminal/quick-commands", middleware.Auth(ServeQuickCommands))
+	register("/api/terminal/quick-commands/", middleware.Auth(ServeQuickCommandByID))
 
 	if _, err := os.Stat("public"); err == nil {
 		mux.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(http.Dir("public"))))
