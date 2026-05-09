@@ -648,6 +648,7 @@ function handleShowToolDetail(block) {
 function handleFileOpenInOverlay(filePath) {
   toolDetailOverlay.value.show = false
   openFilePath(filePath)
+  bottomSheetRef.value?.close()
 }
 
 // Start global polling when component mounts

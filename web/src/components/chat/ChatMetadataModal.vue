@@ -1,87 +1,80 @@
 <template>
-  <Teleport to="body">
-    <div v-if="show" class="metadata-modal-overlay" @click="$emit('close')">
-      <div class="metadata-modal" @click.stop>
-        <div class="metadata-modal-header">
-          <h3>{{ t('chat.metadata.title') }}</h3>
-          <button class="metadata-close-btn" @click="$emit('close')">×</button>
-        </div>
-        <div class="metadata-content">
-          <div v-if="messageId" class="metadata-item metadata-copyable" @click="copyValue(String(messageId), $event)">
-            <span class="metadata-label">{{ t('chat.metadata.messageId') }}</span>
-            <div class="metadata-value-wrap">
-              <span class="metadata-value metadata-session-id metadata-value-copyable">{{ messageId }}</span>
-              <button class="metadata-copy-btn" @click.stop="copyValue(String(messageId), $event)" :title="t('chat.metadata.copy')">
-                <Copy :size="13" />
-              </button>
-            </div>
-          </div>
-          <div v-if="createdAt" class="metadata-item">
-            <span class="metadata-label">{{ t('chat.metadata.time') }}</span>
-            <span class="metadata-value">{{ formatDetailTime(createdAt) }}</span>
-          </div>
-          <div v-if="relatedFile" class="metadata-item">
-            <span class="metadata-label">{{ t('chat.metadata.relatedFile') }}</span>
-            <span class="metadata-value metadata-value-copyable" @click="copyValue(relatedFile, $event)">{{ relatedFile }}</span>
-          </div>
-          <div v-if="backend" class="metadata-item">
-            <span class="metadata-label">{{ t('chat.metadata.backend') }}</span>
-            <span class="metadata-value">{{ backend }}</span>
-          </div>
-          <div v-if="data.model" class="metadata-item">
-            <span class="metadata-label">{{ t('chat.metadata.model') }}</span>
-            <span class="metadata-value">{{ data.model }}</span>
-          </div>
-          <div v-if="data.inputTokens" class="metadata-item">
-            <span class="metadata-label">{{ t('chat.metadata.inputTokens') }}</span>
-            <span class="metadata-value">{{ data.inputTokens.toLocaleString() }}</span>
-          </div>
-          <div v-if="data.outputTokens" class="metadata-item">
-            <span class="metadata-label">{{ t('chat.metadata.outputTokens') }}</span>
-            <span class="metadata-value">{{ data.outputTokens.toLocaleString() }}</span>
-          </div>
-          <div v-if="data.wallMs" class="metadata-item">
-            <span class="metadata-label">{{ t('chat.metadata.wallDuration') }}</span>
-            <span class="metadata-value">{{ formatDuration(data.wallMs) }}</span>
-          </div>
-          <div v-if="data.durationMs" class="metadata-item">
-            <span class="metadata-label">{{ t('chat.metadata.duration') }}</span>
-            <span class="metadata-value">{{ (data.durationMs / 1000).toFixed(2) }}s</span>
-          </div>
-          <div v-if="data.costUsd" class="metadata-item">
-            <span class="metadata-label">{{ t('chat.metadata.cost') }}</span>
-            <span class="metadata-value">${{ data.costUsd.toFixed(6) }}</span>
-          </div>
-          <div v-if="sessionId" class="metadata-item metadata-copyable" @click="copyValue(sessionId, $event)">
-            <span class="metadata-label">{{ t('chat.metadata.sessionId') }}</span>
-            <div class="metadata-value-wrap">
-              <span class="metadata-value metadata-session-id metadata-value-copyable">{{ sessionId }}</span>
-              <button class="metadata-copy-btn" @click.stop="copyValue(sessionId, $event)" :title="t('chat.metadata.copy')">
-                <Copy :size="13" />
-              </button>
-            </div>
-          </div>
-          <div class="metadata-item">
-            <span class="metadata-label">{{ t('chat.metadata.ragIndexed') }}</span>
-            <span class="metadata-value" :class="indexed ? 'metadata-indexed-yes' : 'metadata-indexed-no'">{{ indexed ? t('chat.metadata.indexedYes') : t('chat.metadata.indexedNo') }}</span>
-          </div>
-          <div v-if="data.stopReason" class="metadata-item">
-            <span class="metadata-label">{{ t('chat.metadata.stopReason') }}</span>
-            <span class="metadata-value">{{ data.stopReason }}</span>
-          </div>
-          <div v-if="data.isError" class="metadata-item">
-            <span class="metadata-label">{{ t('chat.metadata.error') }}</span>
-            <span class="metadata-value metadata-error">{{ data.errorMessage || t('chat.metadata.unknownError') }}</span>
-          </div>
+  <ModalDialog :open="show" :zIndex="2500" :title="t('chat.metadata.title')" @close="$emit('close')">
+    <div class="metadata-content">
+      <div v-if="messageId" class="metadata-item metadata-copyable" @click="copyValue(String(messageId), $event)">
+        <span class="metadata-label">{{ t('chat.metadata.messageId') }}</span>
+        <div class="metadata-value-wrap">
+          <span class="metadata-value metadata-session-id metadata-value-copyable">{{ messageId }}</span>
+          <button class="metadata-copy-btn" @click.stop="copyValue(String(messageId), $event)" :title="t('chat.metadata.copy')">
+            <Copy :size="13" />
+          </button>
         </div>
       </div>
+      <div v-if="createdAt" class="metadata-item">
+        <span class="metadata-label">{{ t('chat.metadata.time') }}</span>
+        <span class="metadata-value">{{ formatDetailTime(createdAt) }}</span>
+      </div>
+      <div v-if="relatedFile" class="metadata-item">
+        <span class="metadata-label">{{ t('chat.metadata.relatedFile') }}</span>
+        <span class="metadata-value metadata-value-copyable" @click="copyValue(relatedFile, $event)">{{ relatedFile }}</span>
+      </div>
+      <div v-if="backend" class="metadata-item">
+        <span class="metadata-label">{{ t('chat.metadata.backend') }}</span>
+        <span class="metadata-value">{{ backend }}</span>
+      </div>
+      <div v-if="data.model" class="metadata-item">
+        <span class="metadata-label">{{ t('chat.metadata.model') }}</span>
+        <span class="metadata-value">{{ data.model }}</span>
+      </div>
+      <div v-if="data.inputTokens" class="metadata-item">
+        <span class="metadata-label">{{ t('chat.metadata.inputTokens') }}</span>
+        <span class="metadata-value">{{ data.inputTokens.toLocaleString() }}</span>
+      </div>
+      <div v-if="data.outputTokens" class="metadata-item">
+        <span class="metadata-label">{{ t('chat.metadata.outputTokens') }}</span>
+        <span class="metadata-value">{{ data.outputTokens.toLocaleString() }}</span>
+      </div>
+      <div v-if="data.wallMs" class="metadata-item">
+        <span class="metadata-label">{{ t('chat.metadata.wallDuration') }}</span>
+        <span class="metadata-value">{{ formatDuration(data.wallMs) }}</span>
+      </div>
+      <div v-if="data.durationMs" class="metadata-item">
+        <span class="metadata-label">{{ t('chat.metadata.duration') }}</span>
+        <span class="metadata-value">{{ (data.durationMs / 1000).toFixed(2) }}s</span>
+      </div>
+      <div v-if="data.costUsd" class="metadata-item">
+        <span class="metadata-label">{{ t('chat.metadata.cost') }}</span>
+        <span class="metadata-value">${{ data.costUsd.toFixed(6) }}</span>
+      </div>
+      <div v-if="sessionId" class="metadata-item metadata-copyable" @click="copyValue(sessionId, $event)">
+        <span class="metadata-label">{{ t('chat.metadata.sessionId') }}</span>
+        <div class="metadata-value-wrap">
+          <span class="metadata-value metadata-session-id metadata-value-copyable">{{ sessionId }}</span>
+          <button class="metadata-copy-btn" @click.stop="copyValue(sessionId, $event)" :title="t('chat.metadata.copy')">
+            <Copy :size="13" />
+          </button>
+        </div>
+      </div>
+      <div class="metadata-item">
+        <span class="metadata-label">{{ t('chat.metadata.ragIndexed') }}</span>
+        <span class="metadata-value" :class="indexed ? 'metadata-indexed-yes' : 'metadata-indexed-no'">{{ indexed ? t('chat.metadata.indexedYes') : t('chat.metadata.indexedNo') }}</span>
+      </div>
+      <div v-if="data.stopReason" class="metadata-item">
+        <span class="metadata-label">{{ t('chat.metadata.stopReason') }}</span>
+        <span class="metadata-value">{{ data.stopReason }}</span>
+      </div>
+      <div v-if="data.isError" class="metadata-item">
+        <span class="metadata-label">{{ t('chat.metadata.error') }}</span>
+        <span class="metadata-value metadata-error">{{ data.errorMessage || t('chat.metadata.unknownError') }}</span>
+      </div>
     </div>
-  </Teleport>
+  </ModalDialog>
 </template>
 
 <script setup>
 import { Copy } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
+import ModalDialog from '@/components/common/ModalDialog.vue'
 import { useToast } from '@/composables/useToast.ts'
 import { formatDuration } from '@/utils/format.ts'
 
@@ -137,67 +130,10 @@ function copyValue(value, event) {
 </script>
 
 <style scoped>
-.metadata-modal-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 2500;
-    animation: fadeIn 0.15s ease;
-}
-
-.metadata-modal {
-    background: var(--bg-primary);
-    border-radius: 8px;
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
-    max-width: 480px;
-    width: 90%;
-    max-height: 80vh;
-    overflow: hidden;
-    animation: slideUp 0.2s ease;
-}
-
-.metadata-modal-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 16px 20px;
-    border-bottom: 1px solid var(--border-color);
-}
-
-.metadata-modal-header h3 {
-    margin: 0;
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--text-primary);
-}
-
-.metadata-close-btn {
-    width: 28px;
-    height: 28px;
-    padding: 0;
-    border: none;
-    background: transparent;
-    color: var(--text-secondary);
-    font-size: 24px;
-    cursor: pointer;
-    border-radius: 4px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background 0.15s;
-}
-
-.metadata-close-btn:hover {
-    background: var(--bg-tertiary);
-}
-
 .metadata-content {
-    padding: 16px 20px;
+    padding: 12px 14px;
     overflow-y: auto;
-    max-height: calc(80vh - 60px);
+    flex: 1;
 }
 
 .metadata-item {
@@ -295,21 +231,5 @@ function copyValue(value, event) {
 
 .metadata-indexed-no {
     color: var(--text-muted, #999);
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-}
-
-@keyframes slideUp {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
 }
 </style>

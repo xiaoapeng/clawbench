@@ -23,8 +23,8 @@
           <!-- Done (success or unknown): green check -->
           <CheckCircle2 v-else :size="14" color="#22c55e" class="tool-check" />
         </div>
-        <!-- Inline detail only for AskUserQuestion (interactive, must stay in message flow) -->
-        <div v-if="shouldAutoExpand(block) && expandedTools[key(bi)]" class="tool-detail" :data-tool-name="block.name" @click="handleToolDetailClick">
+        <!-- Inline detail only for AskUserQuestion (interactive, must stay in message flow; auto-expanded) -->
+        <div v-if="shouldAutoExpand(block)" class="tool-detail" :data-tool-name="block.name" @click="handleToolDetailClick">
           <div v-html="formatToolInput(block.input, block.name)"></div>
         </div>
       </template>
@@ -851,6 +851,25 @@ onUnmounted(() => {
   top: 0;
   right: 0;
   flex-shrink: 0;
+}
+
+/* Base style for file-open buttons in tool detail */
+.content-blocks .tool-detail .chat-file-open-btn {
+  background: none;
+  border: none;
+  padding: 2px;
+  cursor: pointer;
+  color: var(--text-muted, #999);
+  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s;
+}
+
+.content-blocks .tool-detail .chat-file-open-btn:hover {
+  color: var(--accent-color, #4a90d9);
+  background: var(--bg-tertiary, #f0f0f0);
 }
 
 .content-blocks .tool-detail .tool-file-path {
