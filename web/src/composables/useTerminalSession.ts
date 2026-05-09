@@ -14,6 +14,11 @@ const NO_RECONNECT_CODES = new Set([
   'shell_start_failed',
 ])
 
+// Custom WebSocket close codes from the backend (4000-4999 per RFC 6455)
+// When the server kicks an existing client because a new one connected,
+// it uses this code so the old client knows not to auto-reconnect.
+const WS_CLOSE_REPLACED = 4001
+
 export function useTerminalSession(getWsUrl: () => string) {
   const { t } = useI18n()
   const connectionState: Ref<ConnectionState> = ref('disconnected')
@@ -64,6 +69,17 @@ export function useTerminalSession(getWsUrl: () => string) {
         // If already in error state (from onerror or fatal error message),
         // don't override — keep the error visible
         if (connectionState.value === 'error') {
+          return
+        }
+
+        // Close code 4001 = replaced by a new client (e.g. another browser tab
+        // or mobile app connected to the same terminal session).  The session
+        // is still alive — just owned by a different client now — so we must
+        // NOT auto-reconnect, otherwise we'd kick the new client and start an
+        // infinite kick-reconnect loop.
+        if (event.code === WS_CLOSE_REPLACED) {
+          connectionState.value = 'disconnected'
+          reconnectAttempts = maxReconnectAttempts // prevent reconnect
           return
         }
 

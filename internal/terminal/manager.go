@@ -134,8 +134,10 @@ func (m *Manager) HandleWebSocket(w http.ResponseWriter, r *http.Request, projec
 }
 
 // handleClientMessages reads messages from the WebSocket and dispatches them.
+// The conn parameter is passed to Disconnect so it only closes the connection
+// it owns — not a newer connection that replaced it (reconnect race).
 func (m *Manager) handleClientMessages(session *Session, conn *websocket.Conn) {
-	defer session.Disconnect()
+	defer session.Disconnect(conn)
 
 	ctx := context.Background()
 	for {

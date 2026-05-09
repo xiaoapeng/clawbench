@@ -179,11 +179,12 @@ func (s *Session) Connect(conn *websocket.Conn) error {
 	}
 
 	// Kick any existing client — this handles the race where the old
-	// WebSocket's read loop hasn't exited yet (e.g. reconnect scenario)
+	// WebSocket's read loop hasn't exited yet (e.g. reconnect scenario).
+	// Use StatusReplaced so the old client's frontend knows not to auto-reconnect.
 	if s.wsConn != nil {
 		slog.Info("terminal: kicking existing client for new connection")
 		s.wsMu.Lock()
-		s.wsConn.Close(websocket.StatusNormalClosure, "replaced by new client")
+		s.wsConn.Close(StatusReplaced, "replaced by new client")
 		s.wsMu.Unlock()
 		s.wsConn = nil
 	}
@@ -211,18 +212,25 @@ func (s *Session) Connect(conn *websocket.Conn) error {
 	return nil
 }
 
-// Disconnect removes the WebSocket client and starts the idle timer.
-func (s *Session) Disconnect() {
+// Disconnect removes the WebSocket client if it matches the given connection,
+// and starts the idle timer.
+// The conn parameter identifies which connection is disconnecting — if the
+// session's active wsConn has been replaced by a newer client (reconnect race),
+// we must NOT close the new connection.
+func (s *Session) Disconnect(conn *websocket.Conn) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if s.wsConn != nil {
+	// Only clear and close if the disconnecting connection is still the active one.
+	// If a new client has already connected (replaced s.wsConn), this old
+	// goroutine must not touch the new connection.
+	if s.wsConn == conn {
 		s.wsConn.Close(websocket.StatusNormalClosure, "client disconnected")
 		s.wsConn = nil
 	}
 
-	// Start idle timer — no clients connected
-	if !s.closed {
+	// Start idle timer if no clients are connected
+	if s.wsConn == nil && !s.closed {
 		s.idleTimer.Stop()
 		s.idleTimer.Reset(s.idleTimeout)
 	}

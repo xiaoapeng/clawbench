@@ -26,3 +26,12 @@ const (
 	ErrCodeShellFailed  = "shell_start_failed"
 	ErrCodeCwdInvalid   = "cwd_invalid"
 )
+
+// WebSocket close codes (custom range 4000-4999 per RFC 6455)
+const (
+	// StatusReplaced is sent when a new WebSocket client connects and the
+	// existing client is kicked. The frontend should NOT auto-reconnect
+	// when it receives this close code — the session is still alive, just
+	// owned by a different client now.
+	StatusReplaced = 4001
+)
