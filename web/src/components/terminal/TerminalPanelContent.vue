@@ -63,6 +63,14 @@
           <button class="toolbar-btn btn-modifier shortcut" @click="terminalKeys.sendCtrlC(); focusTerminal()" title="Ctrl+C">⌃C</button>
           <button class="toolbar-btn btn-modifier shortcut" @click="terminalKeys.sendCtrlZ(); focusTerminal()" title="Ctrl+Z">⌃Z</button>
         </div>
+        <!-- Group: Symbols -->
+        <div class="key-group">
+          <button class="toolbar-btn btn-symbol" @click="session.sendInput('/'); focusTerminal()">/</button>
+          <button class="toolbar-btn btn-symbol" @click="session.sendInput('-'); focusTerminal()">-</button>
+          <button class="toolbar-btn btn-symbol" @click="session.sendInput('|'); focusTerminal()">|</button>
+          <button class="toolbar-btn btn-symbol" @click="session.sendInput('_'); focusTerminal()">_</button>
+          <button class="toolbar-btn btn-symbol" @click="session.sendInput('~'); focusTerminal()">~</button>
+        </div>
         <!-- Group: Navigation -->
         <div class="key-group">
           <button class="toolbar-btn btn-nav" @click="terminalKeys.sendHome(); focusTerminal()" title="Home">Home</button>
@@ -76,14 +84,6 @@
           <button class="toolbar-btn btn-arrow" @click="terminalKeys.sendArrowDown(); focusTerminal()" title="↓">↓</button>
           <button class="toolbar-btn btn-arrow" @click="terminalKeys.sendArrowLeft(); focusTerminal()" title="←">←</button>
           <button class="toolbar-btn btn-arrow" @click="terminalKeys.sendArrowRight(); focusTerminal()" title="→">→</button>
-        </div>
-        <!-- Group: Symbols -->
-        <div class="key-group">
-          <button class="toolbar-btn btn-symbol" @click="session.sendInput('/'); focusTerminal()">/</button>
-          <button class="toolbar-btn btn-symbol" @click="session.sendInput('-'); focusTerminal()">-</button>
-          <button class="toolbar-btn btn-symbol" @click="session.sendInput('|'); focusTerminal()">|</button>
-          <button class="toolbar-btn btn-symbol" @click="session.sendInput('_'); focusTerminal()">_</button>
-          <button class="toolbar-btn btn-symbol" @click="session.sendInput('~'); focusTerminal()">~</button>
         </div>
         <!-- Group: Actions -->
         <div class="key-group">
