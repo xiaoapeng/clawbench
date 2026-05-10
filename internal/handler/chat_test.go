@@ -1184,3 +1184,110 @@ func TestAccumulateBlock_InterleavedToolUse(t *testing.T) {
 		t.Errorf("block 1: expected input command='ls', got %v", blocks[1].Input)
 	}
 }
+
+func TestRemoveFailedAskUserQuestionBlocks(t *testing.T) {
+	tests := []struct {
+		name   string
+		blocks []model.ContentBlock
+		want   int // expected number of blocks after removal
+	}{
+		{
+			name: "removes failed AskUserQuestion tool_use and matching warning",
+			blocks: []model.ContentBlock{
+				{Type: "text", Text: "Here is my answer"},
+				{Type: "tool_use", Name: "AskUserQuestion", ID: "toolu_abc", Status: "error", Output: "Tool AskUserQuestion not found in agent cli.", Done: true},
+				{Type: "tool_use", Name: "AskUserQuestion", ID: "ask-123", Status: "", Done: true},
+				{Type: "warning", Text: "Tool AskUserQuestion not found in agent cli."},
+			},
+			want: 2, // text + successful AskUserQuestion
+		},
+		{
+			name: "keeps successful AskUserQuestion tool_use blocks",
+			blocks: []model.ContentBlock{
+				{Type: "text", Text: "Answer"},
+				{Type: "tool_use", Name: "AskUserQuestion", ID: "ask-456", Status: "", Done: true},
+			},
+			want: 2,
+		},
+		{
+			name: "keeps non-AskUserQuestion error tool_use blocks",
+			blocks: []model.ContentBlock{
+				{Type: "tool_use", Name: "Bash", ID: "toolu_xyz", Status: "error", Output: "command failed", Done: true},
+				{Type: "warning", Text: "command failed"},
+			},
+			want: 2,
+		},
+		{
+			name: "keeps unrelated warning blocks",
+			blocks: []model.ContentBlock{
+				{Type: "text", Text: "Answer"},
+				{Type: "warning", Text: "Some other warning"},
+			},
+			want: 2,
+		},
+		{
+			name: "removes only failed AskUserQuestion, not successful ones",
+			blocks: []model.ContentBlock{
+				{Type: "tool_use", Name: "AskUserQuestion", ID: "toolu_fail", Status: "error", Output: "Tool AskUserQuestion not found", Done: true},
+				{Type: "tool_use", Name: "AskUserQuestion", ID: "ask-ok", Status: "", Done: true},
+			},
+			want: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := removeFailedAskUserQuestionBlocks(tt.blocks)
+			if len(got) != tt.want {
+				t.Errorf("removeFailedAskUserQuestionBlocks() returned %d blocks, want %d", len(got), tt.want)
+				for i, b := range got {
+					t.Logf("  block[%d]: type=%s name=%s status=%s", i, b.Type, b.Name, b.Status)
+				}
+			}
+		})
+	}
+}
+
+func TestConvertAskQuestionBlocks_Deduplication(t *testing.T) {
+	// When the AI model outputs both a direct AskUserQuestion tool call (which
+	// the CLI rejects) AND <ask-question> XML tags, convertAskQuestionBlocks
+	// should remove the failed CLI tool_use block and its warning, keeping
+	// only the successfully converted XML-tag version.
+	blocks := []model.ContentBlock{
+		{Type: "text", Text: "Here is my analysis"},
+		{Type: "tool_use", Name: "AskUserQuestion", ID: "toolu_rejected", Status: "error",
+			Output: "Tool AskUserQuestion not found in agent cli.", Done: true,
+			Input: map[string]any{"questions": []any{}}},
+		{Type: "text", Text: `<ask-question>{"questions":[{"question":"Which approach?","header":"Approach","options":[{"label":"A","description":"Fast"},{"label":"B","description":"Safe"}],"multiSelect":false}]}</ask-question>`},
+		{Type: "warning", Text: "Tool AskUserQuestion not found in agent cli."},
+	}
+
+	result := convertAskQuestionBlocks(blocks)
+
+	// Should have: text block + AskUserQuestion tool_use from XML conversion
+	// Should NOT have: failed AskUserQuestion tool_use from CLI, warning block
+	askQCount := 0
+	failedAskQ := false
+	warningCount := 0
+	for _, b := range result {
+		if b.Type == "tool_use" && b.Name == "AskUserQuestion" {
+			askQCount++
+			if b.Status == "error" {
+				failedAskQ = true
+			}
+		}
+		if b.Type == "warning" {
+			warningCount++
+		}
+	}
+
+	if failedAskQ {
+		t.Error("failed AskUserQuestion tool_use block should have been removed")
+	}
+	if askQCount != 1 {
+		t.Errorf("expected 1 AskUserQuestion tool_use block, got %d", askQCount)
+	}
+	if warningCount != 0 {
+		t.Errorf("expected 0 warning blocks, got %d", warningCount)
+	}
+}

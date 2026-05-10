@@ -1009,7 +1009,41 @@ func convertAskQuestionBlocks(blocks []model.ContentBlock) []model.ContentBlock 
 		}
 	}
 
+	// Remove failed AskUserQuestion tool_use blocks (Status=="error") that were
+	// rejected by the CLI ("Tool AskUserQuestion not found in agent cli").
+	// When the AI model outputs both a direct tool call AND <ask-question> XML tags,
+	// the CLI rejects the tool call while the XML conversion succeeds — the failed
+	// block is redundant and confusing, so we strip it along with its warning.
+	if len(conversions) > 0 {
+		blocks = removeFailedAskUserQuestionBlocks(blocks)
+	}
+
 	return blocks
+}
+
+// removeFailedAskUserQuestionBlocks strips AskUserQuestion tool_use blocks that
+// failed (Status=="error") — these are CLI-rejected tool calls that duplicate the
+// <ask-question> XML tag conversion. Also removes warning blocks containing the
+// "not found" error message for AskUserQuestion.
+func removeFailedAskUserQuestionBlocks(blocks []model.ContentBlock) []model.ContentBlock {
+	filtered := make([]model.ContentBlock, 0, len(blocks))
+	for _, block := range blocks {
+		if block.Type == "tool_use" && block.Name == "AskUserQuestion" && block.Status == "error" {
+			slog.Info("removing failed AskUserQuestion tool_use block from CLI",
+				slog.String("id", block.ID),
+				slog.String("output", block.Output),
+			)
+			continue
+		}
+		if block.Type == "warning" && strings.Contains(block.Text, "AskUserQuestion") && strings.Contains(block.Text, "not found") {
+			slog.Info("removing AskUserQuestion not-found warning block",
+				slog.String("text", block.Text),
+			)
+			continue
+		}
+		filtered = append(filtered, block)
+	}
+	return filtered
 }
 
 // sendEvent sends an event to the stream channel.
