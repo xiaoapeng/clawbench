@@ -22,6 +22,7 @@
       :loadingMore="session.loadingMore.value"
       :totalMessages="session.totalMessages.value"
       :pendingMessages="manager.pendingMessages.value"
+      :staticBlockCache="render.staticBlockCache"
       @touchstart="swipeSession.onTouchStart"
       @touchend="swipeSession.onTouchEnd"
       @toggle-tool="render.toggleToolDetail"
@@ -414,6 +415,7 @@ const stream = useChatStream({
       }
     }
   },
+  onExtractScheduledTasks: (msgs) => render.extractScheduledTasks(msgs),
 })
 
 const { pendingFiles, attachedFiles, handleFileSelect, handleFileDrop, removeFile, addAttachedFile, removeAttachedFile, cleanupPreviewUrls, clearPendingFiles } = useFileUpload()

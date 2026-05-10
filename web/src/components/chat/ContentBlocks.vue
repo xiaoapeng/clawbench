@@ -180,6 +180,8 @@ const props = defineProps({
   truncate: { type: Function, default: (s) => s },
   getAgentIcon: { type: Function, default: () => '' },
   getAgentName: { type: Function, default: () => '' },
+  // Performance: static block cache from useChatRender (Problem 6)
+  staticBlockCache: { type: Object, default: null },
 })
 
 const emit = defineEmits(['toggle-tool', 'show-tool-detail', 'edit-task', 'view-history', 'task-action', 'send-message', 'render-flush'])
@@ -298,7 +300,8 @@ function flushBlockHtml() {
   for (let i = 0; i < (props.blocks?.length || 0); i++) {
     const block = props.blocks[i]
     if (block.type === 'text') {
-      newCache[i] = props.renderTextBlock(block.text, props.msgId, i)
+      // streaming=true: deferred rendering — pure markdown only
+      newCache[i] = props.renderTextBlock(block.text, props.msgId, i, true)
     }
   }
   blockHtmlCache.value = newCache
@@ -310,12 +313,21 @@ function flushBlockHtml() {
 
 function getBlockHtml(bi, block) {
   if (!props.streaming) {
-    return props.renderTextBlock(block.text, props.msgId, bi)
+    // Non-streaming: full pipeline with cache
+    if (props.staticBlockCache) {
+      const cached = props.staticBlockCache.get(props.msgId, bi, block.text)
+      if (cached !== undefined) return cached
+      const html = props.renderTextBlock(block.text, props.msgId, bi, false)
+      props.staticBlockCache.set(props.msgId, bi, block.text, html)
+      return html
+    }
+    return props.renderTextBlock(block.text, props.msgId, bi, false)
   }
+  // Streaming: deferred rendering with throttling
   if (blockHtmlCache.value[bi] !== undefined) {
     if (!_throttleTimer) {
       const newCache = { ...blockHtmlCache.value }
-      newCache[bi] = props.renderTextBlock(block.text, props.msgId, bi)
+      newCache[bi] = props.renderTextBlock(block.text, props.msgId, bi, true)
       blockHtmlCache.value = newCache
       _throttleTimer = setTimeout(flushBlockHtml, THROTTLE_MS)
     } else {
@@ -323,7 +335,7 @@ function getBlockHtml(bi, block) {
     }
     return blockHtmlCache.value[bi]
   }
-  const html = props.renderTextBlock(block.text, props.msgId, bi)
+  const html = props.renderTextBlock(block.text, props.msgId, bi, true)
   blockHtmlCache.value = { ...blockHtmlCache.value, [bi]: html }
   return html
 }

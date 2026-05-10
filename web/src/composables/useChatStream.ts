@@ -20,6 +20,7 @@ export interface UseChatStreamOptions {
   onQueueUpdate?: (queue: any[]) => void
   onQueueConsume?: () => void
   onFileModified?: (filePath: string) => void
+  onExtractScheduledTasks?: (msgs: any[]) => void
 }
 
 // Tool names that modify files on disk (canonical PascalCase, guaranteed by backend normalization)
@@ -44,6 +45,7 @@ export function useChatStream(options: UseChatStreamOptions) {
     onQueueUpdate,
     onQueueConsume,
     onFileModified,
+    onExtractScheduledTasks,
   } = options
 
   let eventSource: EventSource | null = null
@@ -119,6 +121,9 @@ export function useChatStream(options: UseChatStreamOptions) {
           }
         }
       }
+      // Extract scheduled tasks from the just-finished message
+      // (this path doesn't go through loadHistory, so we must call it explicitly)
+      onExtractScheduledTasks?.(messages.value)
     }
     onRenderNeeded(true)
     loading.value = false
@@ -393,7 +398,8 @@ export function useChatStream(options: UseChatStreamOptions) {
       if ((!msg.blocks || msg.blocks.length === 0) && !msg.content) {
         msg.blocks = [{ type: 'error', text: gt('chat.stream.userCancelled') }]
       }
-      onRenderNeeded()
+      onRenderNeeded(true)
+      onExtractScheduledTasks?.(messages.value)
       loading.value = false
       onStreamEnd?.('cancelled')
     })
@@ -473,7 +479,8 @@ export function useChatStream(options: UseChatStreamOptions) {
           }
         }
       }
-      onRenderNeeded()
+      onRenderNeeded(true)
+      onExtractScheduledTasks?.(messages.value)
       // Re-sync scroll position: removing the streaming indicator and pending
       // messages shrinks the layout, which can make isAtBottom=false even when
       // the user is visually at the bottom. Scroll to ensure isAtBottom stays
@@ -498,7 +505,8 @@ export function useChatStream(options: UseChatStreamOptions) {
         for (const block of messages.value[lastIndex].blocks) {
           if (block.type === 'tool_use' && !block.done) block.done = true
         }
-        onRenderNeeded()
+        onRenderNeeded(true)
+        onExtractScheduledTasks?.(messages.value)
         loading.value = false
       })
       onStreamEnd?.('error')

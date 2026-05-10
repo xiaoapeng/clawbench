@@ -6,6 +6,13 @@ import { renderKatexInString, renderMermaidInElement } from '@/composables/useMa
 import { useFilePathAnnotation } from '@/composables/useFilePathAnnotation.ts'
 import { gt } from '@/composables/useLocale'
 import { store } from '@/stores/app.ts'
+import {
+  extractScheduledTaskIds,
+  stripScheduledTaskTags,
+  detectAskQuestion,
+  taskChanged,
+  StaticBlockCache,
+} from '@/utils/streamPerf.ts'
 
 export function useChatRender(options) {
   const { messages, theme, currentSessionId } = options
@@ -16,35 +23,37 @@ export function useChatRender(options) {
   const expandedTools = ref({})
   let lastRenderedCount = 0
 
-  // Re-render when theme changes
+  // ── StaticBlockCache for non-streaming re-renders ──
+  const staticBlockCache = new StaticBlockCache()
+
+  // Re-render when theme changes — clear caches since rendering may differ
   watch(theme, () => {
+    staticBlockCache.clear()
     updateRenderedContents(true)
   })
 
+  // Clear caches when session changes
+  watch(currentSessionId, () => {
+    staticBlockCache.clear()
+  })
+
   // Sync blockTasks with latest task data from store (global polling updates store.state.tasks).
-  // Use a tasks Map for O(1) lookup instead of .find() on every key, and avoid deep: true
-  // which triggers expensive recursive comparison on the entire tasks array every 2s.
+  // Use a tasks Map for O(1) lookup, and taskChanged() for semantic comparison.
   watch(() => store.state.tasks, (tasks) => {
     if (!tasks || tasks.length === 0) return
     const keys = Object.keys(blockTasks)
     if (keys.length === 0) return
-    // Build a Map for O(1) task lookup by ID
     const taskMap = new Map(tasks.map(t => [t.id, t]))
-    let changed = false
     for (const key of keys) {
       const entry = blockTasks[key]
       if (entry.deleted || !entry.task) continue
       const updated = taskMap.get(entry.taskId)
       if (!updated) {
         entry.deleted = true
-        changed = true
-      } else if (updated !== entry.task) {
+      } else if (taskChanged(entry.task, updated)) {
         entry.task = updated
-        changed = true
       }
     }
-    // If nothing changed, skip reactive notification to prevent unnecessary re-renders
-    // (Vue's reactive() tracks mutations; only trigger if we actually changed something)
   })
 
   async function fetchTaskData(key, taskId) {
@@ -82,118 +91,86 @@ export function useChatRender(options) {
     }
   }
 
-  function renderMarkdown(text) {
+  /**
+   * Render markdown to HTML.
+   * When skipEnhancements=true (streaming mode), only marked + DOMPurify + table-wrap runs.
+   * When skipEnhancements=false (post-streaming), the full pipeline runs:
+   * marked → KaTeX → DOMPurify → table-wrap → img → audio → annotateFilePaths → verifyFilePaths.
+   */
+  function renderMarkdown(text, { skipEnhancements = false } = {}) {
     let html = marked.parse((text || '').trim())
-    html = renderKatexInString(html)
+
+    if (!skipEnhancements) {
+      // KaTeX: deferred to post-streaming — formula may be incomplete during streaming
+      html = renderKatexInString(html)
+    }
+
     html = DOMPurify.sanitize(html, { ADD_TAGS: ['math', 'button'], ADD_ATTR: ['data-file-path', 'title'] })
     html = html.replace(/<table>/g, '<div class="table-wrap"><table>').replace(/<\/table>/g, '</table></div>')
-    html = html.replace(/<img([^>]*)>/g, (match, attrs) => {
-      let cleanAttrs = attrs.replace(/\s*style="[^"]*"/i, '').replace(/\s*class="[^"]*"/i, '')
-      return `<img${cleanAttrs} style="max-width: 200px; max-height: 200px; object-fit: cover; border-radius: 6px; margin: 4px 0; cursor: pointer;" class="chat-img-thumbnail">`
-    })
-    const audioExts = ['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac', '.wma', '.opus']
-    html = html.replace(/<a href="([^"]+)">([^<]*)<\/a>/g, (match, href, text) => {
-      const lower = href.toLowerCase()
-      if (audioExts.some(ext => lower.endsWith(ext))) {
-        return `<div class="chat-audio-wrapper"><audio src="${href}" controls class="chat-audio-player"></audio></div>`
-      }
-      return match
-    })
-    const { html: annotatedHtml, detectedPaths } = annotateFilePaths(html, { projectRoot: store.state.projectRoot })
-    html = annotatedHtml
-    if (detectedPaths.length > 0) {
-      const uniquePaths = [...new Set(detectedPaths)]
-      nextTick(() => {
-        const el = document.getElementById('aiChatMessages')
-        if (el) verifyFilePaths(uniquePaths, el)
+
+    if (!skipEnhancements) {
+      // Image styling, audio links, file path annotation: deferred to post-streaming
+      html = html.replace(/<img([^>]*)>/g, (match, attrs) => {
+        let cleanAttrs = attrs.replace(/\s*style="[^"]*"/i, '').replace(/\s*class="[^"]*"/i, '')
+        return `<img${cleanAttrs} style="max-width: 200px; max-height: 200px; object-fit: cover; border-radius: 6px; margin: 4px 0; cursor: pointer;" class="chat-img-thumbnail">`
       })
+      const audioExts = ['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac', '.wma', '.opus']
+      html = html.replace(/<a href="([^"]+)">([^<]*)<\/a>/g, (match, href, text) => {
+        const lower = href.toLowerCase()
+        if (audioExts.some(ext => lower.endsWith(ext))) {
+          return `<div class="chat-audio-wrapper"><audio src="${href}" controls class="chat-audio-player"></audio></div>`
+        }
+        return match
+      })
+      const { html: annotatedHtml, detectedPaths } = annotateFilePaths(html, { projectRoot: store.state.projectRoot })
+      html = annotatedHtml
+      if (detectedPaths.length > 0) {
+        const uniquePaths = [...new Set(detectedPaths)]
+        nextTick(() => {
+          const el = document.getElementById('aiChatMessages')
+          if (el) verifyFilePaths(uniquePaths, el)
+        })
+      }
     }
+
     return html
   }
 
-  // Validate that <ask-question> content looks like a real JSON payload
-  // (not a prose reference like "Forces structured <ask-question> XML tags").
-  // Strips markdown code fences, then checks that JSON.parse succeeds and
-  // the result has a `questions` array.
-  function isValidAskContent(raw) {
-    let probe = raw.trim()
-    if (probe.startsWith('```')) {
-      const nlIdx = probe.indexOf('\n')
-      if (nlIdx !== -1) probe = probe.slice(nlIdx + 1).trim()
-      const lastFence = probe.lastIndexOf('```')
-      if (lastFence !== -1) probe = probe.slice(0, lastFence).trim()
+  /**
+   * Render a text block to HTML.
+   *
+   * When streaming=true (during streaming):
+   *   Only pure markdown rendering — no structured detection.
+   *   Tags like <scheduled-task> and <ask-question> remain as visible text.
+   *   No KaTeX, no file path annotation, no path verification.
+   *
+   * When streaming=false (post-streaming / history load):
+   *   Full pipeline: scheduled-task extraction, ask-question detection,
+   *   tag stripping, and enhanced markdown rendering.
+   */
+  function renderTextBlock(text, msgId, blockIdx, streaming = false) {
+    // ── Streaming: pure markdown only ──
+    if (streaming) {
+      return renderMarkdown(text, { skipEnhancements: true })
     }
-    try {
-      const parsed = JSON.parse(probe)
-      return parsed && parsed.questions && Array.isArray(parsed.questions)
-    } catch {
-      return false
-    }
-  }
 
-  function renderTextBlock(text, msgId, blockIdx) {
-    // Detect <scheduled-task id="..." /> tags — match optional "task-" prefix before UUID
-    // to avoid false positives when AI mentions the tag format in prose
-    // (e.g. `<scheduled-task id="..."/>` as documentation)
-    const UUID_RE = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
-    const scheduledTaskRegex = new RegExp(`<scheduled-task\\s+id="(task-)?(${UUID_RE})"\\s*/>`, 'gi')
-    let tagIdx = 0
-    let match
+    // ── Post-streaming: full pipeline ──
 
-    while ((match = scheduledTaskRegex.exec(text)) !== null) {
-      const taskId = match[1] ? match[0].match(/id="([^"]+)"/)[1] : match[2]
+    // Extract scheduled-task IDs and fetch their data
+    const taskIds = extractScheduledTaskIds(text)
+    for (let tagIdx = 0; tagIdx < taskIds.length; tagIdx++) {
       const key = `${msgId}-${blockIdx}-${tagIdx}`
-      fetchTaskData(key, taskId)
-      tagIdx++
+      fetchTaskData(key, taskIds[tagIdx])
     }
 
-    // Detect <ask-question> tags — strip from text and store for interactive rendering.
-    // Strategy: iterate ALL <ask-question> occurrences (last-to-first priority)
-    // and validate that the captured content parses as JSON with a `questions` array.
-    // This avoids false positives from prose references like:
-    //   "Forces structured `<ask-question>` XML tags"
-    // We try three patterns per occurrence, in order:
-    //   1. Properly closed: <ask-question>...</ask-question>
-    //   2. Wrong closing tag: <ask-question>...</user_query> (some models do this)
-    //   3. Unclosed: <ask-question>... (to end-of-text)
-    let askMatch = null
-    const allOpenTags = [...text.matchAll(/<ask-question\b[^>]*>/g)]
-    for (let j = allOpenTags.length - 1; j >= 0; j--) {
-      const startIdx = allOpenTags[j].index
-      const afterTag = text.slice(startIdx)
+    // Detect ask-question tags
+    const askResult = detectAskQuestion(text)
 
-      // Pattern 1: properly closed with </ask-question>
-      const closedMatch = afterTag.match(/<ask-question\b[^>]*>([\s\S]*?)<\/ask-question>/)
-      if (closedMatch && isValidAskContent(closedMatch[1])) {
-        askMatch = closedMatch
-        askMatch._startIdx = startIdx
-        askMatch._endIdx = startIdx + closedMatch[0].length
-        break
-      }
-
-      // Pattern 2: wrong closing tag (e.g. </user_query>, </ask>, etc.)
-      const wrongCloseMatch = afterTag.match(/<ask-question\b[^>]*>([\s\S]*?)<\/\w+>/)
-      if (wrongCloseMatch && isValidAskContent(wrongCloseMatch[1])) {
-        askMatch = wrongCloseMatch
-        askMatch._startIdx = startIdx
-        askMatch._endIdx = startIdx + wrongCloseMatch[0].length
-        break
-      }
-
-      // Pattern 3: unclosed — capture to end-of-text
-      const subMatch = afterTag.match(/<ask-question\b[^>]*>([\s\S]+)$/)
-      if (subMatch && isValidAskContent(subMatch[1])) {
-        askMatch = subMatch
-        askMatch._startIdx = startIdx
-        break
-      }
-    }
-    if (askMatch) {
+    if (askResult.found) {
       const askKey = `${msgId}-${blockIdx}`
       if (!blockAskQuestions[askKey]) {
         try {
-          let askContent = askMatch[1].trim()
-          // Strip markdown code fences (```json ... ```) that some models wrap around the JSON
+          let askContent = askResult.content.trim()
           if (askContent.startsWith('```')) {
             const nlIdx = askContent.indexOf('\n')
             if (nlIdx !== -1) askContent = askContent.slice(nlIdx + 1).trim()
@@ -208,21 +185,19 @@ export function useChatRender(options) {
           console.error('Failed to parse ask-question:', e)
         }
       }
-      // Remove the matched tag from the rendered text.
-      // For closed/wrong-close matches (_endIdx set), splice out the tag range.
-      // For unclosed matches, truncate from the tag position to end-of-text.
+      // Remove the matched tag from the rendered text
       let cleanText
-      if (askMatch._endIdx !== undefined) {
-        cleanText = (text.slice(0, askMatch._startIdx) + text.slice(askMatch._endIdx)).trim()
+      if (askResult.endIdx !== undefined) {
+        cleanText = (text.slice(0, askResult.startIdx) + text.slice(askResult.endIdx)).trim()
       } else {
-        cleanText = text.slice(0, askMatch._startIdx).trim()
+        cleanText = text.slice(0, askResult.startIdx).trim()
       }
-      // Strip scheduled-task tags (with optional task- prefix) from the remaining text
-      cleanText = cleanText.replace(/<scheduled-task\s+id="(task-)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"\s*\/>/gi, '').trim()
+      cleanText = stripScheduledTaskTags(cleanText)
       return cleanText ? renderMarkdown(cleanText) : ''
     }
-    // No ask-question: strip scheduled-task tags (with optional task- prefix) and render
-    const cleanText = text.replace(/<scheduled-task\s+id="(task-)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"\s*\/>/gi, '').trim()
+
+    // No ask-question: strip scheduled-task tags and render
+    const cleanText = stripScheduledTaskTags(text)
     return cleanText ? renderMarkdown(cleanText) : ''
   }
 
@@ -233,10 +208,7 @@ export function useChatRender(options) {
       if (parsed.blocks && Array.isArray(parsed.blocks)) {
         const mapped = parsed.blocks.map(b => {
           if (b.type === 'tool_use') {
-            // DB-loaded blocks from finished sessions: if done is missing or false,
-            // the session ended without receiving the tool result — mark as incomplete
             if (b.done === undefined || b.done === false) b.done = true
-            // Backward compat: old Codex format had output in input.output
             if (!b.output && b.input && b.input.output) {
               b.output = b.input.output
               delete b.input.output
@@ -244,11 +216,8 @@ export function useChatRender(options) {
           }
           return b
         })
-        // Deduplicate tool_use blocks by ID — old scheduled-task data could have
-        // two blocks with the same ID (one empty input from start event, one with
-        // content from stop event). Merge by keeping the richer version.
         const result = []
-        const toolIndex = new Map() // id -> index in result
+        const toolIndex = new Map()
         for (const b of mapped) {
           if (b.type === 'tool_use' && b.id) {
             const prevIdx = toolIndex.get(b.id)
@@ -256,8 +225,8 @@ export function useChatRender(options) {
               const prev = result[prevIdx]
               const prevEmpty = !prev.input || Object.keys(prev.input).length === 0
               const currEmpty = !b.input || Object.keys(b.input).length === 0
-              if (currEmpty && !prevEmpty) continue          // keep previous (has data)
-              if (!currEmpty && prevEmpty) {                  // replace with current
+              if (currEmpty && !prevEmpty) continue
+              if (!currEmpty && prevEmpty) {
                 prev.input = b.input
                 prev.done = b.done
                 prev.name = b.name || prev.name
@@ -265,7 +234,6 @@ export function useChatRender(options) {
                 if (b.status) prev.status = b.status
                 continue
               }
-              // Both have data or both empty — merge: prefer done=true
               if (b.done) prev.done = true
               if (!currEmpty) prev.input = b.input
               if (b.output) prev.output = b.output
@@ -292,18 +260,10 @@ export function useChatRender(options) {
         for (let bi = 0; bi < msg.blocks.length; bi++) {
           const block = msg.blocks[bi]
           if (block.type === 'text') {
-            // Extract <scheduled-task id="..." /> tags (with optional "task-" prefix before UUID).
-            // <ask-question> parsing is handled lazily in renderTextBlock()
-            // to avoid duplicating expensive regex work on every session load.
-            const scheduledTaskRegex = /<scheduled-task\s+id="(task-)?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"\s*\/>/gi
-            let tagIdx = 0
-            let match
-            scheduledTaskRegex.lastIndex = 0
-            while ((match = scheduledTaskRegex.exec(block.text || '')) !== null) {
-              const taskId = match[1] ? match[0].match(/id="([^"]+)"/)[1] : match[2]
+            const taskIds = extractScheduledTaskIds(block.text || '')
+            for (let tagIdx = 0; tagIdx < taskIds.length; tagIdx++) {
               const key = `${msg.id}-${bi}-${tagIdx}`
-              fetchTaskData(key, taskId)
-              tagIdx++
+              fetchTaskData(key, taskIds[tagIdx])
             }
           }
         }
@@ -317,6 +277,10 @@ export function useChatRender(options) {
     if (!forceFullRender && lastRenderedCount > messages.value.length) {
       forceFullRender = true
     }
+
+    // ── Deferred rendering: only render Mermaid when not streaming ──
+    // During streaming, Mermaid code blocks are incomplete — rendering them
+    // would produce errors. Defer to post-streaming forceFullRender.
     if (forceFullRender) {
       lastRenderedCount = messages.value.length
       nextTick(() => {
@@ -331,15 +295,8 @@ export function useChatRender(options) {
 
       lastRenderedCount = messages.value.length
 
-      nextTick(() => {
-        const el = document.getElementById('aiChatMessages')
-        if (el) {
-          const newBlocks = el.querySelectorAll(`.chat-message:nth-last-child(n+${startIdx + 1}) pre.mermaid:not([data-rendered])`)
-          if (newBlocks.length > 0) {
-            renderMermaidInElement(el, 'chat-mermaid', newBlocks)
-          }
-        }
-      })
+      // Skip Mermaid rendering during streaming — it will be rendered
+      // when forceFullRender triggers after streaming ends.
     }
   }
 
@@ -350,7 +307,6 @@ export function useChatRender(options) {
   function toolCallSummary(block) {
     if (!block.input) return ''
     const name = (block.name || '').toLowerCase()
-    // AskUserQuestion: show first question header
     if (name === 'askuserquestion' && Array.isArray(block.input.questions) && block.input.questions.length > 0) {
       const q = block.input.questions[0]
       const header = q.header || ''
@@ -358,20 +314,14 @@ export function useChatRender(options) {
       if (header) return header
       if (question) return question.length > 60 ? question.slice(0, 57) + '...' : question
     }
-    // Prefer description (human-readable intent) over raw input values
     if (block.input.description) return block.input.description
     const obj = block.input
     if (obj.file_path) return baseName(obj.file_path)
     if (obj.command) return obj.command.length > 60 ? obj.command.slice(0, 57) + '...' : obj.command
-    // Grep/Glob: show pattern
     if (obj.pattern) return obj.pattern.length > 60 ? obj.pattern.slice(0, 57) + '...' : obj.pattern
-    // WebSearch: show query
     if (obj.query) return obj.query.length > 60 ? obj.query.slice(0, 57) + '...' : obj.query
-    // WebFetch: show url
     if (obj.url) return obj.url.length > 60 ? obj.url.slice(0, 57) + '...' : obj.url
-    // Skill: show skill name
     if (obj.skill) return obj.skill
-    // Agent: show description or prompt summary (description already handled above)
     if (obj.prompt && name === 'agent') return obj.prompt.length > 60 ? obj.prompt.slice(0, 57) + '...' : obj.prompt
     if (obj.path) return baseName(obj.path)
     if (obj.src_path && obj.dst_path) return `${baseName(obj.src_path)} → ${baseName(obj.dst_path)}`
@@ -459,5 +409,7 @@ export function useChatRender(options) {
     humanizeCron,
     repeatLabel,
     truncate,
+    // Expose cache for ContentBlocks.vue integration
+    staticBlockCache,
   }
 }

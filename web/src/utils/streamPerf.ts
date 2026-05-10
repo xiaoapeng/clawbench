@@ -1,0 +1,171 @@
+/**
+ * Streaming render utilities for useChatRender.
+ *
+ * Core design: During streaming, renderTextBlock only does pure markdown
+ * rendering (marked + DOMPurify + table-wrap). All structured detection
+ * (KaTeX, Mermaid, scheduled-task, ask-question, file path annotation)
+ * is deferred to after streaming ends.
+ *
+ * This module provides the pure functions used in the post-streaming
+ * full pipeline:
+ *
+ * - scheduled-task regex (module-level, reused across calls)
+ * - ask-question detection (with early exit optimization)
+ * - task semantic comparison (for blockTasks watcher)
+ * - static block cache (for non-streaming re-renders)
+ */
+
+// ────────────────────────────────────────────────────────────
+// Module-level scheduled-task regex
+// ────────────────────────────────────────────────────────────
+
+/** Regex to match <scheduled-task id="..." /> tags (with optional "task-" prefix before UUID). */
+export const SCHEDULED_TASK_RE = /<scheduled-task\s+id="(task-)?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"\s*\/>/gi
+
+/**
+ * Extract scheduled task IDs from text.
+ * Resets the module-level regex lastIndex before use (required due to 'g' flag).
+ * Only called post-streaming.
+ */
+export function extractScheduledTaskIds(text: string): string[] {
+  const ids: string[] = []
+  SCHEDULED_TASK_RE.lastIndex = 0
+  let match
+  while ((match = SCHEDULED_TASK_RE.exec(text)) !== null) {
+    // match[1] = "task-" prefix (or undefined), match[2] = UUID
+    ids.push(match[1] ? match[1] + match[2] : match[2])
+  }
+  return ids
+}
+
+/**
+ * Strip <scheduled-task .../> tags from text.
+ * Resets the module-level regex lastIndex before use.
+ * Only called post-streaming.
+ */
+export function stripScheduledTaskTags(text: string): string {
+  SCHEDULED_TASK_RE.lastIndex = 0
+  return text.replace(SCHEDULED_TASK_RE, '').trim()
+}
+
+// ────────────────────────────────────────────────────────────
+// ask-question detection (with early exit)
+// ────────────────────────────────────────────────────────────
+
+/**
+ * Validate that <ask-question> content looks like a real JSON payload.
+ * Strips markdown code fences, then checks JSON.parse succeeds with .questions array.
+ * Only called post-streaming.
+ */
+export function isValidAskContent(raw: string): boolean {
+  let probe = raw.trim()
+  if (probe.startsWith('```')) {
+    const nlIdx = probe.indexOf('\n')
+    if (nlIdx !== -1) probe = probe.slice(nlIdx + 1).trim()
+    const lastFence = probe.lastIndexOf('```')
+    if (lastFence !== -1) probe = probe.slice(0, lastFence).trim()
+  }
+  try {
+    const parsed = JSON.parse(probe)
+    return !!(parsed && parsed.questions && Array.isArray(parsed.questions))
+  } catch {
+    return false
+  }
+}
+
+export interface AskQuestionResult {
+  found: boolean
+  content?: string
+  startIdx?: number
+  endIdx?: number
+}
+
+/**
+ * Detect <ask-question> tags in text with early exit optimization.
+ * Returns result with found=false immediately if '<ask-question' is not in the text.
+ * Only called post-streaming.
+ */
+export function detectAskQuestion(text: string): AskQuestionResult {
+  // Fast path: skip entire detection if tag substring not present
+  if (!text.includes('<ask-question')) {
+    return { found: false }
+  }
+
+  // Full detection: matchAll + up to 3 regex patterns + JSON.parse validation
+  const allOpenTags = [...text.matchAll(/<ask-question\b[^>]*>/g)]
+  for (let j = allOpenTags.length - 1; j >= 0; j--) {
+    const startIdx = allOpenTags[j].index!
+    const afterTag = text.slice(startIdx)
+
+    const closedMatch = afterTag.match(/<ask-question\b[^>]*>([\s\S]*?)<\/ask-question>/)
+    if (closedMatch && isValidAskContent(closedMatch[1])) {
+      return { found: true, content: closedMatch[1], startIdx, endIdx: startIdx + closedMatch[0].length }
+    }
+
+    const wrongCloseMatch = afterTag.match(/<ask-question\b[^>]*>([\s\S]*?)<\/\w+>/)
+    if (wrongCloseMatch && isValidAskContent(wrongCloseMatch[1])) {
+      return { found: true, content: wrongCloseMatch[1], startIdx, endIdx: startIdx + wrongCloseMatch[0].length }
+    }
+
+    const subMatch = afterTag.match(/<ask-question\b[^>]*>([\s\S]+)$/)
+    if (subMatch && isValidAskContent(subMatch[1])) {
+      return { found: true, content: subMatch[1], startIdx }
+    }
+  }
+
+  return { found: false }
+}
+
+// ────────────────────────────────────────────────────────────
+// Task semantic comparison (for blockTasks watcher)
+// ────────────────────────────────────────────────────────────
+
+/** Key fields to compare for semantic equality of a scheduled task. */
+const TASK_COMPARE_KEYS = [
+  'status', 'name', 'cronExpr', 'runCount',
+  'lastRunAt', 'nextRunAt', 'runningCount',
+  'repeatMode', 'maxRuns', 'agentId',
+] as const
+
+/**
+ * Compare two task objects by semantic key fields.
+ * Returns true if any key field differs (or either is null).
+ */
+export function taskChanged(oldTask: any, newTask: any): boolean {
+  if (!oldTask || !newTask) return true
+  for (const key of TASK_COMPARE_KEYS) {
+    if (oldTask[key] !== newTask[key]) return true
+  }
+  return false
+}
+
+// ────────────────────────────────────────────────────────────
+// Static block cache (for non-streaming re-renders)
+// ────────────────────────────────────────────────────────────
+
+/**
+ * Cache for non-streaming block HTML rendering.
+ * Prevents redundant renderTextBlock calls when Vue re-renders
+ * already-completed message blocks.
+ */
+export class StaticBlockCache {
+  private cache = new Map<string, string>()
+
+  private makeKey(msgId: string | number, blockIdx: number, text: string): string {
+    const prefix = text.length > 40 ? text.slice(0, 20) : ''
+    const suffix = text.slice(-20)
+    return `${msgId}-${blockIdx}-${text.length}-${prefix}${suffix}`
+  }
+
+  get(msgId: string | number, blockIdx: number, text: string): string | undefined {
+    return this.cache.get(this.makeKey(msgId, blockIdx, text))
+  }
+
+  set(msgId: string | number, blockIdx: number, text: string, html: string): void {
+    this.cache.set(this.makeKey(msgId, blockIdx, text), html)
+  }
+
+  clear(): void {
+    this.cache.clear()
+  }
+}

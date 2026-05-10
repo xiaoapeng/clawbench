@@ -46,6 +46,7 @@
       :blockAskQuestions="blockAskQuestions"
       :agents="agents"
       :shouldCollapse="isCollapsed(i, msg)"
+      :staticBlockCache="staticBlockCache"
       @toggle-tool="$emit('toggle-tool', $event)"
       @show-tool-detail="$emit('show-tool-detail', $event)"
       @show-metadata="$emit('show-metadata', $event)"
@@ -97,6 +98,7 @@ const props = defineProps({
   loadingMore: Boolean,
   totalMessages: { type: Number, default: 0 },
   pendingMessages: { type: Array, default: () => [] },
+  staticBlockCache: Object,
 })
 
 const emit = defineEmits(['toggle-tool', 'show-tool-detail', 'show-metadata', 'file-tag-click', 'file-open', 'load-more', 'edit-task', 'view-history', 'task-action', 'send-message', 'remove-pending', 'render-flush'])

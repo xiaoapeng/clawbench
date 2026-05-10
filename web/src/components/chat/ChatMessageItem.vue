@@ -24,6 +24,7 @@
         :truncate="truncate"
         :getAgentIcon="getAgentIcon"
         :getAgentName="getAgentName"
+        :staticBlockCache="staticBlockCache"
         @toggle-tool="$emit('toggle-tool', $event)"
         @show-tool-detail="$emit('show-tool-detail', $event)"
         @edit-task="$emit('edit-task', $event)"
@@ -113,6 +114,7 @@ const props = defineProps({
   blockAskQuestions: Object,
   agents: Array,
   shouldCollapse: Boolean,
+  staticBlockCache: Object,
 })
 
 const emit = defineEmits(['toggle-tool', 'show-tool-detail', 'show-metadata', 'file-tag-click', 'expand', 'collapse', 'edit-task', 'view-history', 'task-action', 'send-message', 'render-flush'])
