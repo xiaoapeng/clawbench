@@ -9,7 +9,7 @@
             <span class="tunnel-banner-title">{{ t('proxy.tunnelDisconnected') }}</span>
             <span class="tunnel-banner-detail">{{ t('proxy.tunnelDisconnectedDetail') }}</span>
           </div>
-          <button class="tunnel-retry-btn" :class="{ spinning: tunnelChecking }" @click="handleRetryTunnel" :title="t('proxy.retryCheck')">
+          <button class="tunnel-retry-btn" :class="{ spinning: tunnelChecking }" :disabled="tunnelChecking" @click="handleRetryTunnel" :title="t('proxy.retryCheck')">
             <RotateCcw :size="14" />
           </button>
         </div>
@@ -19,7 +19,7 @@
             <span class="tunnel-banner-title">{{ t('proxy.portsNoResponse') }}</span>
             <span class="tunnel-banner-detail">{{ t('proxy.tunnelConnectedButNoResponse') }}</span>
           </div>
-          <button class="tunnel-retry-btn" :class="{ spinning: tunnelChecking }" @click="handleRetryTunnel" :title="t('proxy.retryCheck')">
+          <button class="tunnel-retry-btn" :class="{ spinning: tunnelChecking }" :disabled="tunnelChecking" @click="handleRetryTunnel" :title="t('proxy.retryCheck')">
             <RotateCcw :size="14" />
           </button>
         </div>
@@ -346,8 +346,13 @@ async function handleRetryTunnel() {
   align-self: center;
 }
 
-.tunnel-retry-btn:active {
+.tunnel-retry-btn:active:not(:disabled) {
   background: rgba(255, 255, 255, 0.25);
+}
+
+.tunnel-retry-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .tunnel-retry-btn.spinning svg {
