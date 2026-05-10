@@ -21,7 +21,7 @@ const FILE_TYPES: FileType[] = [
     { exts: ['.go', '.mod', '.sum'], lang: 'go', label: 'Go', color: '#00acd7', isMarkdown: false },
     { exts: ['.py', '.pyi'], lang: 'python', label: 'PY', color: '#3572a5', isMarkdown: false },
     { exts: ['.rs'], lang: 'rust', label: 'RS', color: '#ce412b', isMarkdown: false },
-    { exts: ['.js', '.mjs', '.cjs'], lang: 'javascript', label: 'JS', color: '#f7df1e', isMarkdown: false },
+    { exts: ['.js', '.mjs', '.cjs', '.jsx'], lang: 'javascript', label: 'JS', color: '#f7df1e', isMarkdown: false },
     { exts: ['.ts', '.tsx', '.mts', '.cts'], lang: 'typescript', label: 'TS', color: '#3178c6', isMarkdown: false },
     { exts: ['.java'], lang: 'java', label: 'Java', color: '#b07219', isMarkdown: false },
     { exts: ['.cs'], lang: 'csharp', label: 'C#', color: '#68217a', isMarkdown: false },

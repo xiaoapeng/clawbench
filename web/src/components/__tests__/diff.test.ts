@@ -1,25 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { escapeHtml } from '@/utils/html.ts'
+import { parseHunkHeader, parseDiffLines, detectLang, highlightLine, renderDiff } from '@/utils/diff.ts'
 
 // ────────────────────────────────────────────────────────────
-// diff.ts relies on hljs (highlight.js) from globals.ts which
-// needs browser environment. We test the parsing logic by
-// replicating the pure parts (parseHunkHeader) and renderDiff
-// with mocked highlight.
+// parseHunkHeader — imported from source, no copy-paste
 // ────────────────────────────────────────────────────────────
-
-// Replicate parseHunkHeader logic (pure function)
-function parseHunkHeader(line: string) {
-  const m = line.match(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(.*)/)
-  if (!m) return null
-  return {
-    oldStart: parseInt(m[1]),
-    oldCount: parseInt(m[2] || '1'),
-    newStart: parseInt(m[3]),
-    newCount: parseInt(m[4] || '1'),
-    text: m[5].trim(),
-  }
-}
 
 describe('parseHunkHeader', () => {
   it('parses basic hunk header', () => {
@@ -70,41 +54,17 @@ describe('parseHunkHeader', () => {
     expect(result!.oldStart).toBe(0)
     expect(result!.newStart).toBe(0)
   })
+
+  it('parses hunk header with trailing whitespace in text', () => {
+    const result = parseHunkHeader('@@ -1,1 +1,1 @@  ')
+    expect(result).not.toBeNull()
+    expect(result!.text).toBe('') // trimmed
+  })
 })
 
-// Replicate diff line parsing logic
-interface DiffLine {
-  type: 'add' | 'del' | 'ctx'
-  content: string
-  oldLine: number | null
-  newLine: number | null
-}
-
-function parseDiffLines(raw: string): DiffLine[] {
-  const lines = raw.split('\n')
-  const result: DiffLine[] = []
-  let oldLineNum = 0
-  let newLineNum = 0
-  let inHunk = false
-
-  for (const line of lines) {
-    if (line.startsWith('@@')) {
-      const header = parseHunkHeader(line)
-      if (header) {
-        oldLineNum = header.oldStart
-        newLineNum = header.newStart
-        inHunk = true
-      }
-    } else if (line.startsWith(' ') && inHunk) {
-      result.push({ type: 'ctx', content: line.substring(1), oldLine: oldLineNum++, newLine: newLineNum++ })
-    } else if (line.startsWith('+') && !line.startsWith('+++') && inHunk) {
-      result.push({ type: 'add', content: line.substring(1), oldLine: null, newLine: newLineNum++ })
-    } else if (line.startsWith('-') && !line.startsWith('---') && inHunk) {
-      result.push({ type: 'del', content: line.substring(1), oldLine: oldLineNum++, newLine: null })
-    }
-  }
-  return result
-}
+// ────────────────────────────────────────────────────────────
+// parseDiffLines — imported from source, no copy-paste
+// ────────────────────────────────────────────────────────────
 
 describe('parseDiffLines', () => {
   it('parses context lines', () => {
@@ -174,5 +134,98 @@ describe('parseDiffLines', () => {
     // Second hunk starts at line 10
     expect(lines[3].oldLine).toBe(10)
     expect(lines[3].newLine).toBe(10)
+  })
+})
+
+// ────────────────────────────────────────────────────────────
+// detectLang
+// ────────────────────────────────────────────────────────────
+
+describe('detectLang', () => {
+  it('returns plaintext for empty string', () => {
+    expect(detectLang('')).toBe('plaintext')
+  })
+
+  it('detects go from .go extension', () => {
+    expect(detectLang('main.go')).toBe('go')
+  })
+
+  it('detects typescript from .ts extension', () => {
+    expect(detectLang('app.ts')).toBe('typescript')
+  })
+
+  it('detects markdown from .md extension', () => {
+    expect(detectLang('README.md')).toBe('markdown')
+  })
+
+  it('returns plaintext for unknown extensions', () => {
+    expect(detectLang('data.xyz')).toBe('plaintext')
+  })
+
+  it('handles files with multiple dots', () => {
+    expect(detectLang('test.spec.ts')).toBe('typescript')
+  })
+
+  it('is case-insensitive for extension', () => {
+    expect(detectLang('main.GO')).toBe('go')
+  })
+})
+
+// ────────────────────────────────────────────────────────────
+// highlightLine — needs hljs (browser env)
+// ────────────────────────────────────────────────────────────
+
+describe('highlightLine', () => {
+  it('returns empty string for empty input', () => {
+    expect(highlightLine('', 'go')).toBe('')
+  })
+
+  it('returns highlighted HTML for valid input', () => {
+    const result = highlightLine('func main()', 'go')
+    // hljs wraps keywords in <span> tags
+    expect(result).toContain('func')
+    expect(result).toContain('main')
+  })
+
+  it('falls back to escaped HTML on invalid language', () => {
+    const result = highlightLine('hello <world>', 'nonexistent_lang_xyz')
+    // Should still return something (either highlighted or escaped)
+    expect(result).toContain('hello')
+  })
+})
+
+// ────────────────────────────────────────────────────────────
+// renderDiff
+// ────────────────────────────────────────────────────────────
+
+describe('renderDiff', () => {
+  it('returns empty string for empty input', () => {
+    expect(renderDiff('', 'test.go')).toBe('')
+  })
+
+  it('returns empty string for whitespace-only input', () => {
+    expect(renderDiff('   \n  ', 'test.go')).toBe('')
+  })
+
+  it('renders a simple diff with one hunk', () => {
+    const raw = '@@ -1,1 +1,1 @@\n-old\n+new'
+    const html = renderDiff(raw, 'test.go')
+    expect(html).toContain('diff-view')
+    expect(html).toContain('diff-hunk')
+    expect(html).toContain('diff-line-del')
+    expect(html).toContain('diff-line-add')
+  })
+
+  it('renders raw view for diff without hunks', () => {
+    const raw = 'some text\nmore text'
+    const html = renderDiff(raw, 'test.go')
+    expect(html).toContain('diff-raw')
+  })
+
+  it('renders hunk header when present', () => {
+    const raw = '@@ -1,3 +1,4 @@ function hello()\n context\n-old\n+new1\n+new2\n context'
+    const html = renderDiff(raw, 'test.go')
+    expect(html).toContain('diff-hunk-header')
+    expect(html).toContain('function hello()')
   })
 })

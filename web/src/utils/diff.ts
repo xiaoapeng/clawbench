@@ -18,7 +18,7 @@ export function highlightLine(line: string, lang: string): string {
     }
 }
 
-interface DiffLine {
+export interface DiffLine {
     type: 'add' | 'del' | 'ctx'
     content: string
     oldLine: number | null
@@ -30,7 +30,37 @@ interface Hunk {
     lines: DiffLine[]
 }
 
-function parseHunkHeader(line: string): {
+/**
+ * Parse a unified diff string into structured DiffLine objects.
+ * Pure function — no rendering, no syntax highlighting.
+ */
+export function parseDiffLines(raw: string): DiffLine[] {
+    const lines = raw.split('\n')
+    const result: DiffLine[] = []
+    let oldLineNum = 0
+    let newLineNum = 0
+    let inHunk = false
+
+    for (const line of lines) {
+        if (line.startsWith('@@')) {
+            const header = parseHunkHeader(line)
+            if (header) {
+                oldLineNum = header.oldStart
+                newLineNum = header.newStart
+                inHunk = true
+            }
+        } else if (line.startsWith(' ') && inHunk) {
+            result.push({ type: 'ctx', content: line.substring(1), oldLine: oldLineNum++, newLine: newLineNum++ })
+        } else if (line.startsWith('+') && !line.startsWith('+++') && inHunk) {
+            result.push({ type: 'add', content: line.substring(1), oldLine: null, newLine: newLineNum++ })
+        } else if (line.startsWith('-') && !line.startsWith('---') && inHunk) {
+            result.push({ type: 'del', content: line.substring(1), oldLine: oldLineNum++, newLine: null })
+        }
+    }
+    return result
+}
+
+export function parseHunkHeader(line: string): {
     oldStart: number; oldCount: number;
     newStart: number; newCount: number;
     text: string

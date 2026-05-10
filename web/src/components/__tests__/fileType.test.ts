@@ -93,6 +93,67 @@ describe('getFileType', () => {
     const ft = getFileType('query.sql')
     expect(ft.lang).toBe('sql')
   })
+
+  it('detects .yml extension as yaml', () => {
+    const ft = getFileType('docker-compose.yml')
+    expect(ft.lang).toBe('yaml')
+  })
+
+  it('detects .tsx as typescript', () => {
+    const ft = getFileType('Component.tsx')
+    expect(ft.lang).toBe('typescript')
+  })
+
+  it('detects .jsx as javascript', () => {
+    const ft = getFileType('Component.jsx')
+    expect(ft.lang).toBe('javascript')
+  })
+
+  it('detects Rust files', () => {
+    const ft = getFileType('main.rs')
+    expect(ft.lang).toBe('rust')
+  })
+
+  it('detects Python files', () => {
+    const ft = getFileType('app.py')
+    expect(ft.lang).toBe('python')
+  })
+
+  it('detects .svg as image', () => {
+    const ft = getFileType('logo.svg')
+    expect(ft.isImage).toBe(true)
+  })
+
+  it('detects .webm as video', () => {
+    const ft = getFileType('video.webm')
+    expect(ft.isVideo).toBe(true)
+  })
+
+  it('detects .flac as audio', () => {
+    const ft = getFileType('music.flac')
+    expect(ft.isAudio).toBe(true)
+  })
+
+  it('detects .diff extension', () => {
+    const ft = getFileType('changes.diff')
+    expect(ft.lang).toBe('diff')
+  })
+
+  it('detects .toml extension', () => {
+    const ft = getFileType('pyproject.toml')
+    expect(ft.lang).toBe('toml')
+  })
+
+  it('detects .graphql extension', () => {
+    const ft = getFileType('schema.graphql')
+    expect(ft.lang).toBe('graphql')
+  })
+
+  it('is case-insensitive for all extensions', () => {
+    expect(getFileType('main.GO').lang).toBe('go')
+    expect(getFileType('readme.MD').lang).toBe('markdown')
+    expect(getFileType('app.TS').lang).toBe('typescript')
+  })
 })
 
 describe('formatFileSize', () => {
@@ -122,5 +183,21 @@ describe('formatFileSize', () => {
 
   it('formats fractional KB', () => {
     expect(formatFileSize(1536)).toBe('1.5 KB')
+  })
+
+  it('formats 1 byte', () => {
+    expect(formatFileSize(1)).toBe('1 B')
+  })
+
+  it('formats boundary between B and KB', () => {
+    expect(formatFileSize(1023)).toBe('1023 B')
+  })
+
+  it('formats boundary between KB and MB', () => {
+    expect(formatFileSize(1024 * 1024 - 1)).toBe('1024.0 KB')
+  })
+
+  it('formats large MB', () => {
+    expect(formatFileSize(1024 * 1024 * 1024)).toBe('1024.0 MB')
   })
 })

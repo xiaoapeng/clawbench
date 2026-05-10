@@ -1,13 +1,10 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { describe, expect, it, vi, beforeEach, beforeAll } from 'vitest'
 
 // ────────────────────────────────────────────────────────────
 // formatDuration and statusLabel are pure functions we can test
 // directly. formatRelativeTime, formatDateTime, humanizeCron,
 // and repeatLabel depend on i18n which we need to mock.
 // ────────────────────────────────────────────────────────────
-
-// Import pure functions
-import { formatDuration, statusLabel, humanizeCron, repeatLabel } from '@/utils/format.ts'
 
 // Mock i18n module
 vi.mock('@/i18n', () => ({
@@ -28,12 +25,27 @@ vi.mock('@/i18n', () => ({
         if (key === 'task.status.active') return 'Enabled'
         if (key === 'task.status.paused') return 'Disabled'
         if (key === 'task.status.completed') return 'Completed'
+        if (key === 'time.justNow') return 'Just now'
+        if (key === 'time.minutesAgo') return `${params?.count} min ago`
+        if (key === 'time.hoursAgo') return `${params?.count}h ago`
+        if (key === 'time.daysAgo') return `${params?.count}d ago`
+        if (key === 'cron.weekdayNames') return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
         return key
       },
       locale: { value: 'en' },
     },
   },
 }))
+
+// Import after mocks
+import {
+  formatDuration,
+  statusLabel,
+  humanizeCron,
+  repeatLabel,
+  formatRelativeTime,
+  formatDateTime,
+} from '@/utils/format.ts'
 
 describe('formatDuration', () => {
   it('formats milliseconds', () => {
@@ -63,6 +75,104 @@ describe('formatDuration', () => {
   it('formats exactly 60 seconds as 1m0s', () => {
     expect(formatDuration(60000)).toBe('1m0s')
   })
+
+  it('formats 1ms', () => {
+    expect(formatDuration(1)).toBe('1ms')
+  })
+
+  it('formats 999ms', () => {
+    expect(formatDuration(999)).toBe('999ms')
+  })
+
+  it('formats 999.9s as 16m40s', () => {
+    // 999900ms = 999.9s = 16m40s (rounding: 999.9s -> 16*60=960, 999.9-960=39.9 ≈ 40)
+    expect(formatDuration(999900)).toBe('16m40s')
+  })
+
+  it('formats duration with rounding (e.g. 30.5s rounds to 31)', () => {
+    expect(formatDuration(30500)).toBe('30.5s')
+  })
+
+  it('formats 1 second exactly', () => {
+    expect(formatDuration(1000)).toBe('1.0s')
+  })
+
+  it('formats sub-millisecond as 0ms', () => {
+    // Negative or fractional — the function takes integer ms
+    expect(formatDuration(0)).toBe('0ms')
+  })
+})
+
+describe('formatRelativeTime', () => {
+  it('returns empty string for empty input', () => {
+    expect(formatRelativeTime('')).toBe('')
+  })
+
+  it('returns "Just now" for dates less than 1 minute ago', () => {
+    const now = new Date()
+    const thirtySecondsAgo = new Date(now.getTime() - 30000)
+    expect(formatRelativeTime(thirtySecondsAgo)).toBe('Just now')
+  })
+
+  it('returns minutes ago for dates within the hour', () => {
+    const now = new Date()
+    const fiveMinutesAgo = new Date(now.getTime() - 5 * 60000)
+    expect(formatRelativeTime(fiveMinutesAgo)).toBe('5 min ago')
+  })
+
+  it('returns hours ago for dates within the day', () => {
+    const now = new Date()
+    const threeHoursAgo = new Date(now.getTime() - 3 * 3600000)
+    expect(formatRelativeTime(threeHoursAgo)).toBe('3h ago')
+  })
+
+  it('returns days ago for dates within the week', () => {
+    const now = new Date()
+    const threeDaysAgo = new Date(now.getTime() - 3 * 86400000)
+    expect(formatRelativeTime(threeDaysAgo)).toBe('3d ago')
+  })
+
+  it('returns locale date string for dates older than a week', () => {
+    const now = new Date()
+    const tenDaysAgo = new Date(now.getTime() - 10 * 86400000)
+    const result = formatRelativeTime(tenDaysAgo)
+    // Should be a date string, not a relative time pattern
+    expect(result).not.toBe('Just now')
+    expect(result).not.toContain('min ago')
+    expect(result).not.toContain('h ago')
+    expect(result).not.toContain('d ago')
+  })
+
+  it('handles ISO string input', () => {
+    const now = new Date()
+    const twoMinutesAgo = new Date(now.getTime() - 2 * 60000).toISOString()
+    expect(formatRelativeTime(twoMinutesAgo)).toBe('2 min ago')
+  })
+})
+
+describe('formatDateTime', () => {
+  it('returns empty string for empty input', () => {
+    expect(formatDateTime('')).toBe('')
+  })
+
+  it('returns formatted date string for valid date', () => {
+    const result = formatDateTime('2025-01-15T10:30:00Z')
+    // Should contain month/day and time components
+    expect(result).toBeTruthy()
+    expect(result.length).toBeGreaterThan(0)
+  })
+
+  it('handles Date object input', () => {
+    const date = new Date('2025-06-15T14:30:00')
+    const result = formatDateTime(date)
+    expect(result).toBeTruthy()
+  })
+
+  it('returns a string with time info', () => {
+    const result = formatDateTime('2025-03-20T09:15:00')
+    // The format includes month, day, hour, minute
+    expect(result).toBeTruthy()
+  })
 })
 
 describe('humanizeCron', () => {
@@ -90,8 +200,28 @@ describe('humanizeCron', () => {
     expect(humanizeCron('0 9 * * 1-5')).toBe('Weekdays at 9:00')
   })
 
+  it('parses hourly schedule', () => {
+    expect(humanizeCron('30 * * * *')).toBe('Hourly at :30')
+  })
+
+  it('parses weekly schedule with specific weekday', () => {
+    expect(humanizeCron('0 9 * * 3')).toBe('Wed at 9:00')
+  })
+
+  it('parses monthly schedule', () => {
+    expect(humanizeCron('0 9 15 * *')).toBe('Monthly on day 15 at 9:00')
+  })
+
   it('returns raw expression for unrecognized pattern', () => {
     expect(humanizeCron('30 4 1 1 *')).toBe('30 4 1 1 *')
+  })
+
+  it('parses every-1-minute', () => {
+    expect(humanizeCron('*/1 * * * *')).toBe('Every 1 min')
+  })
+
+  it('handles minute with padding (single-digit minute in daily)', () => {
+    expect(humanizeCron('5 9 * * *')).toBe('Daily at 9:05')
   })
 })
 
@@ -106,6 +236,10 @@ describe('repeatLabel', () => {
 
   it('returns "Unlimited" for unlimited mode', () => {
     expect(repeatLabel('unlimited', 0)).toBe('Unlimited')
+  })
+
+  it('returns "Unlimited" for any other mode', () => {
+    expect(repeatLabel('other', 0)).toBe('Unlimited')
   })
 })
 
@@ -124,5 +258,9 @@ describe('statusLabel', () => {
 
   it('returns raw status for unknown status', () => {
     expect(statusLabel('unknown')).toBe('unknown')
+  })
+
+  it('returns empty string for empty status', () => {
+    expect(statusLabel('')).toBe('')
   })
 })

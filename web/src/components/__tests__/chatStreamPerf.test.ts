@@ -124,24 +124,21 @@ describe('renderTextBlock deferred rendering', () => {
 // ────────────────────────────────────────────────────────────
 
 describe('renderMarkdown streaming mode (skipEnhancements)', () => {
-  it('streaming mode should not call renderKatexInString', () => {
-    // Verify that when skipEnhancements is true, KaTeX is skipped
-    // This is a design contract test — the actual implementation
-    // is in useChatRender.ts renderMarkdown({ skipEnhancements: true })
+  it('streaming mode skips all structured pipeline', () => {
     const text = 'The equation $E=mc^2$ is famous'
-    // In streaming mode, the raw $E=mc^2$ should be left as-is
-    // (only marked + DOMPurify runs, no KaTeX)
-    // We test the contract: renderMarkdown with skipEnhancements
-    // should produce different output than without it
-    expect(text).toContain('$E=mc^2$')
+    const result = renderTextBlockDeferred(text, 'msg1', 0, true)
+    // Streaming mode skips KaTeX, scheduled-task, ask-question, path annotation
+    expect(result.ranKaTeX).toBe(false)
+    expect(result.ranScheduledTask).toBe(false)
+    expect(result.ranAskQuestion).toBe(false)
+    expect(result.ranPathAnnotation).toBe(false)
   })
 
-  it('non-streaming mode should process KaTeX', () => {
-    // In non-streaming mode, KaTeX renders $E=mc^2$ into <span class="katex">...
-    // This is the default behavior
+  it('non-streaming mode runs KaTeX pipeline', () => {
     const text = 'The equation $E=mc^2$ is famous'
-    expect(text).toContain('$E=mc^2$')
-    // After KaTeX rendering, the $ delimiters would be replaced
+    const result = renderTextBlockDeferred(text, 'msg1', 0, false)
+    expect(result.ranKaTeX).toBe(true)
+    expect(result.ranPathAnnotation).toBe(true)
   })
 })
 
@@ -150,20 +147,19 @@ describe('renderMarkdown streaming mode (skipEnhancements)', () => {
 // ────────────────────────────────────────────────────────────
 
 describe('Mermaid rendering deferred to post-streaming', () => {
-  it('should not render Mermaid during streaming', () => {
-    // During streaming, Mermaid code blocks are incomplete
-    // Rendering them would produce errors
+  it('streaming=true does not trigger mermaid rendering', () => {
     const incompleteMermaid = '```mermaid\ngraph TD\n  A -->'
-    expect(incompleteMermaid).toContain('mermaid')
-    // The contract: updateRenderedContents should skip
-    // renderMermaidInElement when streaming is active
+    const result = renderTextBlockDeferred(incompleteMermaid, 'msg1', 0, true)
+    // Streaming skips all structured detection including mermaid
+    expect(result.streaming).toBe(true)
+    expect(result.ranKaTeX).toBe(false)
   })
 
-  it('should render Mermaid after streaming ends', () => {
+  it('streaming=false triggers full render pipeline', () => {
     const completeMermaid = '```mermaid\ngraph TD\n  A --> B\n```'
-    expect(completeMermaid).toContain('mermaid')
-    // After streaming ends, forceFullRender=true triggers
-    // renderMermaidInElement for all un-rendered mermaid blocks
+    const result = renderTextBlockDeferred(completeMermaid, 'msg1', 0, false)
+    expect(result.streaming).toBe(false)
+    expect(result.ranKaTeX).toBe(true)
   })
 })
 

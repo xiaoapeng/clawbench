@@ -21,6 +21,18 @@ describe('splitPath', () => {
   it('handles empty string', () => {
     expect(splitPath('')).toEqual([''])
   })
+
+  it('handles root path /', () => {
+    expect(splitPath('/')).toEqual(['', ''])
+  })
+
+  it('handles consecutive slashes', () => {
+    expect(splitPath('a//b')).toEqual(['a', '', 'b'])
+  })
+
+  it('handles path with only separators', () => {
+    expect(splitPath('/\\')).toEqual(['', '', ''])
+  })
 })
 
 describe('baseName', () => {
@@ -41,11 +53,24 @@ describe('baseName', () => {
   })
 
   it('handles path with trailing slash', () => {
-    // splitPath('/home/user/') => ['', 'home', 'user', '']
-    // pop() returns '' for trailing slash, falls back to original path
     const result = baseName('/home/user/')
-    // Empty string from pop, should fallback to the path itself
     expect(result).toBe('/home/user/')
+  })
+
+  it('handles root path', () => {
+    expect(baseName('/')).toBe('/')
+  })
+
+  it('handles dot files', () => {
+    expect(baseName('.gitignore')).toBe('.gitignore')
+  })
+
+  it('handles hidden file in directory', () => {
+    expect(baseName('/home/user/.bashrc')).toBe('.bashrc')
+  })
+
+  it('handles multiple extensions', () => {
+    expect(baseName('/path/to/archive.tar.gz')).toBe('archive.tar.gz')
   })
 })
 
@@ -59,7 +84,6 @@ describe('dirName', () => {
   })
 
   it('returns drive root for file in drive root', () => {
-    // C:\file.txt -> parts = ['C:', 'file.txt'], pop -> ['C:'], result = 'C:' -> 'C:\'
     expect(dirName('C:\\file.txt')).toBe('C:\\')
   })
 
@@ -76,7 +100,23 @@ describe('dirName', () => {
   })
 
   it('handles windows paths with backslash separator', () => {
-    // The function checks if path includes backslash and not forward slash
     expect(dirName('a\\b\\c')).toBe('a\\b')
+  })
+
+  it('handles deeply nested unix path', () => {
+    expect(dirName('/a/b/c/d/e/f')).toBe('/a/b/c/d/e')
+  })
+
+  it('handles path with only two segments', () => {
+    expect(dirName('/file')).toBe('')
+  })
+
+  it('handles dot file dirName', () => {
+    expect(dirName('/home/user/.bashrc')).toBe('/home/user')
+  })
+
+  it('handles path with mixed separators (uses forward slash by default)', () => {
+    // Mixed paths use / as join since path includes /
+    expect(dirName('a/b\\c')).toBe('a/b')
   })
 })

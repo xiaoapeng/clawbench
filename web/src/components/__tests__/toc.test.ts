@@ -33,6 +33,38 @@ describe('slugify', () => {
   it('handles multiple consecutive special chars', () => {
     expect(slugify('a!!!b')).toBe('a-b')
   })
+
+  it('handles mixed Chinese and English', () => {
+    expect(slugify('配置 Options')).toBe('配置-options')
+  })
+
+  it('handles underscores (kept as word chars)', () => {
+    expect(slugify('my_variable')).toBe('my_variable')
+  })
+
+  it('handles hyphens (treated as word chars)', () => {
+    expect(slugify('already-dashed')).toBe('already-dashed')
+  })
+
+  it('handles dots', () => {
+    expect(slugify('v1.0.0')).toBe('v1-0-0')
+  })
+
+  it('handles tabs and newlines as whitespace', () => {
+    expect(slugify('hello\tworld\nfoo')).toBe('hello-world-foo')
+  })
+
+  it('handles only special characters', () => {
+    expect(slugify('@#$%')).toBe('')
+  })
+
+  it('handles parentheses', () => {
+    expect(slugify('func(arg)')).toBe('func-arg')
+  })
+
+  it('handles square brackets', () => {
+    expect(slugify('array[0]')).toBe('array-0')
+  })
 })
 
 describe('extractToc', () => {
@@ -87,7 +119,6 @@ describe('extractToc', () => {
 
   it('returns empty for unknown language with no extractable content', () => {
     const toc = extractToc('just some random text', 'unknown')
-    // extractTocGeneric may extract from structured content, but plain text yields nothing
     expect(toc).toEqual([])
   })
 
@@ -129,5 +160,44 @@ describe('extractToc', () => {
     const content = 'line 1\nline 2\n## Header on line 3'
     const toc = extractToc(content, 'markdown')
     expect(toc[0].line).toBe(3)
+  })
+
+  it('extracts h4-h6 headers', () => {
+    const content = '#### Deep Header\n##### Deeper\n###### Deepest'
+    const toc = extractToc(content, 'markdown')
+    expect(toc).toHaveLength(3)
+    expect(toc[0].level).toBe(4)
+    expect(toc[1].level).toBe(5)
+    expect(toc[2].level).toBe(6)
+  })
+
+  it('generates correct slug for Chinese headers', () => {
+    const toc = extractToc('# 配置选项', 'markdown')
+    expect(toc[0].id).toBe('配置选项')
+  })
+
+  it('does not filter # in code blocks (known limitation of simple regex)', () => {
+    // The simple regex approach does not parse code blocks,
+    // so # comments inside code blocks will be falsely matched as headers.
+    // This is a known limitation.
+    const content = '```python\n# This is a comment\n```\n## Real Header'
+    const toc = extractToc(content, 'markdown')
+    // The regex matches # This is a comment as h1 — known limitation
+    expect(toc.length).toBeGreaterThanOrEqual(1)
+    // But the real header should still be present
+    const realHeaders = toc.filter(t => t.text === 'Real Header')
+    expect(realHeaders).toHaveLength(1)
+  })
+
+  it('extracts CSS selectors', () => {
+    const content = '.container {\n}\n#header {\n}\n@media screen {\n}'
+    const toc = extractToc(content, 'css')
+    expect(toc.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('extracts Dockerfile instructions', () => {
+    const content = 'FROM golang:1.21\nRUN go build\nCMD ["./app"]'
+    const toc = extractToc(content, 'dockerfile')
+    expect(toc.length).toBeGreaterThanOrEqual(1)
   })
 })

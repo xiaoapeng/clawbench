@@ -35,7 +35,31 @@ describe('escapeHtml', () => {
   })
 
   it('handles numbers by converting to string', () => {
-    // String(42) = '42', no special chars
     expect(escapeHtml(String(42))).toBe('42')
+  })
+
+  it('handles multiple ampersands', () => {
+    expect(escapeHtml('a & b & c')).toBe('a &amp; b &amp; c')
+  })
+
+  it('handles consecutive special characters', () => {
+    expect(escapeHtml('<<>>')).toBe('&lt;&lt;&gt;&gt;')
+  })
+
+  it('handles string with only special characters', () => {
+    expect(escapeHtml('<>&"\'')).toBe('&lt;&gt;&amp;&quot;&#039;')
+  })
+
+  it('handles unicode text without modification', () => {
+    expect(escapeHtml('你好世界')).toBe('你好世界')
+  })
+
+  it('handles mixed unicode and special chars', () => {
+    expect(escapeHtml('你好<世界>')).toBe('你好&lt;世界&gt;')
+  })
+
+  it('handles already-escaped entities (double-escapes)', () => {
+    // ampersand in &amp; gets re-escaped
+    expect(escapeHtml('&amp;')).toBe('&amp;amp;')
   })
 })
