@@ -111,50 +111,39 @@ graph LR
 - **一台 PC（Linux / macOS / Windows）**：用于运行 ClawBench 服务端，需已安装至少一种 AI 编程智能体 CLI（CodeBuddy、Claude Code、OpenCode、Gemini CLI、Codex、Qoder CLI、VeCLI 均可）
 - **一台手机**：安装 [ClawBench Android App](https://github.com/xulongzhe/clawbench/releases)，或使用手机浏览器（推荐 Chrome）访问服务端地址
 
-### 下载与解压
+### 下载与启动
 
-从 [GitHub Releases](https://github.com/xulongzhe/clawbench/releases) 下载最新版 ZIP 包，解压即可部署。所有配置项均有默认值，无需配置文件即可启动。
+从 [GitHub Releases](https://github.com/xulongzhe/clawbench/releases) 下载最新版 ZIP 包，解压即可部署：
 
 ```bash
 wget https://github.com/xulongzhe/clawbench/releases/latest/download/clawbench-linux-amd64.zip
 unzip clawbench-linux-amd64.zip
 cd clawbench
-```
-
-### 配置智能体
-
-`config/agents/` 目录下的 YAML 文件定义了可用的 AI 智能体。每个后端提供独立的示例文件，复制后修改即可：
-
-| 示例文件 | 后端 | 说明 |
-|----------|------|------|
-| `claude.yaml.example` | claude | Claude Code CLI |
-| `codebuddy.yaml.example` | codebuddy | CodeBuddy CLI，支持多模型 |
-| `opencode.yaml.example` | opencode | OpenCode CLI |
-| `gemini.yaml.example` | gemini | Gemini CLI |
-| `codex.yaml.example` | codex | Codex CLI，支持 profile |
-| `qoder.yaml.example` | qoder | Qoder CLI，自动模型路由 |
-| `vecli.yaml.example` | vecli | VeCLI（火山引擎） |
-
-```bash
-# 示例：创建一个 Claude 智能体
-cp config/agents/claude.yaml.example config/agents/my-claude.yaml
-# 编辑 id、name、model 等字段后重启服务即可
-```
-
-每个示例文件包含该后端的完整配置字段和说明，`.yaml.example` 文件不会被加载，仅作为参考模板。
-
-### 启动服务
-
-```bash
 ./server.sh
 ```
 
-> 首次启动会自动生成随机密码并打印到控制台，请妥善保存。如需自定义配置，可复制 `config/config.example.yaml` 为 `config/config.yaml` 并修改。
+就这么简单 —— 首次启动时，ClawBench 会自动扫描系统中已安装的 AI CLI 工具，为每个检测到的后端生成智能体配置。无需手动配置即可开始使用。
+
+> 首次启动会自动生成随机密码并打印到控制台，请妥善保存。
 
 部署完成后，使用手机 App 或手机浏览器访问 `http://服务器IP:20000` 即可开始使用：
 
 - **手机 App**：原生集成，自动连接，支持完整功能
 - **手机浏览器**：推荐使用 **Chrome 浏览器**访问，支持将网页安装为 PWA 应用（添加到主屏幕），获得接近原生 App 的体验
+
+### 自定义智能体
+
+自动生成的智能体配置为最小化默认值。如需自定义模型列表、系统提示词、图标等，编辑 `config/agents/` 目录下的 YAML 文件后重启服务即可：
+
+```bash
+# 编辑已有智能体
+vim config/agents/claude.yaml
+
+# 添加新的智能体（参考示例模板）
+cp config/agents/claude.yaml.example config/agents/my-claude.yaml
+```
+
+每个 `.yaml.example` 文件包含该后端的完整配置字段和说明，仅作为参考模板，不会被自动加载。
 
 > 编译构建、高级配置、部署说明、架构设计等详细文档请参阅 **[编译与开发指南](docs/DEVELOPMENT.md)**。
 

@@ -110,50 +110,39 @@ graph LR
 - **A PC (Linux / macOS / Windows)**: To run the ClawBench server, with at least one AI coding agent CLI installed (CodeBuddy, Claude Code, OpenCode, Gemini CLI, Codex, Qoder CLI, or VeCLI)
 - **A phone**: Install the [ClawBench Android App](https://github.com/xulongzhe/clawbench/releases), or use a mobile browser (Chrome recommended) to access the server address
 
-### Download & Extract
+### Download & Start
 
-Download the latest ZIP package from [GitHub Releases](https://github.com/xulongzhe/clawbench/releases), extract and deploy. All configuration items have default values — no config file needed to start.
+Download the latest ZIP package from [GitHub Releases](https://github.com/xulongzhe/clawbench/releases), extract and you're ready:
 
 ```bash
 wget https://github.com/xulongzhe/clawbench/releases/latest/download/clawbench-linux-amd64.zip
 unzip clawbench-linux-amd64.zip
 cd clawbench
-```
-
-### Configure Agents
-
-YAML files in the `config/agents/` directory define available AI agents. Each backend provides a separate example file — copy and modify to create your own agent:
-
-| Example File | Backend | Description |
-|--------------|---------|-------------|
-| `claude.yaml.example` | claude | Claude Code CLI |
-| `codebuddy.yaml.example` | codebuddy | CodeBuddy CLI, multi-model support |
-| `opencode.yaml.example` | opencode | OpenCode CLI |
-| `gemini.yaml.example` | gemini | Gemini CLI |
-| `codex.yaml.example` | codex | Codex CLI, profile support |
-| `qoder.yaml.example` | qoder | Qoder CLI, auto model routing |
-| `vecli.yaml.example` | vecli | VeCLI (Volcengine) |
-
-```bash
-# Example: create a Claude agent
-cp config/agents/claude.yaml.example config/agents/my-claude.yaml
-# Edit id, name, model, etc. and restart the server
-```
-
-Each example file contains complete configuration fields and descriptions for that backend. Files with the `.yaml.example` extension are not loaded — they serve as reference templates only.
-
-### Start the Server
-
-```bash
 ./server.sh
 ```
 
-> A random password is auto-generated on first startup and printed to the console. Save it securely. To customize configuration, copy `config/config.example.yaml` to `config/config.yaml` and modify.
+That's it — on first startup, ClawBench automatically scans for installed AI CLI tools and generates agent configs for each detected backend. No manual configuration needed.
+
+> A random password is auto-generated on first startup and printed to the console. Save it securely.
 
 Once deployed, access `http://server-ip:20000` from your phone app or mobile browser:
 
 - **Phone App**: Native integration, auto-connect, full feature support
 - **Mobile Browser**: **Chrome** recommended — supports installing as a PWA app (Add to Home Screen) for a near-native experience
+
+### Customize Agents
+
+Auto-generated agent configs use minimal defaults. To customize model lists, system prompts, icons, etc., edit the YAML files in `config/agents/` and restart the server:
+
+```bash
+# Edit an existing agent
+vim config/agents/claude.yaml
+
+# Add a new agent (use example templates as reference)
+cp config/agents/claude.yaml.example config/agents/my-claude.yaml
+```
+
+Each `.yaml.example` file contains complete configuration fields and descriptions for that backend. They serve as reference templates only and are not auto-loaded.
 
 > For build instructions, advanced configuration, deployment, and architecture details, see **[Build & Development Guide](docs/DEVELOPMENT.en.md)**.
 
