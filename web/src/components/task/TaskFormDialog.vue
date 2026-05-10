@@ -5,7 +5,21 @@
       <span class="modal-title">{{ mode === 'create' ? t('task.form.createTitle') : t('task.form.editTitle') }}</span>
     </template>
 
-    <div class="details-content">
+    <!-- Tab bar -->
+    <div class="tab-bar">
+      <button class="tab-btn" :class="{ active: activeTab === 'settings' }" @click="activeTab = 'settings'">
+        <Settings :size="13" />
+        {{ t('task.form.tabSettings') }}
+      </button>
+      <button class="tab-btn" :class="{ active: activeTab === 'prompt', 'has-error': errors.prompt }" @click="activeTab = 'prompt'">
+        <FileText :size="13" />
+        {{ t('task.form.tabPrompt') }}
+        <span class="required-dot">*</span>
+      </button>
+    </div>
+
+    <!-- Settings tab -->
+    <div v-show="activeTab === 'settings'" class="details-content">
       <div v-if="saving" class="saving-indicator">{{ t('task.form.saving') }}</div>
 
       <!-- Task name -->
@@ -142,13 +156,23 @@
         <label class="form-label">{{ t('task.form.maxRuns') }}</label>
         <input type="number" class="form-input" v-model.number="form.maxRuns" min="1" />
       </div>
+    </div>
 
-      <!-- Prompt -->
-      <div class="form-group">
-        <label class="form-label">{{ t('task.form.prompt') }} <span class="required">*</span></label>
-        <textarea class="form-textarea" v-model="form.prompt" rows="10" :placeholder="t('task.form.promptPlaceholder')"></textarea>
-        <div v-if="errors.prompt" class="form-error">{{ errors.prompt }}</div>
+    <!-- Prompt tab -->
+    <div v-show="activeTab === 'prompt'" class="prompt-tab">
+      <div v-if="saving" class="saving-indicator">{{ t('task.form.saving') }}</div>
+      <div class="prompt-toolbar">
+        <button class="preview-toggle" :class="{ active: promptPreview }" :title="promptPreview ? t('task.form.editPrompt') : t('task.form.previewPrompt')" @click="togglePromptPreview">
+          <EyeOff v-if="promptPreview" :size="13" />
+          <Eye v-else :size="13" />
+          {{ promptPreview ? t('task.form.editPrompt') : t('task.form.previewPrompt') }}
+        </button>
       </div>
+      <div class="prompt-editor-wrap">
+        <textarea v-if="!promptPreview" class="form-textarea prompt-textarea" v-model="form.prompt" :placeholder="t('task.form.promptPlaceholder')"></textarea>
+        <div v-else class="prompt-preview markdown-body" v-html="renderedPromptHtml"></div>
+      </div>
+      <div v-if="errors.prompt" class="form-error">{{ errors.prompt }}</div>
     </div>
 
     <template #footer>
@@ -172,9 +196,10 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Clock, Pause, Play } from 'lucide-vue-next'
+import { Clock, Pause, Play, Eye, EyeOff, Settings, FileText } from 'lucide-vue-next'
 import ModalDialog from '@/components/common/ModalDialog.vue'
 import { useAgents } from '@/composables/useAgents.ts'
+import { useMarkdownRenderer } from '@/composables/useMarkdownRenderer.ts'
 import { humanizeCron } from '@/utils/format.ts'
 
 const { t } = useI18n()
@@ -189,6 +214,18 @@ const emit = defineEmits(['close', 'saved'])
 
 const saving = ref(false)
 const { agents, loadAgents } = useAgents()
+const { renderMarkdown } = useMarkdownRenderer()
+const promptPreview = ref(false)
+const activeTab = ref('settings')
+
+const renderedPromptHtml = computed(() => {
+  if (!form.value.prompt) return '<p style="color:var(--text-muted,#999);font-style:italic">' + t('task.form.promptPlaceholder') + '</p>'
+  return renderMarkdown(form.value.prompt, { renderMermaid: false })
+})
+
+function togglePromptPreview() {
+  promptPreview.value = !promptPreview.value
+}
 
 // Frequency preset
 const presets = computed(() => [
@@ -296,6 +333,16 @@ function validate() {
     e.cronExpr = t('task.form.cronRequired')
   }
   errors.value = e
+
+  // Auto-switch to the tab with the first error
+  if (Object.keys(e).length > 0) {
+    if (e.prompt) {
+      activeTab.value = 'prompt'
+    } else {
+      activeTab.value = 'settings'
+    }
+  }
+
   return Object.keys(e).length === 0
 }
 
@@ -383,6 +430,8 @@ async function resumeTask() {
 watch(() => props.open, (isOpen) => {
   if (!isOpen) return
   errors.value = {}
+  promptPreview.value = true
+  activeTab.value = 'settings'
 
   if (props.mode === 'edit' && props.task) {
     form.value = {
@@ -422,6 +471,56 @@ watch(() => props.open, (isOpen) => {
 </script>
 
 <style scoped>
+/* Tab bar */
+.tab-bar {
+  display: flex;
+  gap: 2px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border-color, #e5e5e5);
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  background: var(--bg-secondary, #fff);
+  z-index: 1;
+}
+
+.tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-secondary, #666);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.tab-btn:hover {
+  color: var(--accent-color, #0066cc);
+}
+
+.tab-btn.active {
+  color: var(--accent-color, #0066cc);
+  border-bottom-color: var(--accent-color, #0066cc);
+}
+
+.tab-btn.has-error {
+  color: #dc3545;
+}
+
+.tab-btn.has-error.active {
+  border-bottom-color: #dc3545;
+}
+
+.required-dot {
+  color: #dc3545;
+  font-size: 11px;
+}
+
 /* Details content */
 .details-content {
   flex: 1;
@@ -496,6 +595,70 @@ watch(() => props.open, (isOpen) => {
   font-size: 11px;
   color: #dc3545;
   margin-top: 2px;
+}
+
+/* Prompt tab */
+.prompt-tab {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+
+.prompt-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 4px 10px;
+  flex-shrink: 0;
+}
+
+.prompt-editor-wrap {
+  padding: 0 10px 8px;
+  display: flex;
+  flex-direction: column;
+}
+
+.prompt-textarea {
+  height: 50vh;
+  min-height: 200px;
+  resize: vertical;
+}
+
+.prompt-preview {
+  height: 50vh;
+  min-height: 200px;
+  overflow-y: auto;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color, #e5e5e5);
+  border-radius: 4px;
+  background: var(--bg-primary, #fff);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* Preview toggle button (text style) */
+.preview-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted, #999);
+  cursor: pointer;
+  padding: 3px 8px;
+  font-size: 12px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.preview-toggle:hover {
+  color: var(--accent-color, #0066cc);
+  background: var(--bg-tertiary, #f0f0f0);
+}
+
+.preview-toggle.active {
+  color: var(--accent-color, #0066cc);
+  background: var(--bg-tertiary, #f0f0f0);
 }
 
 /* Preset buttons */
