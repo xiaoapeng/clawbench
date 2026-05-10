@@ -849,10 +849,34 @@ function openEditDialog() {
   display: flex;
   align-items: center;
   padding: 4px 6px;
-  gap: 3px;
-  border-top: 1px solid var(--border-color);
+  gap: 2px;
+  border-top: 1px solid color-mix(in srgb, var(--border-color) 40%, transparent);
   flex-shrink: 0;
   background: var(--bg-secondary);
+  --toolbar-key-hover: color-mix(in srgb, var(--text-primary) 7%, transparent);
+  --toolbar-key-active: color-mix(in srgb, var(--text-primary) 12%, transparent);
+  --toolbar-key-text: color-mix(in srgb, var(--text-primary) 72%, transparent);
+  --toolbar-key-muted: color-mix(in srgb, var(--text-muted) 72%, transparent);
+  --toolbar-key-selected-bg: color-mix(in srgb, var(--text-primary) 14%, transparent);
+  --toolbar-key-selected-text: var(--text-primary);
+  --toolbar-divider: color-mix(in srgb, var(--border-color) 48%, transparent);
+  --toolbar-scrollbar-track: color-mix(in srgb, var(--border-color) 20%, transparent);
+  --toolbar-scrollbar-thumb: color-mix(in srgb, var(--text-muted) 46%, transparent);
+  --toolbar-scrollbar-thumb-hover: color-mix(in srgb, var(--text-primary) 58%, transparent);
+}
+
+[data-theme="dark"] .terminal-toolbar {
+  background: var(--bg-secondary);
+  --toolbar-key-hover: color-mix(in srgb, var(--text-primary) 9%, transparent);
+  --toolbar-key-active: color-mix(in srgb, var(--text-primary) 16%, transparent);
+  --toolbar-key-text: color-mix(in srgb, var(--text-primary) 64%, transparent);
+  --toolbar-key-muted: color-mix(in srgb, var(--text-muted) 64%, transparent);
+  --toolbar-key-selected-bg: color-mix(in srgb, var(--text-primary) 18%, transparent);
+  --toolbar-key-selected-text: var(--text-primary);
+  --toolbar-divider: color-mix(in srgb, var(--border-color) 52%, transparent);
+  --toolbar-scrollbar-track: color-mix(in srgb, var(--border-color) 30%, transparent);
+  --toolbar-scrollbar-thumb: color-mix(in srgb, var(--text-muted) 54%, transparent);
+  --toolbar-scrollbar-thumb-hover: color-mix(in srgb, var(--text-primary) 68%, transparent);
 }
 
 .gesture-toggle {
@@ -868,161 +892,164 @@ function openEditDialog() {
   -webkit-overflow-scrolling: touch;
   flex: 1;
   min-width: 0;
-  /* Thin visible scrollbar */
+  padding-bottom: 1px;
   scrollbar-width: thin;
-  scrollbar-color: var(--border-color) transparent;
+  scrollbar-color: var(--toolbar-scrollbar-thumb) transparent;
 }
 .toolbar-scroll::-webkit-scrollbar {
-  height: 3px;
+  height: 2px;
 }
 .toolbar-scroll::-webkit-scrollbar-track {
-  background: transparent;
+  background: linear-gradient(90deg,
+    transparent 0,
+    var(--toolbar-scrollbar-track) 14px,
+    var(--toolbar-scrollbar-track) calc(100% - 14px),
+    transparent 100%);
 }
 .toolbar-scroll::-webkit-scrollbar-thumb {
-  background: var(--border-color);
-  border-radius: 3px;
+  background: var(--toolbar-scrollbar-thumb);
+  border-radius: 999px;
+  transition: background 140ms ease;
+}
+.toolbar-scroll:hover::-webkit-scrollbar-thumb {
+  background: var(--toolbar-scrollbar-thumb-hover);
 }
 
 .key-group {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 3px;
 }
 
-/* Add spacing between groups */
 .key-group + .key-group {
-  margin-left: 6px;
+  position: relative;
+  margin-left: 12px;
+}
+
+.key-group + .key-group::before {
+  content: '';
+  position: absolute;
+  left: -7px;
+  width: 1px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--toolbar-divider);
 }
 
 .toolbar-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 30px;
-  height: 28px;
-  padding: 0 5px;
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  background: var(--bg-key);
-  color: var(--text-primary);
+  min-width: 31px;
+  height: 29px;
+  padding: 0 7px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--toolbar-key-text);
   font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
   cursor: pointer;
   flex-shrink: 0;
   user-select: none;
   -webkit-user-select: none;
   touch-action: manipulation;
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    transform 90ms ease;
 }
 
 .toolbar-btn:hover {
-  background: var(--bg-tertiary);
+  background: var(--toolbar-key-hover);
 }
 
 .toolbar-btn:active {
-  background: var(--bg-key-active);
+  background: var(--toolbar-key-active);
+  transform: translateY(1px) scale(0.98);
+}
+
+.toolbar-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--text-primary) 36%, transparent);
+  outline-offset: 2px;
 }
 
 .toolbar-btn.modifier.active {
-  background: var(--accent-color);
-  border-color: var(--accent-color);
-  color: #fff;
+  background: var(--toolbar-key-selected-bg);
+  color: var(--toolbar-key-selected-text);
 }
 
 .toolbar-btn.modifier.locked {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
-  color: #fff;
+  background: var(--toolbar-key-selected-bg);
+  color: var(--toolbar-key-selected-text);
+  box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--toolbar-key-selected-text) 36%, transparent);
 }
 
 .toolbar-btn.shortcut {
-  background: var(--bg-tertiary);
-  font-weight: 600;
+  background: transparent;
+  color: var(--toolbar-key-text);
+  font-weight: 700;
   font-size: 10px;
 }
 
 .toolbar-btn.shortcut:active {
-  background: var(--bg-key-active);
+  background: var(--toolbar-key-active);
 }
 
 .toolbar-btn.danger {
-  color: var(--color-red);
-  border-color: var(--color-red);
-  opacity: 0.7;
+  color: var(--toolbar-key-text);
+  opacity: 0.78;
 }
 
 .toolbar-btn.danger:hover {
   opacity: 1;
-  background: var(--bg-tertiary);
+  background: var(--toolbar-key-hover);
 }
 
-/* Gesture toggle keeps round shape */
+/* Gesture toggle keeps a compact anchor shape outside the scroll row. */
 .toolbar-btn.gesture-toggle {
-  border-radius: 6px;
+  min-width: 32px;
+  border-radius: 9px;
 }
 
 /* Mobile: adjust toolbar for soft keyboard */
 @media (max-width: 768px) {
   .terminal-toolbar {
-    padding-bottom: max(4px, env(safe-area-inset-bottom));
+    padding-bottom: max(6px, env(safe-area-inset-bottom));
   }
 }
 
 /* Touch device: prevent sticky hover */
 @media (hover: none) {
   .toolbar-btn:hover {
-    background: var(--bg-key);
+    background: transparent;
   }
   .toolbar-btn.shortcut:hover {
-    background: var(--bg-tertiary);
+    background: transparent;
+  }
+  .toolbar-btn.modifier.active:hover,
+  .toolbar-btn.modifier.locked:hover {
+    background: var(--toolbar-key-selected-bg);
   }
   .toolbar-btn:active {
-    background: var(--bg-key-active);
+    background: var(--toolbar-key-active);
   }
 }
 
-/* Button group colors — after all .toolbar-btn rules to win cascade */
-.toolbar-btn.btn-modifier {
-  background: var(--bg-tertiary);
-  border-color: color-mix(in srgb, var(--text-muted) 35%, var(--border-color));
-}
-
-.toolbar-btn.btn-nav {
-  background: color-mix(in srgb, var(--accent-color) 18%, var(--bg-key));
-  border-color: color-mix(in srgb, var(--accent-color) 40%, var(--border-color));
-}
-
-.toolbar-btn.btn-arrow {
-  background: color-mix(in srgb, var(--color-green) 18%, var(--bg-key));
-  border-color: color-mix(in srgb, var(--color-green) 40%, var(--border-color));
+/* Button groups share one borderless system; class hooks remain semantic. */
+.toolbar-btn.btn-modifier,
+.toolbar-btn.btn-nav,
+.toolbar-btn.btn-arrow,
+.toolbar-btn.btn-symbol,
+.toolbar-btn.btn-action {
+  background: transparent;
 }
 
 .toolbar-btn.btn-symbol {
-  background: color-mix(in srgb, var(--color-yellow) 18%, var(--bg-key));
-  border-color: color-mix(in srgb, var(--color-yellow) 40%, var(--border-color));
-}
-
-.toolbar-btn.btn-action {
-  background: color-mix(in srgb, var(--color-purple) 18%, var(--bg-key));
-  border-color: color-mix(in srgb, var(--color-purple) 40%, var(--border-color));
-}
-
-[data-theme="dark"] .toolbar-btn.btn-nav {
-  background: color-mix(in srgb, var(--accent-color) 22%, var(--bg-key));
-  border-color: color-mix(in srgb, var(--accent-color) 40%, var(--border-color));
-}
-
-[data-theme="dark"] .toolbar-btn.btn-arrow {
-  background: color-mix(in srgb, var(--color-green) 18%, var(--bg-key));
-  border-color: color-mix(in srgb, var(--color-green) 35%, var(--border-color));
-}
-
-[data-theme="dark"] .toolbar-btn.btn-symbol {
-  background: color-mix(in srgb, var(--color-yellow) 18%, var(--bg-key));
-  border-color: color-mix(in srgb, var(--color-yellow) 35%, var(--border-color));
-}
-
-[data-theme="dark"] .toolbar-btn.btn-action {
-  background: color-mix(in srgb, var(--color-purple) 18%, var(--bg-key));
-  border-color: color-mix(in srgb, var(--color-purple) 35%, var(--border-color));
+  color: var(--toolbar-key-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
 }
 </style>
 
