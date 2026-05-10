@@ -37,6 +37,7 @@
       @search="onSearch"
       @load-more="loadMoreCommits"
       @init-git="initGitRepo"
+      @refresh="onRefresh"
     />
 
     <!-- View: file list for selected commit (project mode only) -->
@@ -369,6 +370,17 @@ async function initGitRepo() {
   } finally {
     initLoading.value = false
   }
+}
+
+async function onRefresh() {
+  commitSearch.value = ''
+  if (commitListRef.value) commitListRef.value.commitSearch = ''
+  if (props.mode === 'file' && props.file?.path) {
+    await loadFileHistory(props.file.path)
+  } else {
+    await loadProjectHistory()
+  }
+  setTimeout(() => commitListRef.value?.observeList(), 100)
 }
 
 // ─── Drill-down navigation ──────────────────────────────────────────────────

@@ -15,6 +15,16 @@
         <span v-else-if="!untracked" class="drilldown-count">{{ t('git.commitList.loading') }}</span>
       </div>
       <SearchInput v-if="commits.length > 0" v-model="commitSearch" :placeholder="searchPlaceholder" />
+      <button
+        v-if="commits.length > 0"
+        class="drilldown-refresh-btn"
+        :class="{ spinning: loading }"
+        :disabled="loading"
+        :title="t('git.commitList.refresh')"
+        @click.stop="$emit('refresh')"
+      >
+        <RefreshCw :size="14" />
+      </button>
     </div>
     <div class="drilldown-body" ref="bodyRef">
       <div v-if="loading" class="git-history-loading">
@@ -89,7 +99,7 @@
 </template>
 
 <script setup>
-import { CirclePlus, FileText, Info, ChevronRight } from 'lucide-vue-next'
+import { CirclePlus, FileText, Info, ChevronRight, RefreshCw } from 'lucide-vue-next'
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import GitGraph from './GitGraph.vue'
@@ -113,7 +123,7 @@ const props = defineProps({
   selectedSHA: { type: String, default: null },
 })
 
-const emit = defineEmits(['select', 'search', 'load-more', 'init-git'])
+const emit = defineEmits(['select', 'search', 'load-more', 'init-git', 'refresh'])
 
 const commitSearch = ref('')
 const listRef = ref(null)
@@ -253,6 +263,45 @@ defineExpose({ observeList, unobserveList, commitSearch })
   padding: 1px 6px;
   border-radius: 10px;
   flex-shrink: 0;
+}
+
+.drilldown-refresh-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: var(--bg-tertiary, #e9ecef);
+  border-radius: 50%;
+  cursor: pointer;
+  color: var(--text-muted, #999);
+  flex-shrink: 0;
+  padding: 0;
+  transition: background 0.15s, color 0.15s, transform 0.3s;
+}
+
+.drilldown-refresh-btn:hover:not(:disabled) {
+  background: var(--accent-color, #4a90d9);
+  color: #fff;
+}
+
+.drilldown-refresh-btn:active:not(:disabled) {
+  transform: scale(0.92);
+}
+
+.drilldown-refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.drilldown-refresh-btn.spinning svg {
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .drilldown-body {

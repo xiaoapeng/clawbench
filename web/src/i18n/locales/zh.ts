@@ -544,6 +544,7 @@ export default {
       untrackedDesc: '文件尚未纳入版本控制，无历史记录',
       untrackedHint: 'git add <文件名> 可将其添加到跟踪',
       noCommits: '暂无提交记录',
+      refresh: '刷新',
     },
     diffView: {
       noChanges: '无变更',

@@ -544,6 +544,7 @@ export default {
       untrackedDesc: 'File is not under version control, no history',
       untrackedHint: 'git add <filename> to start tracking',
       noCommits: 'No commits yet',
+      refresh: 'Refresh',
     },
     diffView: {
       noChanges: 'No changes',
