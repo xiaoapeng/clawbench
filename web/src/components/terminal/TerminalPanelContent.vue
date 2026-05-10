@@ -483,6 +483,25 @@ function deactivate() {
   cleanupTerminal()
 }
 
+// Auto-activate/deactivate when the terminal tab becomes active/inactive.
+// This replaces the old BottomSheet watch(() => props.open, ...) lifecycle.
+watch(() => props.active, async (isActive) => {
+  if (isActive) {
+    emit('open')
+    initTerminal()
+    enableVolumeKeys()
+    await nextTick()
+    await mountTerminal()
+  } else {
+    disableVolumeKeys()
+    session.disconnect()
+    terminalKeys.reset()
+    showCommands.value = false
+    showReopenPrompt.value = false
+    cleanupTerminal()
+  }
+}, { immediate: true })
+
 // Watch target cwd changes. Do not automatically rebuild: a terminal may be
 // running a long-lived command, so changing files/directories must only show a
 // prompt and wait for explicit user confirmation before closing the PTY.
