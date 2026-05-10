@@ -15,88 +15,122 @@
         @open-project-dialog="handleOpenProjectDialog"
       />
 
-      <FileManager
-        :entries="dirEntries"
-        :current-dir="currentDir"
-        :current-file="currentFile"
-        :open="fileManagerOpen"
-        :show-hidden="showHidden"
-        :sort-field="sortField"
-        :sort-dir="sortDir"
-        :dir-loading="store.state.dirLoading"
-        @close="fileManagerOpen = false"
-        @navigate-dir="handleNavigateDir"
-        @select-file="handleSelectFile"
-        @toggle-sort="handleToggleSort"
-        @toggle-hidden="toggleHidden"
-        @rename="handleRename"
-        @delete="handleDelete"
-        @refresh="handleRefresh"
-        @open-terminal="handleOpenTerminal"
-      />
-
       <main class="main-content">
-        <div
-          class="content-area"
-          id="contentArea"
-        >
-          <WelcomeView v-if="!currentFile" />
-          <FileViewer
-            v-if="currentFile"
-            :file="currentFile"
-            :toc-open="tocOpen"
-            :search-open="searchOpen"
-            :markdown-view-mode="markdownViewMode"
-            @delete="handleDelete(currentFile?.path)"
-            @show-details="detailsOpen = true"
-            @open-git-history="openDrawer('fileHistory')"
-            @toggle-toc="openDrawer('toc')"
-            @toggle-search="currentFile?.content && openDrawer('search')"
-            @toggle-view="markdownViewMode = markdownViewMode === 'rendered' ? 'raw' : 'rendered'"
-            @refresh="handleRefresh"
-          />
+        <div class="content-area" id="contentArea">
+          <!-- Chat Tab -->
+          <TabPanel tabId="chat" :activeTab="activeTab">
+            <template #header>
+              <MessageSquare :size="16" class="bs-header-icon" />
+              <span class="bs-header-title">{{ sessionIdentity.agentHeaderTitle.value }}</span>
+              <div v-if="sessionIdentity.currentSessionTitle.value" class="bs-header-description">
+                <HeaderMarquee :text="sessionIdentity.currentSessionTitle.value">{{ sessionIdentity.currentSessionTitle.value }}</HeaderMarquee>
+              </div>
+            </template>
+            <ChatPanelContent
+              :active="activeTab === 'chat'"
+              :current-file="currentFile"
+              @open-file="handleSelectFile"
+            />
+          </TabPanel>
+
+          <!-- File Browse Tab -->
+          <TabPanel tabId="browse" :activeTab="activeTab">
+            <template #header>
+              <Folder :size="16" class="bs-header-icon" />
+              <span class="bs-header-title">{{ t('file.manager') }}</span>
+            </template>
+            <FileManagerContent
+              :entries="dirEntries"
+              :current-dir="currentDir"
+              :current-file="currentFile"
+              :show-hidden="showHidden"
+              :sort-field="sortField"
+              :sort-dir="sortDir"
+              :dir-loading="store.state.dirLoading"
+              @navigate-dir="handleNavigateDir"
+              @select-file="handleBrowseSelectFile"
+              @toggle-sort="handleToggleSort"
+              @toggle-hidden="toggleHidden"
+              @rename="handleRename"
+              @delete="handleDelete"
+              @refresh="handleRefresh"
+              @open-terminal="handleOpenTerminal"
+            />
+          </TabPanel>
+
+          <!-- File Viewer Tab -->
+          <TabPanel tabId="viewer" :activeTab="activeTab" :noHeader="true">
+            <div class="viewer-panel">
+              <WelcomeView v-if="!currentFile" />
+              <FileViewer
+                v-if="currentFile"
+                :file="currentFile"
+                :toc-open="tocOpen"
+                :search-open="searchOpen"
+                :markdown-view-mode="markdownViewMode"
+                @delete="handleDelete(currentFile?.path)"
+                @show-details="detailsOpen = true"
+                @open-git-history="openFileHistory"
+                @toggle-toc="tocOpen = !tocOpen"
+                @toggle-search="currentFile?.content && (searchOpen = !searchOpen)"
+                @toggle-view="markdownViewMode = markdownViewMode === 'rendered' ? 'raw' : 'rendered'"
+                @refresh="handleRefresh"
+              />
+            </div>
+            <!-- Auxiliary overlays for viewer tab -->
+            <TocDrawer
+              :file="tocFile"
+              :open="tocOpen"
+              @close="tocOpen = false"
+              @jump="scrollToLine"
+            />
+            <SearchDrawer
+              :file="currentFile"
+              :open="searchOpen"
+              :view-mode="currentFileIsMarkdown ? markdownViewMode : undefined"
+              @close="searchOpen = false"
+              @jump="scrollToLine"
+            />
+            <GitHistoryDrawer
+              :open="fileHistoryOpen"
+              mode="file"
+              :file="currentFile"
+              @close="fileHistoryOpen = false"
+              @open-file="handleSelectFile"
+            />
+          </TabPanel>
+
+          <!-- History Tab -->
+          <TabPanel tabId="history" :activeTab="activeTab">
+            <template #header>
+              <GitBranch :size="16" class="bs-header-icon" />
+              <span class="bs-header-title">{{ t('git.history.projectHistory') }}</span>
+            </template>
+            <GitHistoryContent
+              mode="project"
+              @open-file="handleSelectFile"
+            />
+          </TabPanel>
+
+          <!-- Proxy Tab -->
+          <TabPanel tabId="proxy" :activeTab="activeTab">
+            <template #header>
+              <EthernetPort :size="16" class="bs-header-icon" />
+              <span class="bs-header-title">{{ t('proxy.title') }}</span>
+            </template>
+            <ProxyPanelContent />
+          </TabPanel>
+
+          <!-- Terminal Tab -->
+          <TabPanel tabId="terminal" :activeTab="activeTab" :noHeader="true">
+            <TerminalPanelContent
+              :requested-cwd="terminalRequestedCwd"
+            />
+          </TabPanel>
         </div>
       </main>
 
       <Lightbox />
-
-      <ChatPanel
-        :open="chatOpen"
-        :current-file="currentFile"
-        @close="chatOpen = false"
-        @open="ensureDrawerOpen('chat')"
-        @message="handleChatMessage()"
-      />
-
-      <GitHistoryDrawer
-        :open="projectHistoryOpen"
-        mode="project"
-        @close="projectHistoryOpen = false"
-        @open-file="handleSelectFile"
-      />
-
-      <GitHistoryDrawer
-        :open="fileHistoryOpen"
-        mode="file"
-        :file="currentFile"
-        @close="fileHistoryOpen = false"
-        @open-file="handleSelectFile"
-      />
-
-      <TocDrawer
-        :file="tocFile"
-        :open="tocOpen"
-        @close="tocOpen = false"
-        @jump="scrollToLine"
-      />
-
-      <SearchDrawer
-        :file="currentFile"
-        :open="searchOpen"
-        :view-mode="currentFileIsMarkdown ? markdownViewMode : undefined"
-        @close="searchOpen = false"
-        @jump="scrollToLine"
-      />
 
       <ProjectDialog
         :open="projectDialogOpen"
@@ -109,19 +143,7 @@
         @close="detailsOpen = false"
       />
 
-      <ProxyPanel
-        :open="proxyOpen"
-        @close="proxyOpen = false"
-      />
-
-      <TerminalPanel
-        :open="terminalOpen"
-        :requested-cwd="terminalRequestedCwd"
-        @close="terminalOpen = false"
-        @open="ensureDrawerOpen('terminal')"
-      />
-
-      <!-- Quote question floating bar — uses session identity singleton -->
+      <!-- Quote question floating bar -->
       <QuoteQuestionBar
         :visible="quoteQuestion.visible.value"
         :quoteData="quoteQuestion.quoteData.value"
@@ -146,23 +168,26 @@
         @delete="handleQuoteSessionDelete"
       />
 
-      <!-- Bottom dock -->
+      <!-- Bottom dock (tab bar) -->
       <div v-if="isAuthenticated" class="bottom-dock-wrapper">
-        <div class="bottom-dock" @click="closeAllDrawers">
+        <div class="bottom-dock">
           <div class="dock-center">
-            <button class="dock-btn" :class="{ active: chatOpen, 'has-unread': (store.state.chatUnread || store.state.taskUnread) && !chatOpen, 'has-running': store.state.chatRunning && !chatOpen && !store.state.chatUnread && !store.state.taskUnread }" @click.stop="openDrawer('chat')" :title="t('nav.chat')">
+            <button class="dock-btn" :class="{ active: activeTab === 'chat', 'has-unread': (store.state.chatUnread || store.state.taskUnread) && activeTab !== 'chat', 'has-running': store.state.chatRunning && activeTab !== 'chat' && !store.state.chatUnread && !store.state.taskUnread }" @click.stop="switchTab('chat')" :title="t('nav.chat')">
               <MessageSquare />
             </button>
-            <button class="dock-btn" :class="{ active: fileManagerOpen }" @click.stop="openDrawer('fileManager')" :title="t('nav.fileManager')">
-              <Folder />
+            <button class="dock-btn" :class="{ active: activeTab === 'browse' }" @click.stop="switchTab('browse')" :title="t('nav.fileManager')">
+              <FolderOpen />
             </button>
-            <button class="dock-btn" :class="{ active: projectHistoryOpen || fileHistoryOpen }" @click.stop="toggleHistoryDrawer" :title="t('nav.history')">
+            <button class="dock-btn" :class="{ active: activeTab === 'viewer' }" @click.stop="switchTab('viewer')" :title="t('nav.fileViewer')">
+              <FileText />
+            </button>
+            <button class="dock-btn" :class="{ active: activeTab === 'history' }" @click.stop="switchTab('history')" :title="t('nav.history')">
               <GitBranch />
             </button>
-            <button class="dock-btn" :class="{ active: proxyOpen }" @click.stop="openDrawer('proxy')" :title="t('nav.portForward')">
+            <button class="dock-btn" :class="{ active: activeTab === 'proxy' }" @click.stop="switchTab('proxy')" :title="t('nav.portForward')">
               <EthernetPort />
             </button>
-            <button class="dock-btn" :class="{ active: terminalOpen }" @click.stop="handleDockTerminal" :title="t('terminal.title')">
+            <button class="dock-btn" :class="{ active: activeTab === 'terminal' }" @click.stop="handleDockTerminal" :title="t('terminal.title')">
               <TerminalIcon />
             </button>
           </div>
@@ -171,10 +196,7 @@
       </div>
     </div>
 
-    <!-- Toast - always rendered regardless of auth state -->
     <ToastNotification :toast="toast" />
-
-    <!-- Dialog overlay (confirm/prompt/alert) -->
     <DialogOverlay />
   </div>
 </template>
@@ -182,13 +204,17 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, provide, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { MessageSquare, Folder, GitBranch, EthernetPort, Terminal as TerminalIcon } from 'lucide-vue-next'
+import { MessageSquare, Folder, FolderOpen, FileText, GitBranch, EthernetPort, Terminal as TerminalIcon } from 'lucide-vue-next'
 import AppHeader from './components/common/AppHeader.vue'
-import FileManager from './components/file/FileManager.vue'
+import TabPanel from './components/common/TabPanel.vue'
 import WelcomeView from './components/WelcomeView.vue'
 import FileViewer from './components/file/FileViewer.vue'
 import Lightbox from './components/media/Lightbox.vue'
-import ChatPanel from './components/chat/ChatPanel.vue'
+import ChatPanelContent from './components/chat/ChatPanelContent.vue'
+import FileManagerContent from './components/file/FileManagerContent.vue'
+import GitHistoryContent from './components/git/GitHistoryContent.vue'
+import ProxyPanelContent from './components/proxy/ProxyPanelContent.vue'
+import TerminalPanelContent from './components/terminal/TerminalPanelContent.vue'
 import ProjectDialog from './components/ProjectDialog.vue'
 import LoginView from './components/LoginView.vue'
 import TocDrawer from './components/TocDrawer.vue'
@@ -198,9 +224,8 @@ import SearchDrawer from './components/common/SearchDrawer.vue'
 import ToastNotification from './components/common/ToastNotification.vue'
 import DialogOverlay from './components/common/DialogOverlay.vue'
 import SessionDrawer from './components/session/SessionDrawer.vue'
-import ProxyPanel from './components/proxy/ProxyPanel.vue'
-import TerminalPanel from './components/terminal/TerminalPanel.vue'
 import QuoteQuestionBar from './components/common/QuoteQuestionBar.vue'
+import HeaderMarquee from './components/common/HeaderMarquee.vue'
 import { useQuoteQuestion } from './composables/useQuoteQuestion.ts'
 import { useSessionIdentity } from './composables/useSessionIdentity.ts'
 import { useToast } from './composables/useToast.ts'
@@ -215,63 +240,53 @@ import 'highlight.js/styles/github.css'
 import 'highlight.js/styles/github-dark.css'
 import './assets/hljs-light-override.css'
 
-// Auth
 const isAuthenticated = ref(null)
 const { t } = useI18n()
 
+const activeTab = ref('browse')
 
-// Git history drawers
-const projectHistoryOpen = ref(false)
+function switchTab(tab) {
+  if (activeTab.value === tab) return
+  activeTab.value = tab
+  if (tab === 'chat') {
+    store.state.chatUnread = false
+    store.state.taskUnread = false
+  }
+}
+
+const detailsOpen = ref(false)
+const tocOpen = ref(false)
+const searchOpen = ref(false)
 const fileHistoryOpen = ref(false)
 
-// File details dialog
-const detailsOpen = ref(false)
+function openFileHistory() {
+  fileHistoryOpen.value = true
+}
 
-const searchOpen = ref(false)
-
-// Markdown view mode (lifted from FileViewer so SearchDrawer can access it)
 const markdownViewMode = ref('rendered')
 
-// Chat
-const chatOpen = ref(false)
-
-// Global toast
 const toast = useToast()
 provide('toast', toast)
 
-// Session identity singleton — single source of truth for session state
 const sessionIdentity = useSessionIdentity()
 
-// TOC state
-const tocOpen = ref(false)
-
-// FileManager state
-const fileManagerOpen = ref(false)
 const showHidden = ref(JSON.parse(localStorage.getItem('clawbenchShowHidden') || 'false'))
 const sortField = ref(null)
 const sortDir = ref('asc')
 
-// File watch auto-refresh (fsnotify + SSE)
 useFileWatch({
-  fileManagerOpen,
+  fileManagerOpen: computed(() => activeTab.value === 'browse'),
   currentDir: computed(() => store.state.currentDir),
   currentFile: computed(() => store.state.currentFile),
 })
 
-// App mode & port forwarding
 const { isAppMode } = useAppMode()
 const { syncToNative } = usePortForward()
-const proxyOpen = ref(false)
-const terminalOpen = ref(false)
 const terminalRequestedCwd = ref(null)
 
-// File watch auto-refresh (fsnotify + SSE)
-
-// Quote question feature
 const quoteQuestion = useQuoteQuestion()
 const quoteSessionDrawerOpen = ref(false)
 
-// Open session drawer directly when user clicks session info in QuoteQuestionBar
 function handleQuoteOpenSessions() {
   quoteSessionDrawerOpen.value = true
 }
@@ -290,61 +305,6 @@ function handleQuoteSessionDelete(sessionId, backend) {
   sessionIdentity.deleteSession(sessionId, backend)
 }
 
-// 抽屉互斥：打开一个时关闭其他（瞬间关闭，无动画）
-const drawerStates = {
-  chat: chatOpen,
-  fileManager: fileManagerOpen,
-  projectHistory: projectHistoryOpen,
-  fileHistory: fileHistoryOpen,
-  toc: tocOpen,
-  search: searchOpen,
-  details: detailsOpen,
-  proxy: proxyOpen,
-  terminal: terminalOpen,
-}
-
-function openDrawer(name, tab = null) {
-  // 如果已打开，则关闭
-  if (drawerStates[name].value) {
-    drawerStates[name].value = false
-    return
-  }
-  ensureDrawerOpen(name)
-}
-
-// 确保抽屉打开（不切换，用于 @open 事件等"只开不关"场景）
-function ensureDrawerOpen(name) {
-  // 清除聊天未读角标
-  if (name === 'chat') store.state.chatUnread = false
-  // 清除定时任务未读角标（打开聊天面板时也清除，因为任务按钮在聊天面板内）
-  if (name === 'chat') store.state.taskUnread = false
-  // 关闭其他抽屉
-  Object.entries(drawerStates).forEach(([key, ref]) => {
-    if (key !== name && ref.value) {
-      ref.value = false
-    }
-  })
-  // 打开目标抽屉
-  drawerStates[name].value = true
-}
-
-// 关闭所有抽屉
-function closeAllDrawers() {
-  Object.values(drawerStates).forEach((ref) => {
-    if (ref.value) ref.value = false
-  })
-}
-
-function toggleHistoryDrawer() {
-  // 如果任一历史抽屉打开，关闭它
-  if (projectHistoryOpen.value || fileHistoryOpen.value) {
-    projectHistoryOpen.value = false
-    fileHistoryOpen.value = false
-  } else {
-    openDrawer('projectHistory')
-  }
-}
-
 async function handleLoginSuccess() {
     isAuthenticated.value = true
     initMermaid()
@@ -352,18 +312,15 @@ async function handleLoginSuccess() {
     await store.loadFiles('')
 }
 
-// Project dialog
 const projectDialogOpen = ref(false)
 
 function handleOpenProjectDialog() {
     projectDialogOpen.value = true
 }
 
-// Theme
 const theme = ref(localStorage.getItem('theme') ||
     (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'))
 
-// Sync fileManager state from store
 const dirEntries = computed(() => store.state.dirEntries)
 const currentDir = computed(() => store.state.currentDir)
 const currentFile = computed(() => store.state.currentFile)
@@ -375,7 +332,6 @@ const currentFileIsMarkdown = computed(() => {
 })
 const projectRoot = computed(() => store.state.projectRoot)
 
-// These must be defined after currentFile since they reference it
 const tocFile = computed(() => {
     const f = currentFile.value
     if (!f || f.isImage || f.isPdf || f.isAudio || !f.content) return null
@@ -384,10 +340,6 @@ const tocFile = computed(() => {
     return f
 })
 
-
-const tocFabVisible = computed(() => !!tocFile.value)
-
-// Close dialogs when file changes
 watch(() => currentFile.value, (f) => {
     tocOpen.value = false
     detailsOpen.value = false
@@ -405,7 +357,6 @@ function handleToggleSort(field) {
         if (sortDir.value === 'asc') {
             sortDir.value = 'desc'
         } else {
-            // Third click: clear sort
             sortField.value = null
             sortDir.value = 'asc'
         }
@@ -424,6 +375,11 @@ async function handleSelectFile(path) {
     await store.selectFile(path)
 }
 
+async function handleBrowseSelectFile(path) {
+    await store.selectFile(path)
+    activeTab.value = 'viewer'
+}
+
 async function handleRename({ path, name }) {
     await store.renameFile(path, name)
 }
@@ -432,26 +388,18 @@ async function handleDelete(path) {
     await store.deleteFile(path)
 }
 
-function handleChatMessage() {
-    // File refresh is handled by fsnotify auto-refresh (useFileWatch)
-    if (!chatOpen.value) store.state.chatUnread = true
-}
-
 async function handleRefresh() {
     await refreshCurrentFile({ loadDir: true, clearOnError: true })
 }
 
 function handleDockTerminal() {
     terminalRequestedCwd.value = null
-    openDrawer('terminal')
+    switchTab('terminal')
 }
 
 function handleOpenTerminal(cwd) {
     terminalRequestedCwd.value = cwd || null
-    // Force open terminal (not toggle) — if already open, TerminalPanel will
-    // prompt before closing the existing PTY when the target cwd differs.
-    terminalOpen.value = true
-    ensureDrawerOpen('terminal')
+    activeTab.value = 'terminal'
 }
 
 function scrollToLine(line) {
@@ -472,7 +420,6 @@ function toggleTheme() {
 function applyTheme(t) {
     document.documentElement.setAttribute('data-theme', t)
     localStorage.setItem('theme', t)
-    // Toggle highlight.js theme via attribute selector (both CSS files are bundled)
     document.documentElement.setAttribute('data-hljs-theme', t)
     initMermaid()
     reRenderMermaid()
@@ -480,76 +427,48 @@ function applyTheme(t) {
 
 provide('theme', theme)
 provide('applyTheme', applyTheme)
+provide('activeTab', activeTab)
+provide('switchTab', switchTab)
 
 function handleOpenFileManager() {
-    openDrawer('fileManager')
+    activeTab.value = 'browse'
 }
 
-// Quote-question flying-dot animation: light dot flies from QuoteBar send btn → dock Chat btn
-// Coordinates are captured BEFORE the bar collapses and passed via event.detail.
 function playQuoteEmitAnimation(e) {
   const { from, to } = e?.detail ?? {}
   if (!from || !to) return
-
-  const x0 = from.x
-  const y0 = from.y
-  const x1 = to.x
-  const y1 = to.y
-
-  // Mid-point with slight upward arc (parabola peak offset)
+  const x0 = from.x, y0 = from.y, x1 = to.x, y1 = to.y
   const mx = (x0 + x1) / 2
-  const my = Math.min(y0, y1) - 30 // arc 30px above the higher point
-
-  // Create flying dot
+  const my = Math.min(y0, y1) - 30
   const dot = document.createElement('div')
   dot.className = 'quote-emit-dot'
   dot.style.cssText = `
-    position: fixed;
-    width: 8px; height: 8px;
-    border-radius: 50%;
+    position: fixed; width: 8px; height: 8px; border-radius: 50%;
     background: var(--accent-color, #0066cc);
     box-shadow: 0 0 10px 3px color-mix(in srgb, var(--accent-color, #0066cc) 50%, transparent);
-    z-index: 9999;
-    pointer-events: none;
-    left: 0; top: 0;
-    will-change: transform, opacity;
+    z-index: 9999; pointer-events: none; left: 0; top: 0; will-change: transform, opacity;
   `
   document.body.appendChild(dot)
-
-  const duration = 420
-  const start = performance.now()
-
+  const duration = 420, start = performance.now()
   function animate(now) {
     const t = Math.min((now - start) / duration, 1)
-    // Ease-out cubic
     const ease = 1 - Math.pow(1 - t, 3)
-
-    // Quadratic Bezier: P0=(x0,y0), P1=(mx,my), P2=(x1,y1)
-    const x = (1 - ease) * (1 - ease) * x0 + 2 * (1 - ease) * ease * mx + ease * ease * x1
-    const y = (1 - ease) * (1 - ease) * y0 + 2 * (1 - ease) * ease * my + ease * ease * y1
-
-    // Scale: small→full→shrink at end; opacity: fade in briefly, fade out at tail
+    const x = (1 - ease) ** 2 * x0 + 2 * (1 - ease) * ease * mx + ease ** 2 * x1
+    const y = (1 - ease) ** 2 * y0 + 2 * (1 - ease) * ease * my + ease ** 2 * y1
     const scale = t < 0.1 ? t / 0.1 : t > 0.85 ? 1 - (t - 0.85) / 0.15 : 1
     const opacity = t < 0.08 ? t / 0.08 : t > 0.7 ? 1 - (t - 0.7) / 0.3 : 1
-
     dot.style.transform = `translate(${x - 4}px, ${y - 4}px) scale(${scale})`
     dot.style.opacity = opacity
-
-    if (t < 1) {
-      requestAnimationFrame(animate)
-    } else {
+    if (t < 1) requestAnimationFrame(animate)
+    else {
       dot.remove()
-      // Trigger receive pulse on Chat dock button
       const chatDockBtn = document.querySelector('.dock-center')?.querySelector('.dock-btn')
       if (chatDockBtn) {
         chatDockBtn.classList.add('quote-emit-receive')
-        chatDockBtn.addEventListener('animationend', () => {
-          chatDockBtn.classList.remove('quote-emit-receive')
-        }, { once: true })
+        chatDockBtn.addEventListener('animationend', () => chatDockBtn.classList.remove('quote-emit-receive'), { once: true })
       }
     }
   }
-
   requestAnimationFrame(animate)
 }
 
@@ -563,10 +482,7 @@ onMounted(async () => {
     } catch (_) {
         isAuthenticated.value = false
         if (isAppMode.value && window.AndroidNative?.showServerDialog) {
-            toast.show(t('toast.serverUnreachableApp'), {
-                icon: '⚠️', type: 'error', duration: 0,
-                onClick: () => window.AndroidNative.showServerDialog()
-            })
+            toast.show(t('toast.serverUnreachableApp'), { icon: '⚠️', type: 'error', duration: 0, onClick: () => window.AndroidNative.showServerDialog() })
         } else {
             toast.show(t('toast.serverUnreachableWeb'), { icon: '⚠️', type: 'error', duration: 0, onClick: () => location.reload() })
         }
@@ -575,82 +491,38 @@ onMounted(async () => {
     if (resp.ok) {
         isAuthenticated.value = true
     } else if (resp.status === 401 || resp.status === 403) {
-        // Android app mode: try auto-login with saved password
         if (isAppMode.value && window.AndroidNative?.getPassword?.()) {
             const savedPwd = window.AndroidNative.getPassword()
             if (savedPwd) {
                 try {
-                    const loginRes = await fetch('/login', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ password: savedPwd })
-                    })
+                    const loginRes = await fetch('/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: savedPwd }) })
                     if (loginRes.ok) {
                         isAuthenticated.value = true
-                        // Re-save password for SSH tunnel (in case SharedPreferences was cleared)
-                        if (window.AndroidNative?.setSSHPassword) {
-                            window.AndroidNative.setSSHPassword(savedPwd)
-                        }
-                        // Continue with normal initialization below
-                    } else {
-                        // Auto-login failed (password changed), show login form
-                        isAuthenticated.value = false
-                        return
-                    }
-                } catch (_) {
-                    isAuthenticated.value = false
-                    return
-                }
-            } else {
-                isAuthenticated.value = false
-                return
-            }
-        } else {
-            isAuthenticated.value = false
-            return
-        }
+                        if (window.AndroidNative?.setSSHPassword) window.AndroidNative.setSSHPassword(savedPwd)
+                    } else { isAuthenticated.value = false; return }
+                } catch (_) { isAuthenticated.value = false; return }
+            } else { isAuthenticated.value = false; return }
+        } else { isAuthenticated.value = false; return }
     } else {
         isAuthenticated.value = false
         toast.show(t('toast.serverError'), { icon: '⚠️', type: 'error', duration: 0, onClick: () => location.reload() })
         return
     }
     initMermaid()
-    // Pre-fill session identity from API so QuoteQuestionBar shows correct info
-    // even before ChatPanel is opened
     await sessionIdentity.initSessionFromAPI()
-    // Check unread chat messages on startup
     try {
         const sr = await fetch('/api/ai/sessions')
-        if (sr.ok) {
-            const sd = await sr.json()
-            if (sd.sessions?.some(s => s.unreadCount > 0)) {
-                store.state.chatUnread = true
-            }
-        }
+        if (sr.ok) { const sd = await sr.json(); if (sd.sessions?.some(s => s.unreadCount > 0)) store.state.chatUnread = true }
     } catch (_) {}
-    // Check unread task executions on startup
     try {
         const tr = await fetch('/api/tasks')
-        if (tr.ok) {
-            const td = await tr.json()
-            if (td.hasUnread) {
-                store.state.taskUnread = true
-            }
-        }
+        if (tr.ok) { const td = await tr.json(); if (td.hasUnread) store.state.taskUnread = true }
     } catch (_) {}
-    // Sync port forwarding to Android native layer
-    if (isAppMode.value) {
-      syncToNative().catch(() => {})
+    if (isAppMode.value) syncToNative().catch(() => {})
+    try { await store.loadProject() } catch (_) {
+        toast.show(t('toast.projectLoadFailed'), { icon: '⚠️', type: 'error', duration: 0, onClick: () => location.reload() }); return
     }
-    try {
-        await store.loadProject()
-    } catch (_) {
-        toast.show(t('toast.projectLoadFailed'), { icon: '⚠️', type: 'error', duration: 0, onClick: () => location.reload() })
-        return
-    }
-    try {
-        await store.loadFiles('')
-    } catch (_) {
+    try { await store.loadFiles('') } catch (_) {
         toast.show(t('toast.fileListLoadFailed'), { icon: '⚠️', type: 'error', duration: 6000 })
     }
     const lastFile = localStorage.getItem('clawbenchLastFile_' + store.state.projectRoot)
@@ -659,9 +531,8 @@ onMounted(async () => {
         store.state.currentDir = lastSlash > 0 ? lastFile.slice(0, lastSlash) : ''
         await store.loadFiles(store.state.currentDir)
         await store.selectFile(lastFile)
-        if (store.state.currentFile?.error) {
-            store.state.currentFile = null
-        }
+        if (store.state.currentFile?.error) store.state.currentFile = null
+        if (store.state.currentFile) activeTab.value = 'viewer'
     }
 })
 
@@ -672,6 +543,14 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.viewer-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .bottom-dock-wrapper {
     flex-shrink: 0;
     -webkit-tap-highlight-color: transparent;
@@ -696,7 +575,7 @@ onUnmounted(() => {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 16px;
+    gap: 10px;
 }
 
 .dock-btn {
@@ -743,21 +622,15 @@ onUnmounted(() => {
     cursor: default;
 }
 
-/* Unread indicator — fast flash on dock button */
 .dock-btn.has-unread {
     animation: dock-unread-flash 0.8s ease-in-out infinite;
 }
 
 @keyframes dock-unread-flash {
-    0%, 100% {
-        box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-color, #0066cc) 0%, transparent);
-    }
-    50% {
-        box-shadow: 0 0 8px 3px color-mix(in srgb, var(--accent-color, #0066cc) 40%, transparent);
-    }
+    0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-color, #0066cc) 0%, transparent); }
+    50% { box-shadow: 0 0 8px 3px color-mix(in srgb, var(--accent-color, #0066cc) 40%, transparent); }
 }
 
-/* Running indicator — spinning border light on white glow */
 .dock-btn.has-running {
     position: relative;
     isolation: isolate;
@@ -787,23 +660,13 @@ onUnmounted(() => {
     to { transform: rotate(360deg); }
 }
 
-/* Quote-emit receive pulse — light burst when flying dot arrives at Chat dock button */
 .dock-btn.quote-emit-receive {
     animation: quote-emit-pulse 0.4s ease-out;
 }
 
 @keyframes quote-emit-pulse {
-    0% {
-        transform: scale(1);
-        box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-color, #0066cc) 60%, transparent);
-    }
-    40% {
-        transform: scale(1.25);
-        box-shadow: 0 0 14px 4px color-mix(in srgb, var(--accent-color, #0066cc) 40%, transparent);
-    }
-    100% {
-        transform: scale(1);
-        box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-color, #0066cc) 0%, transparent);
-    }
+    0% { transform: scale(1); box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-color, #0066cc) 60%, transparent); }
+    40% { transform: scale(1.25); box-shadow: 0 0 14px 4px color-mix(in srgb, var(--accent-color, #0066cc) 40%, transparent); }
+    100% { transform: scale(1); box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-color, #0066cc) 0%, transparent); }
 }
 </style>

@@ -1,10 +1,5 @@
 <template>
-  <BottomSheet :open="open" :title="t('file.manager')" @close="$emit('close')">
-    <template #header>
-      <Folder :size="16" class="bs-header-icon" />
-      <span class="bs-header-title">{{ t('file.manager') }}</span>
-    </template>
-
+  <div class="file-manager-content">
     <!-- Dir nav -->
     <div id="dirNav" class="dir-nav">
       <div class="dir-toolbar">
@@ -145,14 +140,13 @@
       </div>
       <div v-if="ctxMenu.visible" class="ctx-overlay" @click="ctxMenu.visible = false" @touchstart="ctxMenu.visible = false" />
     </Teleport>
-  </BottomSheet>
+  </div>
 </template>
 
 <script setup>
 import { ref, computed, reactive, inject, nextTick, Teleport, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Folder, ArrowDownAz, ArrowUpDown, ChevronDown, ChevronUp, Clock, FileText, Eye, EyeOff, ArrowRightLeft, Loader, FileImage, FileMusic, ChevronRight, Copy, Scissors, ClipboardPaste, FilePlus, FolderPlus, Pencil, Download, Trash2, FolderOpen, RotateCw, Terminal as TerminalIcon } from 'lucide-vue-next'
-import BottomSheet from '@/components/common/BottomSheet.vue'
 import { getFileType } from '@/utils/fileType.ts'
 import { dirName } from '@/utils/path.ts'
 import { store } from '@/stores/app.ts'
@@ -170,14 +164,13 @@ const props = defineProps({
     entries: Array,
     currentDir: String,
     currentFile: Object,
-    open: Boolean,
     showHidden: Boolean,
     sortField: String,
     sortDir: String,
     dirLoading: Boolean,
 })
 
-const emit = defineEmits(['close', 'navigateDir', 'selectFile', 'toggleSort', 'toggleHidden', 'rename', 'delete', 'refresh', 'openTerminal'])
+const emit = defineEmits(['navigateDir', 'selectFile', 'toggleSort', 'toggleHidden', 'rename', 'delete', 'refresh', 'openTerminal'])
 
 
 const searchQuery = ref('')
@@ -387,7 +380,6 @@ function handleFileClick(e) {
         emit('navigateDir', path)
     } else {
         emit('selectFile', path)
-        emit('close')
     }
 }
 
@@ -501,6 +493,15 @@ function doDelete() {
 </script>
 
 <style scoped>
+/* ── File manager content ── */
+.file-manager-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
 /* ── File manager specific ── */
 
 .fm-header-row {

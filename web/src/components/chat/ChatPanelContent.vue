@@ -1,0 +1,865 @@
+<template>
+  <div class="chat-panel-content">
+    <!-- Messages -->
+    <ChatMessageList
+      ref="messageListRef"
+      :messages="messages"
+      :expandedTools="render.expandedTools.value"
+      :blockTasks="render.blockTasks"
+      :blockAskQuestions="render.blockAskQuestions"
+      :agents="agentsList"
+      :currentAgent="currentAgent"
+      :currentSessionId="identity.currentSessionId.value"
+      :hasMore="session.hasMore.value"
+      :loadingMore="session.loadingMore.value"
+      :totalMessages="session.totalMessages.value"
+      :pendingMessages="manager.pendingMessages.value"
+      @touchstart="swipeSession.onTouchStart"
+      @touchend="swipeSession.onTouchEnd"
+      @toggle-tool="render.toggleToolDetail"
+      @show-tool-detail="handleShowToolDetail"
+      @show-metadata="showMetadata"
+      @file-tag-click="handleFileTagClick"
+      @load-more="handleLoadMore"
+      @edit-task="openTaskEdit"
+      @view-history="openTaskHistory"
+      @task-action="handleTaskAction"
+      @send-message="handleToolSendMessage"
+      @remove-pending="manager.handleRemovePending"
+      @render-flush="scrollBottom()"
+    />
+
+    <!-- Session switching overlay — placed here to cover the entire message area -->
+    <Transition name="session-switch-fade">
+      <div v-if="session.switching.value" class="session-switch-overlay">
+        <div class="session-switch-spinner"></div>
+      </div>
+    </Transition>
+
+    <!-- Session swipe indicator — floats above the message area -->
+    <Transition name="session-indicator">
+      <div v-if="swipeSession.indicatorText.value" class="session-switch-indicator" :class="swipeSession.indicatorDirection.value">
+        <div class="session-indicator-row">
+          <span class="session-indicator-text">{{ swipeSession.indicatorText.value }}</span>
+        </div>
+        <div v-if="showPositionIndicator" class="session-indicator-position">
+          <div v-if="swipeSession.sessionTotal.value <= 15" class="session-dots">
+            <span v-for="i in swipeSession.sessionTotal.value" :key="i"
+                  class="session-dot" :class="{ active: i - 1 === swipeSession.sessionIndex.value }" />
+          </div>
+          <div v-else class="session-capsule">
+            <div class="session-capsule-track">
+              <div class="session-capsule-slider" :style="capsuleSliderStyle" />
+            </div>
+          </div>
+          <span class="session-position-count">{{ swipeSession.sessionIndex.value + 1 }}/{{ swipeSession.sessionTotal.value }}</span>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- Unified input container -->
+    <ChatInputBar
+      ref="inputBarRef"
+      :inputDisabled="inputDisabled"
+      :loading="loading"
+      :currentFile="currentFile"
+      :pendingFiles="pendingFiles"
+      :attachedFiles="attachedFiles"
+      :messages="messages"
+      :autoSpeechEnabled="autoSpeech.enabled.value"
+      :currentSessionId="identity.currentSessionId.value"
+      :chatUnread="store.state.chatUnread"
+      :chatRunning="store.state.chatRunning"
+      :taskUnread="store.state.taskUnread"
+      :currentModelId="identity.currentModelId.value"
+      :currentModelName="identity.currentModelName.value"
+      :agentModels="agents.getAgentModels(identity.currentAgentId.value)"
+      :isMultiModel="(id) => agents.isMultiModel(id)"
+      :currentAgentId="identity.currentAgentId.value"
+      @send="sendMessage"
+      @cancel="stream.cancelStream"
+      @file-select="handleFileSelect"
+      @file-drop="handleFileDrop"
+      @remove-file="removeFile"
+      @add-attached="addAttachedFile"
+      @remove-attached="removeAttachedFile"
+      @open-session-tab="session.openSessionTab"
+      @file-tag-click="handleFileTagClick"
+      @toggle-auto-speech="autoSpeech.toggle"
+      @create-session="manager.createSession"
+      @show-agent-selector="handleShowAgentSelector"
+      @delete-session="(id) => manager.deleteCurrentSession((draftId) => inputBarRef.value?.deleteDraft(draftId))"
+      @switch-model="handleSwitchModel"
+    />
+
+  </div>
+
+  <!-- Metadata Modal -->
+  <ChatMetadataModal
+    :show="metadataModal.show"
+    :data="metadataModal.data"
+    :backend="metadataModal.backend"
+    :createdAt="metadataModal.createdAt"
+    :relatedFile="metadataModal.relatedFile"
+    :messageId="metadataModal.messageId"
+    :sessionId="metadataModal.sessionId"
+    :indexed="metadataModal.indexed"
+    :formatDetailTime="render.formatDetailTime"
+    @close="metadataModal.show = false"
+  />
+
+  <!-- Tool Detail Overlay -->
+  <ToolDetailOverlay
+    :show="toolDetailOverlay.show"
+    :toolName="toolDetailOverlay.name"
+    :toolSummary="toolDetailOverlay.summary"
+    :toolInputHtml="toolDetailOverlay.inputHtml"
+    :toolOutputHtml="toolDetailOverlay.outputHtml"
+    :toolStatus="toolDetailOverlay.status"
+    :toolDone="toolDetailOverlay.done"
+    @close="toolDetailOverlay.show = false"
+    @file-open="handleFileOpenInOverlay"
+    @send-message="handleToolSendMessage"
+  />
+
+  <!-- Session Drawer -->
+  <SessionDrawer
+    ref="sessionDrawerRef"
+    :open="session.sessionDrawerOpen.value"
+    :currentSessionId="identity.currentSessionId.value"
+    :runningSessionIds="identity.runningSessions.value"
+    @close="session.sessionDrawerOpen.value = false"
+    @select="manager.switchSession"
+    @create="manager.createSession"
+    @delete="(sessionId, backend) => manager.deleteSession(sessionId, backend).then(() => inputBarRef.value?.deleteDraft(sessionId))"
+  />
+
+  <!-- Task Drawer -->
+  <TaskDrawer
+    ref="taskDrawerRef"
+    :open="session.taskDrawerOpen.value"
+    @close="session.taskDrawerOpen.value = false"
+  />
+
+  <!-- Task Edit Dialog (opened from schedule-proposal card) -->
+  <TaskFormDialog
+    :open="taskEditOpen"
+    mode="edit"
+    :task="taskEditData"
+    @close="taskEditOpen = false"
+    @saved="handleTaskEditSaved"
+  />
+  <TaskExecDialog
+    :open="taskHistoryOpen"
+    :task="taskHistoryData"
+    @close="taskHistoryOpen = false"
+  />
+</template>
+
+<script setup>
+import { ref, computed, watch, onUnmounted, onMounted, inject, provide, toRef, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { gt } from '@/composables/useLocale'
+import HeaderMarquee from '@/components/common/HeaderMarquee.vue'
+import SessionDrawer from '@/components/session/SessionDrawer.vue'
+import TaskDrawer from '@/components/task/TaskDrawer.vue'
+import TaskFormDialog from '@/components/task/TaskFormDialog.vue'
+import TaskExecDialog from '@/components/task/TaskExecDialog.vue'
+import ChatMetadataModal from './ChatMetadataModal.vue'
+import ToolDetailOverlay from './ToolDetailOverlay.vue'
+import ChatInputBar from './ChatInputBar.vue'
+import ChatMessageList from './ChatMessageList.vue'
+import { useChatRender } from '@/composables/useChatRender.ts'
+import { formatToolOutput } from '@/utils/renderToolDetail.ts'
+import { useChatStream } from '@/composables/useChatStream.ts'
+import { useChatSession } from '@/composables/useChatSession.ts'
+import { useSessionIdentity } from '@/composables/useSessionIdentity.ts'
+import { useSessionManager } from '@/composables/useSessionManager.ts'
+import { useAgents } from '@/composables/useAgents.ts'
+import { useToast } from '@/composables/useToast.ts'
+import { useFilePathAnnotation } from '@/composables/useFilePathAnnotation.ts'
+import { useNotification } from '@/composables/useNotification.ts'
+import { useFileUpload } from '@/composables/useFileUpload.ts'
+import { refreshCurrentFile } from '@/composables/useFileRefresh.ts'
+import { playNotificationSound } from '@/composables/useNotificationSound.ts'
+import { useAutoSpeech } from '@/composables/useAutoSpeech.ts'
+import { useSwipeSession } from '@/composables/useSwipeSession.ts'
+import { useDialog } from '@/composables/useDialog.ts'
+import { store } from '@/stores/app.ts'
+
+const { t } = useI18n()
+
+const props = defineProps({
+    active: Boolean,
+    currentFile: Object,
+})
+const emit = defineEmits(['open', 'message', 'open-file'])
+
+// ── Singletons ──
+const identity = useSessionIdentity()
+const agentsComposable = useAgents()
+const { agents: agentsList, getAgentIcon, getAgentName, getAgentModels, isMultiModel, getDefaultModelId } = agentsComposable
+// Expose as `agents` for template access to getAgentModels/isMultiModel
+const agents = agentsComposable
+
+const messages = ref([])
+const inputDisabled = ref(false)
+const loading = ref(false)
+// Incremented when the panel reopens, so ChatMessageItem can re-check
+// overflow after being hidden (display:none gives scrollHeight=0).
+const layoutRefreshKey = ref(0)
+const currentAgent = computed(() => {
+  const agentId = identity.currentAgentId.value
+  if (!agentId) return null
+  return agentsList.value.find(a => a.id === agentId) || null
+})
+const sessionDrawerRef = ref(null)
+const inputBarRef = ref(null)
+const messageListRef = ref(null)
+const metadataModal = ref({
+  show: false,
+  data: {},
+  backend: '',
+  createdAt: '',
+  relatedFile: '',
+  messageId: null,
+  sessionId: '',
+  indexed: false
+})
+const toolDetailOverlay = ref({
+  show: false,
+  name: '',
+  summary: '',
+  inputHtml: '',
+  outputHtml: '',
+  status: '',
+  done: true,
+})
+const toast = useToast()
+const dialog = useDialog()
+const notification = useNotification()
+const autoSpeech = useAutoSpeech()
+const theme = inject('theme', ref('light'))
+const switchTab = inject('switchTab', () => {})
+const { openFilePath } = useFilePathAnnotation()
+
+// Task edit dialog (opened from schedule-proposal card)
+const taskEditOpen = ref(false)
+const taskEditData = ref(null)
+const taskHistoryOpen = ref(false)
+const taskHistoryData = ref(null)
+
+async function openTaskEdit(taskId) {
+  try {
+    const resp = await fetch(`/api/tasks/${taskId}`)
+    if (resp.ok) {
+      taskEditData.value = await resp.json()
+      taskEditOpen.value = true
+    }
+  } catch (err) {
+    console.error('Failed to load task for editing:', err)
+  }
+}
+
+async function openTaskHistory(taskId) {
+  try {
+    const resp = await fetch(`/api/tasks/${taskId}`)
+    if (resp.ok) {
+      taskHistoryData.value = await resp.json()
+      taskHistoryOpen.value = true
+    }
+  } catch (err) {
+    console.error('Failed to load task for history:', err)
+  }
+}
+
+function handleTaskEditSaved() {
+  taskEditOpen.value = false
+  taskDrawerRef.value?.loadTasks()
+}
+
+async function handleTaskAction(taskId, action) {
+  try {
+    if (action === 'delete') {
+      if (!await dialog.confirm(t('task.confirmDelete'), { dangerous: true })) return
+      await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' })
+    } else {
+      await fetch(`/api/tasks/${taskId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action })
+      })
+    }
+    render.refreshTaskData(taskId)
+  } catch (err) {
+    console.error(`Failed to ${action} task:`, err)
+  }
+}
+
+function handleFileTagClick(filePath) {
+    if (filePath) {
+        openFilePath(filePath)
+        switchTab('viewer')
+    }
+}
+
+const render = useChatRender({ messages, theme, currentSessionId: identity.currentSessionId })
+
+const session = useChatSession({
+  currentSessionId: identity.currentSessionId,
+  messages,
+  loading,
+  inputDisabled,
+  blockTasks: render.blockTasks,
+  blockAskQuestions: render.blockAskQuestions,
+  expandedTools: render.expandedTools,
+  onParseAssistantContent: (content) => render.parseAssistantContent(content),
+  onExtractScheduledTasks: (msgs) => render.extractScheduledTasks(msgs),
+  onRenderUpdate: (forceFull) => render.updateRenderedContents(forceFull),
+  onScrollBottom: (force) => scrollBottom(force),
+  onConnectStream: (sessionId) => stream.connectStream(sessionId),
+  onStopPolling: () => stream.stopPolling(),
+  onDisconnectStream: () => stream.disconnectStream(),
+  onMessage: () => emit('message'),
+  onOpen: () => emit('open'),
+  isOpen: toRef(props, 'active'),
+  onStreamDone: playNotificationSound,
+})
+
+// onStreamEnd: fires when current session stream completes with a reason
+// - 'done': normal completion → play sound, auto-speech; backend handles queue drain
+// - 'cancelled': user cancelled → clear locally for immediate UI response
+// - 'error': error occurred → don't touch pendingMessages; backend preserves queue
+function onStreamEnd(reason) {
+  if (reason === 'done') {
+    playNotificationSound()
+    if (autoSpeech.enabled.value) {
+      const lastMsg = messages.value[messages.value.length - 1]
+      if (lastMsg?.role === 'assistant') {
+        const textBlocks = (lastMsg.blocks || []).filter(b => b.type === 'text')
+        const fullText = textBlocks.map(b => b.text || '').join('\n')
+        if (fullText.trim() && lastMsg.id) {
+          autoSpeech.speakMessage(lastMsg.id, fullText.trim())
+        }
+      }
+    }
+    // Sync queue from backend — when SSE was disconnected (e.g. user left the page),
+    // queue_consume/queue_update events were missed and pendingMessages may be stale.
+    manager.fetchQueue(identity.currentSessionId.value)
+  } else if (reason === 'cancelled') {
+    // Backend already cleared queue; clear locally for immediate UI response
+    manager.pendingMessages.value = []
+  }
+  // 'error': don't touch pendingMessages — backend preserves queue
+}
+
+const stream = useChatStream({
+  messages,
+  currentSessionId: identity.currentSessionId,
+  currentBackend: identity.currentBackend,
+  loading,
+  onRenderNeeded: (forceFull) => render.updateRenderedContents(forceFull),
+  onScrollBottom: (force) => scrollBottom(force),
+  onLoadHistory: () => session.loadHistory(),
+  onMessage: () => emit('message'),
+  onOpen: () => emit('open'),
+  isOpen: toRef(props, 'active'),
+  onParseAssistantContent: (content) => render.parseAssistantContent(content),
+  onToast: (msg, opts) => toast.show(msg, opts),
+  onNotification: (title, opts) => notification.show(title, opts),
+  onStreamEnd,
+  onQueueUpdate: (queue) => { manager.setPendingMessages(queue) },
+  onQueueConsume: () => {
+    // Optimistically remove the first pending message — it's being consumed now.
+    // The subsequent queue_update SSE event will provide authoritative state,
+    // but this ensures the queue UI updates immediately even if queue_update is delayed or dropped.
+    const current = manager.pendingMessages.value
+    if (current.length > 0) {
+      manager.setPendingMessages(current.slice(1))
+    }
+  },
+  onFileModified: (filePath) => {
+    // Chat-driven file refresh: when AI's Write/Edit tool completes,
+    // refresh the file preview if the modified file is currently being viewed.
+    // This is a defense-in-depth mechanism alongside the fsnotify-based file watcher.
+    const currentFilePath = store.state.currentFile?.path
+
+    // Path matching: tool paths may be relative, absolute, or have different prefixes.
+    // Use suffix matching: if the current file path ends with the tool's file path,
+    // or vice versa, they match.
+    const normA = filePath.replace(/\\/g, '/')
+    const normB = (currentFilePath || '').replace(/\\/g, '/')
+    const isMatch = normA === normB ||
+      normA.endsWith('/' + normB) ||
+      normB.endsWith('/' + normA)
+
+    if (isMatch && currentFilePath) {
+      // refreshCurrentFile handles both file content and directory listing
+      refreshCurrentFile({ loadDir: true })
+    } else {
+      // File not currently viewed, but still refresh directory listing
+      const currentDir = store.state.currentDir
+      if (currentDir !== undefined) {
+        store.loadFiles(currentDir)
+      }
+    }
+  },
+})
+
+const { pendingFiles, attachedFiles, handleFileSelect, handleFileDrop, removeFile, addAttachedFile, removeAttachedFile, cleanupPreviewUrls, clearPendingFiles } = useFileUpload()
+
+const manager = useSessionManager({
+  messages,
+  loading,
+  switchSessionCore: session.switchSession,
+  createSessionCore: session.createSession,
+  deleteSessionCore: session.deleteSession,
+  disconnectStream: stream.disconnectStream,
+  stopPolling: stream.stopPolling,
+  updateRenderedContents: (forceFull) => render.updateRenderedContents(forceFull),
+  clearInputState: () => {
+    attachedFiles.value = []
+    inputBarRef.value?.clearInput()
+    clearPendingFiles()
+  },
+  scrollBottom: (force) => scrollBottom(force),
+})
+
+// Register identity actions — all paths now go through manager
+manager.registerIdentityActions({
+  sendMessage: (text, filePaths) => sendMessage(text, filePaths),
+  openChatPanel: () => emit('open'),
+})
+
+const swipeSession = useSwipeSession({
+  currentSessionId: identity.currentSessionId,
+  switchSession: manager.switchSession,
+})
+
+const showPositionIndicator = computed(() =>
+  swipeSession.sessionIndex.value >= 0 && swipeSession.sessionTotal.value > 1
+)
+
+const capsuleSliderStyle = computed(() => {
+  const total = swipeSession.sessionTotal.value
+  const idx = swipeSession.sessionIndex.value
+  if (total <= 1 || idx < 0) return {}
+  const trackWidth = 80
+  const sliderWidth = Math.max(6, trackWidth / total)
+  const maxOffset = trackWidth - sliderWidth
+  const left = total > 1 ? (idx / (total - 1)) * maxOffset : 0
+  return {
+    width: `${sliderWidth}px`,
+    left: `${left}px`,
+  }
+})
+
+provide('chatRender', {
+  renderTextBlock: render.renderTextBlock,
+  formatMessageTime: render.formatMessageTime,
+  toolCallSummary: render.toolCallSummary,
+  formatToolInput: render.formatToolInput,
+  humanizeCron: render.humanizeCron,
+  repeatLabel: render.repeatLabel,
+  truncate: render.truncate,
+  hasImagesInContent: render.hasImagesInContent,
+})
+provide('chatSession', { getAgentIcon, getAgentName })
+provide('chatUI', { closeSheet: () => switchTab('viewer') })
+provide('autoSpeech', autoSpeech)
+provide('layoutRefreshKey', layoutRefreshKey)
+
+// 子抽屉跟随聊天面板关闭；面板打开时刷新渲染（修复 display:none 期间的过时布局状态）
+watch(() => props.active, async (val) => {
+  if (!val) {
+    session.sessionDrawerOpen.value = false
+    session.taskDrawerOpen.value = false
+  } else {
+    // Re-open: load history (with overlay) and fix stale layout state from v-show display:none
+    await session.loadHistory(false, true)
+    // Bump layoutRefreshKey AFTER loadHistory so ChatMessageItem re-checks
+    // collapse state with the fresh messages and valid scrollHeight.
+    nextTick(() => {
+      layoutRefreshKey.value++
+    })
+  }
+})
+
+async function handleShowAgentSelector() {
+  await agentsComposable.loadAgents()
+  // If only one agent exists, skip the selector and create directly
+  if (agentsList.value.length === 1) {
+    manager.createSession(agentsList.value[0].id)
+    return
+  }
+  sessionDrawerRef.value?.openAgentSelector()
+}
+
+function handleSwitchModel(model) {
+  identity.currentModelId.value = model.id
+  identity.currentModelName.value = model.name
+}
+
+async function sendMessage(text, extraFilePaths) {
+    const inputText = text !== undefined ? text : (inputBarRef.value?.inputText?.trim() || '')
+    const hasFiles = pendingFiles.value.length > 0 || attachedFiles.value.length > 0
+
+    if ((!inputText && !hasFiles) || inputDisabled.value) return
+
+    // If AI is generating, enqueue the message instead of sending immediately
+    if (loading.value) {
+      manager.enqueueMessage(inputText, extraFilePaths, attachedFiles.value, pendingFiles.value.map(f => f.path))
+      return
+    }
+
+    // Merge attached files from the input bar with extra file paths (e.g. from quote-question)
+    const filePaths = [...(extraFilePaths || []), ...(attachedFiles.value.length > 0 ? attachedFiles.value : [])]
+    const uploadedFiles = pendingFiles.value.map(f => ({ path: f.path }))
+    const projectFiles = filePaths.map(p => ({ path: p }))
+    const allFiles = [...uploadedFiles, ...projectFiles].map(f => f.path)
+
+    // Clear input state before async request
+    attachedFiles.value = []
+    inputBarRef.value?.clearInput()
+    clearPendingFiles()
+
+    await sendMessageNow(inputText, filePaths, allFiles)
+}
+
+/** Actually send a message to the backend (no queue check). */
+async function sendMessageNow(text, filePaths, files) {
+    messages.value.push({
+        role: 'user',
+        content: text || '',
+        blocks: text ? [{ type: 'text', text: text || '' }] : [],
+        filePath: filePaths.length > 0 ? filePaths[0] : '',
+        files: (files || []).map(p => ({ path: p })),
+        createdAt: new Date().toISOString()
+    })
+
+    render.updateRenderedContents()
+    loading.value = true
+    scrollBottom(true)
+
+    try {
+        const effectiveAgentId = identity.currentAgentId.value
+
+        const url = identity.currentSessionId.value
+            ? `/api/ai/chat?session_id=${encodeURIComponent(identity.currentSessionId.value)}`
+            : '/api/ai/chat'
+        const resp = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: text, filePaths, files: files || [], agentId: effectiveAgentId, modelId: identity.currentModelId.value || undefined }),
+        })
+        const data = await resp.json()
+        if (!resp.ok) {
+            const err = new Error(data.error || gt('chat.metadata.unknownError'))
+            err.msgKey = data.msgKey
+            throw err
+        }
+        // Update session ID if backend created a new one
+        if (data.sessionId && !identity.currentSessionId.value) {
+            identity.currentSessionId.value = data.sessionId
+        }
+        // Session already running — another request is in progress
+        if (data.running) {
+            if (data.queued && data.queue) {
+                manager.setPendingMessages(data.queue)
+            }
+            stream.connectStream(identity.currentSessionId.value)
+            return
+        }
+        stream.connectStream(identity.currentSessionId.value)
+    } catch (err) {
+        stream.stopPolling()
+        stream.disconnectStream()
+        messages.value.push({ role: 'assistant', content: t('chat.sendError', { error: err.message }), file_path: '' })
+        loading.value = false
+        toast.show(t('toast.sendFailed'), { icon: '⚠️', type: 'error' })
+        // Clear session ID on error to prevent using invalid session
+        if (err.msgKey === 'SessionBackendNotFound' || err.msgKey === 'SessionNotFound') {
+            identity.currentSessionId.value = ''
+        }
+    }
+}
+
+/** Handle a tool-triggered message send (e.g. AskUserQuestion answer).
+ *  If the AI stream is still running, enqueues the message for delivery after stream ends. */
+async function handleToolSendMessage(text) {
+    if (!text) return
+    if (loading.value) {
+      manager.enqueueMessage(text)
+    } else {
+      await sendMessage(text)
+    }
+}
+
+function scrollBottom(force = false) {
+    messageListRef.value?.scrollToBottom(force)
+}
+
+async function handleLoadMore() {
+    const el = messageListRef.value?.messagesRef
+    if (!el) return
+    const oldScrollHeight = el.scrollHeight
+    await session.loadMoreMessages()
+    // Wait for DOM update + one frame for async rendering (Mermaid, KaTeX)
+    await nextTick()
+    await new Promise(resolve => requestAnimationFrame(resolve))
+    const newScrollHeight = el.scrollHeight
+    el.scrollTop = newScrollHeight - oldScrollHeight
+}
+
+function showMetadata(msg) {
+    metadataModal.value.data = msg.metadata || {}
+    metadataModal.value.backend = msg.backend || ''
+    metadataModal.value.createdAt = msg.createdAt || ''
+    metadataModal.value.relatedFile = (msg.files && msg.files.length > 0) ? msg.files[0] : ''
+    metadataModal.value.messageId = msg.id || null
+    metadataModal.value.sessionId = msg.sessionId || ''
+    metadataModal.value.indexed = !!msg.indexed
+    metadataModal.value.show = true
+}
+
+function handleShowToolDetail(block) {
+  const { formatToolInput } = render
+  toolDetailOverlay.value = {
+    show: true,
+    name: block.name || '',
+    summary: render.toolCallSummary(block),
+    inputHtml: formatToolInput(block.input, block.name),
+    outputHtml: block.output ? formatToolOutput(block.output, block.name) : '',
+    status: block.status || '',
+    done: !!block.done,
+  }
+}
+
+function handleFileOpenInOverlay(filePath) {
+  toolDetailOverlay.value.show = false
+  openFilePath(filePath)
+  switchTab('viewer')
+}
+
+// Start global polling when component mounts
+onMounted(() => {
+    // Request notification permission on mount
+    notification.requestPermission().catch(err => {
+        console.warn('Failed to request notification permission:', err)
+    })
+
+    session.startGlobalPolling()
+    document.addEventListener('visibilitychange', session.handleVisibilityChange)
+})
+
+// Cleanup preview URLs on unmount
+onUnmounted(() => {
+    cleanupPreviewUrls()
+    stream.disconnectStream()
+    stream.stopPolling()
+    session.stopGlobalPolling()
+    session.stopMsgCountPolling()
+    document.removeEventListener('visibilitychange', session.handleVisibilityChange)
+    notification.closeAll()
+})
+</script>
+
+<style scoped>
+.chat-panel-content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Make panel content a positioning context so the switching overlay covers
+   the message+input area only (not the header above it). */
+:deep(.chat-panel-content) {
+  position: relative;
+}
+
+/* Session switch overlay — covers the entire body area (messages + input) */
+.session-switch-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary);
+  z-index: 5;
+  opacity: 0.85;
+}
+
+.session-switch-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--border-color);
+  border-top-color: var(--accent-color);
+  border-radius: 50%;
+  animation: session-switch-spin 0.7s linear infinite;
+}
+
+@keyframes session-switch-spin {
+  to { transform: rotate(360deg); }
+}
+
+.session-switch-fade-enter-active {
+  transition: opacity 0.12s ease-out;
+}
+.session-switch-fade-leave-active {
+  transition: opacity 0.18s ease-in;
+}
+.session-switch-fade-enter-from,
+.session-switch-fade-leave-to {
+  opacity: 0;
+}
+
+/* Session swipe indicator — floats at top of message area */
+.session-switch-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px 8px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border-radius: 24px;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  position: absolute;
+  top: 48px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  z-index: 10;
+  max-width: 260px;
+  margin: 0 auto;
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-md);
+}
+
+.session-indicator-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.session-indicator-text {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+/* Position indicator — row 2 */
+.session-indicator-position {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Dots bar (<=15 sessions) */
+.session-dots {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.session-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--text-tertiary, rgba(128, 128, 128, 0.4));
+  transition: all 0.15s ease-out;
+}
+
+.session-dot.active {
+  width: 6px;
+  height: 6px;
+  background: var(--accent-color);
+}
+
+/* Capsule progress bar (>15 sessions) */
+.session-capsule {
+  display: flex;
+  align-items: center;
+}
+
+.session-capsule-track {
+  width: 80px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--text-tertiary, rgba(128, 128, 128, 0.3));
+  position: relative;
+}
+
+.session-capsule-slider {
+  position: absolute;
+  top: 0;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--accent-color);
+  transition: left 0.2s ease-out;
+}
+
+/* Numeric label */
+.session-position-count {
+  font-size: 10px;
+  color: var(--text-tertiary, rgba(128, 128, 128, 0.6));
+  white-space: nowrap;
+  min-width: 24px;
+  text-align: center;
+}
+
+.session-switch-indicator.left {
+  animation: indicator-slide-left 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.session-switch-indicator.right {
+  animation: indicator-slide-right 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes indicator-slide-left {
+  from {
+    opacity: 0;
+    transform: translateX(30px) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes indicator-slide-right {
+  from {
+    opacity: 0;
+    transform: translateX(-30px) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.session-indicator-enter-active {
+  transition: opacity 0.15s ease-out;
+}
+
+.session-indicator-leave-active {
+  transition: opacity 0.2s ease-in, transform 0.2s ease-in;
+}
+
+.session-indicator-enter-from {
+  opacity: 0;
+}
+
+.session-indicator-leave-to {
+  opacity: 0;
+  transform: scale(0.95);
+}
+</style>
