@@ -21,9 +21,7 @@
       @show-metadata="showMetadata"
       @file-tag-click="handleFileTagClick"
       @load-more="handleLoadMore"
-      @edit-task="openTaskEdit"
-      @view-history="openTaskHistory"
-      @task-action="handleTaskAction"
+      @task-card-click="(taskId) => $emit('task-card-click', taskId)"
       @send-message="handleToolSendMessage"
       @remove-pending="manager.handleRemovePending"
       @render-flush="scrollBottom()"
@@ -71,7 +69,6 @@
       :currentSessionId="identity.currentSessionId.value"
       :chatUnread="store.state.chatUnread"
       :chatRunning="store.state.chatRunning"
-      :taskUnread="store.state.taskUnread"
       :currentModelId="identity.currentModelId.value"
       :currentModelName="identity.currentModelName.value"
       :agentModels="agents.getAgentModels(identity.currentAgentId.value)"
@@ -135,27 +132,6 @@
     @create="manager.createSession"
     @delete="(sessionId, backend) => manager.deleteSession(sessionId, backend).then(() => inputBarRef.value?.deleteDraft(sessionId))"
   />
-
-  <!-- Task Drawer — only open when chat tab is active -->
-  <TaskDrawer
-    ref="taskDrawerRef"
-    :open="props.active && session.taskDrawerOpen.value"
-    @close="session.taskDrawerOpen.value = false"
-  />
-
-  <!-- Task Edit Dialog — only open when chat tab is active -->
-  <TaskFormDialog
-    :open="props.active && taskEditOpen"
-    mode="edit"
-    :task="taskEditData"
-    @close="taskEditOpen = false"
-    @saved="handleTaskEditSaved"
-  />
-  <TaskExecDialog
-    :open="props.active && taskHistoryOpen"
-    :task="taskHistoryData"
-    @close="taskHistoryOpen = false"
-  />
 </template>
 
 <script setup>
@@ -164,9 +140,6 @@ import { useI18n } from 'vue-i18n'
 import { gt } from '@/composables/useLocale'
 import HeaderMarquee from '@/components/common/HeaderMarquee.vue'
 import SessionDrawer from '@/components/session/SessionDrawer.vue'
-import TaskDrawer from '@/components/task/TaskDrawer.vue'
-import TaskFormDialog from '@/components/task/TaskFormDialog.vue'
-import TaskExecDialog from '@/components/task/TaskExecDialog.vue'
 import ChatMetadataModal from './ChatMetadataModal.vue'
 import ToolDetailOverlay from './ToolDetailOverlay.vue'
 import ChatInputBar from './ChatInputBar.vue'
@@ -186,7 +159,6 @@ import { refreshCurrentFile } from '@/composables/useFileRefresh.ts'
 import { playNotificationSound } from '@/composables/useNotificationSound.ts'
 import { useAutoSpeech } from '@/composables/useAutoSpeech.ts'
 import { useSwipeSession } from '@/composables/useSwipeSession.ts'
-import { useDialog } from '@/composables/useDialog.ts'
 import { store } from '@/stores/app.ts'
 
 const { t } = useI18n()
@@ -196,7 +168,7 @@ const props = defineProps({
     currentFile: Object,
     currentDir: String,
 })
-const emit = defineEmits(['open', 'message', 'open-file'])
+const emit = defineEmits(['open', 'message', 'open-file', 'task-card-click'])
 
 // ── Singletons ──
 const identity = useSessionIdentity()
@@ -239,65 +211,11 @@ const toolDetailOverlay = ref({
   done: true,
 })
 const toast = useToast()
-const dialog = useDialog()
 const notification = useNotification()
 const autoSpeech = useAutoSpeech()
 const theme = inject('theme', ref('light'))
 const switchTab = inject('switchTab', () => {})
 const { openFilePath } = useFilePathAnnotation()
-
-// Task edit dialog (opened from schedule-proposal card)
-const taskEditOpen = ref(false)
-const taskEditData = ref(null)
-const taskHistoryOpen = ref(false)
-const taskHistoryData = ref(null)
-
-async function openTaskEdit(taskId) {
-  try {
-    const resp = await fetch(`/api/tasks/${taskId}`)
-    if (resp.ok) {
-      taskEditData.value = await resp.json()
-      taskEditOpen.value = true
-    }
-  } catch (err) {
-    console.error('Failed to load task for editing:', err)
-  }
-}
-
-async function openTaskHistory(taskId) {
-  try {
-    const resp = await fetch(`/api/tasks/${taskId}`)
-    if (resp.ok) {
-      taskHistoryData.value = await resp.json()
-      taskHistoryOpen.value = true
-    }
-  } catch (err) {
-    console.error('Failed to load task for history:', err)
-  }
-}
-
-function handleTaskEditSaved() {
-  taskEditOpen.value = false
-  taskDrawerRef.value?.loadTasks()
-}
-
-async function handleTaskAction(taskId, action) {
-  try {
-    if (action === 'delete') {
-      if (!await dialog.confirm(t('task.confirmDelete'), { dangerous: true })) return
-      await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' })
-    } else {
-      await fetch(`/api/tasks/${taskId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action })
-      })
-    }
-    render.refreshTaskData(taskId)
-  } catch (err) {
-    console.error(`Failed to ${action} task:`, err)
-  }
-}
 
 function handleFileTagClick(filePath) {
     if (filePath) {
@@ -477,7 +395,6 @@ provide('layoutRefreshKey', layoutRefreshKey)
 watch(() => props.active, async (val) => {
   if (!val) {
     session.sessionDrawerOpen.value = false
-    session.taskDrawerOpen.value = false
   } else {
     // Open/Re-open: load history (with overlay) and fix stale layout state from v-show display:none
     await session.loadHistory(false, true)

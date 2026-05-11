@@ -51,9 +51,7 @@
       @show-tool-detail="$emit('show-tool-detail', $event)"
       @show-metadata="$emit('show-metadata', $event)"
       @file-tag-click="$emit('file-tag-click', $event)"
-      @edit-task="$emit('edit-task', $event)"
-      @view-history="$emit('view-history', $event)"
-      @task-action="(id, action) => $emit('task-action', id, action)"
+      @task-card-click="$emit('task-card-click', $event)"
       @send-message="$emit('send-message', $event)"
       @expand="handleExpand"
       @collapse="handleCollapse"
@@ -101,7 +99,7 @@ const props = defineProps({
   staticBlockCache: Object,
 })
 
-const emit = defineEmits(['toggle-tool', 'show-tool-detail', 'show-metadata', 'file-tag-click', 'file-open', 'load-more', 'edit-task', 'view-history', 'task-action', 'send-message', 'remove-pending', 'render-flush'])
+const emit = defineEmits(['toggle-tool', 'show-tool-detail', 'show-metadata', 'file-tag-click', 'file-open', 'load-more', 'task-card-click', 'send-message', 'remove-pending', 'render-flush'])
 
 const messagesRef = ref(null)
 const { handleDblClick } = useDoubleClickCopy()

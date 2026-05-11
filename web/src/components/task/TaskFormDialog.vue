@@ -383,7 +383,8 @@ async function submit() {
       return
     }
 
-    emit('saved')
+    const result = await resp.json()
+    emit('saved', result.task?.id)
   } catch (err) {
     errors.value = { cronExpr: err.message || t('common.networkError') }
   } finally {

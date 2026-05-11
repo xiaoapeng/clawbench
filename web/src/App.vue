@@ -32,6 +32,7 @@
               :current-dir="currentDir"
               @open="switchTab('chat')"
               @open-file="handleSelectFile"
+              @task-card-click="onTaskCardClick"
             />
           </TabPanel>
 
@@ -134,6 +135,15 @@
               :active="activeTab === 'terminal'"
             />
           </TabPanel>
+
+          <!-- Tasks Tab -->
+          <TabPanel tabId="tasks" :activeTab="activeTab">
+            <template #header>
+              <Clock :size="16" class="bs-header-icon" />
+              <span class="bs-header-title">{{ t('nav.tasks') }}</span>
+            </template>
+            <TaskTab :active="activeTab === 'tasks'" @open-file="handleTaskOpenFile" />
+          </TabPanel>
         </div>
       </main>
 
@@ -179,7 +189,7 @@
       <div v-if="isAuthenticated" class="bottom-dock-wrapper">
         <div class="bottom-dock">
           <div class="dock-center">
-            <button class="dock-btn" :class="{ active: activeTab === 'chat', 'has-unread': (store.state.chatUnread || store.state.taskUnread) && activeTab !== 'chat', 'has-running': store.state.chatRunning && activeTab !== 'chat' && !store.state.chatUnread && !store.state.taskUnread }" @click.stop="switchTab('chat')" :title="t('nav.chat')">
+            <button class="dock-btn" :class="{ active: activeTab === 'chat', 'has-unread': store.state.chatUnread && activeTab !== 'chat', 'has-running': store.state.chatRunning && activeTab !== 'chat' && !store.state.chatUnread }" @click.stop="switchTab('chat')" :title="t('nav.chat')">
               <MessageSquare />
             </button>
             <button class="dock-btn" :class="{ active: activeTab === 'browse' }" @click.stop="switchTab('browse')" :title="t('nav.fileManager')">
@@ -190,6 +200,9 @@
             </button>
             <button class="dock-btn" :class="{ active: activeTab === 'history' }" @click.stop="switchTab('history')" :title="t('nav.history')">
               <GitBranch />
+            </button>
+            <button class="dock-btn" :class="{ active: activeTab === 'tasks', 'has-unread': store.state.taskUnread && activeTab !== 'tasks' }" @click.stop="switchTab('tasks')" :title="t('nav.tasks')">
+              <Clock />
             </button>
             <button class="dock-btn" :class="{ active: activeTab === 'proxy' }" @click.stop="switchTab('proxy')" :title="t('nav.portForward')">
               <EthernetPort />
@@ -211,7 +224,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, provide, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { MessageSquare, Folder, FolderOpen, FileText, GitBranch, EthernetPort, Terminal as TerminalIcon } from 'lucide-vue-next'
+import { MessageSquare, Folder, FolderOpen, FileText, GitBranch, EthernetPort, Terminal as TerminalIcon, Clock } from 'lucide-vue-next'
 import AppHeader from './components/common/AppHeader.vue'
 import TabPanel from './components/common/TabPanel.vue'
 import WelcomeView from './components/WelcomeView.vue'
@@ -233,7 +246,9 @@ import DialogOverlay from './components/common/DialogOverlay.vue'
 import SessionDrawer from './components/session/SessionDrawer.vue'
 import QuoteQuestionBar from './components/common/QuoteQuestionBar.vue'
 import HeaderMarquee from './components/common/HeaderMarquee.vue'
+import TaskTab from '@/components/task/TaskTab.vue'
 import { useQuoteQuestion } from './composables/useQuoteQuestion.ts'
+import { useTaskTab } from '@/composables/useTaskTab.ts'
 import { useSessionIdentity } from './composables/useSessionIdentity.ts'
 import { useToast } from './composables/useToast.ts'
 import { useAppMode } from './composables/useAppMode.ts'
@@ -257,6 +272,8 @@ function switchTab(tab) {
   activeTab.value = tab
   if (tab === 'chat') {
     store.state.chatUnread = false
+  }
+  if (tab === 'tasks') {
     store.state.taskUnread = false
   }
 }
@@ -289,6 +306,7 @@ useFileWatch({
 
 const { isAppMode } = useAppMode()
 const { syncToNative } = usePortForward()
+const { startTaskPolling, stopTaskPolling, navigateToTask } = useTaskTab()
 const terminalRequestedCwd = ref(null)
 
 const quoteQuestion = useQuoteQuestion()
@@ -397,6 +415,16 @@ async function handleBrowseSelectFile(path) {
     activeTab.value = 'viewer'
 }
 
+async function handleTaskOpenFile(filePath) {
+    await store.selectFile(filePath)
+    switchTab('viewer')
+}
+
+function onTaskCardClick(taskId) {
+    navigateToTask(taskId)
+    switchTab('tasks')
+}
+
 async function handleRename({ path, name }) {
     await store.renameFile(path, name)
 }
@@ -494,6 +522,7 @@ function playQuoteEmitAnimation(e) {
 }
 
 onMounted(async () => {
+    startTaskPolling()
     window.addEventListener('open-file-manager', handleOpenFileManager)
     window.addEventListener('quote-sent', playQuoteEmitAnimation)
     applyTheme(theme.value)
@@ -535,10 +564,6 @@ onMounted(async () => {
         const sr = await fetch('/api/ai/sessions')
         if (sr.ok) { const sd = await sr.json(); if (sd.sessions?.some(s => s.unreadCount > 0)) store.state.chatUnread = true }
     } catch (_) {}
-    try {
-        const tr = await fetch('/api/tasks')
-        if (tr.ok) { const td = await tr.json(); if (td.hasUnread) store.state.taskUnread = true }
-    } catch (_) {}
     if (isAppMode.value) syncToNative().catch(() => {})
     try { await store.loadProject() } catch (_) {
         toast.show(t('toast.projectLoadFailed'), { icon: '⚠️', type: 'error', duration: 0, onClick: () => location.reload() }); return
@@ -559,6 +584,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+    stopTaskPolling()
     window.removeEventListener('open-file-manager', handleOpenFileManager)
     window.removeEventListener('quote-sent', playQuoteEmitAnimation)
 })
@@ -597,7 +623,7 @@ onUnmounted(() => {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
+    gap: 8px;
 }
 
 .dock-btn {

@@ -23,11 +23,6 @@
           <Trash2 :size="14" />
         </button>
       </div>
-      <button class="chat-action-btn" :class="{ 'has-unread': taskUnread }"
-        @click="$emit('open-session-tab', 'tasks')"
-        :title="t('chat.actions.scheduledTasks')">
-        <Calendar :size="14" />
-      </button>
       <button class="chat-action-btn" :class="{ active: autoSpeechEnabled }"
         @click="$emit('toggle-auto-speech')"
         :title="t('chat.actions.autoSpeech')">
@@ -167,7 +162,7 @@
 <script setup>
 import { ref, computed, nextTick, watch, onBeforeUnmount, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { MessageSquare, List, Plus, Trash2, Calendar, Volume2, Upload, Paperclip, FileImage, FileText, Folder, XCircle, Inbox, Send, Square, Cpu, ChevronDown, Check } from 'lucide-vue-next'
+import { MessageSquare, List, Plus, Trash2, Volume2, Upload, Paperclip, FileImage, FileText, Folder, XCircle, Inbox, Send, Square, Cpu, ChevronDown, Check } from 'lucide-vue-next'
 import { baseName } from '@/utils/path.ts'
 import PopupMenu from '@/components/common/PopupMenu.vue'
 import QuickSendDialog from '@/components/chat/QuickSendDialog.vue'
@@ -191,7 +186,6 @@ const props = defineProps({
   currentSessionId: String,
   chatUnread: Boolean,
   chatRunning: Boolean,
-  taskUnread: Boolean,
   currentModelId: String,
   currentModelName: String,
   agentModels: { type: Array, default: () => [] },

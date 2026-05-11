@@ -88,7 +88,6 @@ export function useChatSession(options: UseChatSessionOptions) {
   const switching = ref(false)
 
   const sessionDrawerOpen = ref(false)
-  const taskDrawerOpen = ref(false)
   const lastMsgCount = ref(0)
   let msgCountInterval: ReturnType<typeof setInterval> | null = null
   let globalPollingInterval: ReturnType<typeof setInterval> | null = null
@@ -363,11 +362,7 @@ export function useChatSession(options: UseChatSessionOptions) {
   }
 
   function openSessionTab(tab) {
-    if (tab === 'tasks') {
-      taskDrawerOpen.value = true
-    } else {
-      sessionDrawerOpen.value = true
-    }
+    sessionDrawerOpen.value = true
   }
 
   function startMsgCountPolling() {
@@ -422,24 +417,6 @@ export function useChatSession(options: UseChatSessionOptions) {
 
         // Track running sessions for dock/chat button indicator
         store.state.chatRunning = newRunning.size > 0
-
-        // Check for unread task executions
-        let totalTaskUnread = 0
-        try {
-          const taskResp = await fetch('/api/tasks')
-          if (taskResp.ok) {
-            const taskData = await taskResp.json()
-            store.state.taskUnread = !!taskData.hasUnread
-            // Only update tasks reference when data actually changed,
-            // to avoid triggering watchers (e.g. blockTasks) on every 15s poll.
-            const newTasks = taskData.tasks || []
-            if (store.state.tasks.length !== newTasks.length ||
-                newTasks.some((t, i) => t.id !== store.state.tasks[i]?.id || t.status !== store.state.tasks[i]?.status || t.runCount !== store.state.tasks[i]?.runCount)) {
-              store.state.tasks = newTasks
-            }
-            totalTaskUnread = (taskData.tasks || []).reduce((sum: number, t: any) => sum + (t.unreadCount || 0), 0)
-          }
-        } catch (_) {}
 
         // Check for completed sessions
         const completedSessions: string[] = []
@@ -531,7 +508,6 @@ export function useChatSession(options: UseChatSessionOptions) {
     runningSessions,
     // UI state — local to this instance
     sessionDrawerOpen,
-    taskDrawerOpen,
     agentHeaderTitle,
     totalMessages,
     hasMore,

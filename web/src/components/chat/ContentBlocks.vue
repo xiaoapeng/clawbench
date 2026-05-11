@@ -43,37 +43,25 @@
         <AlertCircle :size="14" class="warning-icon" />
         <span class="warning-text">{{ getWarningText(block) }}</span>
       </div>
-      <!-- Scheduled task card(s) (inline in message) — must come before generic text block -->
+      <!-- Scheduled task card(s) — simplified: click navigates to Tasks tab -->
       <template v-else-if="block.type === 'text' && hasScheduledTasks(bi)">
         <div v-if="getBlockHtml(bi, block)" v-html="getBlockHtml(bi, block)"></div>
-        <div v-for="(sKey, sIdx) in scheduledTaskKeys(bi)" :key="sIdx" class="scheduled-task-card" :class="{ deleted: blockTasks[sKey].deleted }">
-          <div class="stask-header" @click="!blockTasks[sKey].deleted && !blockTasks[sKey].loading && blockTasks[sKey].task && $emit('edit-task', blockTasks[sKey].taskId)">
+        <div v-for="(sKey, sIdx) in scheduledTaskKeys(bi)" :key="sIdx" class="scheduled-task-card" :class="{ deleted: blockTasks[sKey].deleted }" @click="!blockTasks[sKey].deleted && !blockTasks[sKey].loading && blockTasks[sKey].task && $emit('task-card-click', blockTasks[sKey].taskId)">
+          <div class="stask-header">
             <span v-if="blockTasks[sKey].deleted" class="stask-icon">🗑️</span>
             <span v-else class="stask-icon">⏰</span>
             <template v-if="blockTasks[sKey].deleted">{{ t('chat.contentBlocks.taskDeleted') }}</template>
             <template v-else-if="blockTasks[sKey].loading">{{ t('chat.contentBlocks.loading') }}</template>
             <template v-else>{{ blockTasks[sKey].task?.name || t('chat.contentBlocks.scheduledTaskCreated') }}</template>
-            <button v-if="!blockTasks[sKey].deleted && !blockTasks[sKey].loading && blockTasks[sKey].task"
-                    class="stask-history-btn" @click.stop="$emit('view-history', blockTasks[sKey].taskId)" :title="t('task.exec.title')">
-              <History :size="14" />
-            </button>
-            <button v-if="!blockTasks[sKey].deleted && !blockTasks[sKey].loading && blockTasks[sKey].task"
-                    class="stask-delete-btn" @click.stop="$emit('task-action', blockTasks[sKey].taskId, 'delete')" :title="t('chat.contentBlocks.delete')">
-              <Trash2 :size="13" />
-            </button>
+            <span v-if="!blockTasks[sKey].deleted && !blockTasks[sKey].loading && blockTasks[sKey].task" class="stask-status-badge" :class="blockTasks[sKey].task.status">{{ statusLabelSimple(blockTasks[sKey].task) }}</span>
           </div>
-          <div v-if="!blockTasks[sKey].deleted && !blockTasks[sKey].loading && blockTasks[sKey].task" class="stask-body" @click="$emit('edit-task', blockTasks[sKey].taskId)">
+          <div v-if="!blockTasks[sKey].deleted && !blockTasks[sKey].loading && blockTasks[sKey].task" class="stask-body">
             <div class="stask-row"><strong>{{ t('chat.contentBlocks.frequency') }}</strong>{{ humanizeCron(blockTasks[sKey].task.cronExpr) }}</div>
             <div class="stask-row"><strong>{{ t('chat.contentBlocks.executor') }}</strong>{{ getAgentIcon(blockTasks[sKey].task.agentId) }} {{ getAgentName(blockTasks[sKey].task.agentId) }}</div>
-            <div class="stask-row"><strong>{{ t('chat.contentBlocks.repeat') }}</strong>{{ repeatLabel(blockTasks[sKey].task.repeatMode, blockTasks[sKey].task.maxRuns) }}</div>
-            <div class="stask-row"><strong>{{ t('chat.contentBlocks.status') }}</strong><span class="stask-status-dot" :class="statusClass(blockTasks[sKey].task)"></span>{{ statusLabel(blockTasks[sKey].task) }}</div>
-            <div v-if="blockTasks[sKey].task.lastRunAt" class="stask-row"><strong>{{ t('chat.contentBlocks.lastRun') }}</strong>{{ formatTime(blockTasks[sKey].task.lastRunAt) }}</div>
-            <div v-if="blockTasks[sKey].task.nextRunAt" class="stask-row"><strong>{{ t('chat.contentBlocks.nextRun') }}</strong>{{ formatTime(blockTasks[sKey].task.nextRunAt) }}</div>
-            <div class="stask-actions">
-              <button v-if="blockTasks[sKey].task.status === 'active'" class="stask-action-btn" @click.stop="$emit('task-action', blockTasks[sKey].taskId, 'pause')">{{ t('chat.contentBlocks.pause') }}</button>
-              <button v-if="blockTasks[sKey].task.status === 'paused'" class="stask-action-btn" @click.stop="$emit('task-action', blockTasks[sKey].taskId, 'resume')">{{ t('chat.contentBlocks.resume') }}</button>
-              <button v-if="blockTasks[sKey].task.status === 'active' || blockTasks[sKey].task.status === 'paused'" class="stask-action-btn" @click.stop="$emit('task-action', blockTasks[sKey].taskId, 'trigger')">{{ t('chat.contentBlocks.trigger') }}</button>
-            </div>
+          </div>
+          <div class="stask-view-btn" v-if="!blockTasks[sKey].deleted && !blockTasks[sKey].loading && blockTasks[sKey].task">
+            {{ t('chat.contentBlocks.viewDetail') }}
+            <ChevronRight :size="12" />
           </div>
         </div>
       </template>
@@ -104,7 +92,7 @@ import { ref, watch, onUnmounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { handleToolAction, shouldAutoExpandTool } from '@/utils/renderToolDetail.ts'
 import { getToolIcon } from '@/utils/icons'
-import { CircleHelp, ChevronDown, CheckCircle2, AlertCircle, AlertTriangle, XCircle, Pencil, History, Trash2 } from 'lucide-vue-next'
+import { CircleHelp, ChevronDown, ChevronRight, CheckCircle2, AlertCircle, AlertTriangle, XCircle } from 'lucide-vue-next'
 
 const { t } = useI18n()
 
@@ -184,7 +172,7 @@ const props = defineProps({
   staticBlockCache: { type: Object, default: null },
 })
 
-const emit = defineEmits(['toggle-tool', 'show-tool-detail', 'edit-task', 'view-history', 'task-action', 'send-message', 'render-flush'])
+const emit = defineEmits(['toggle-tool', 'show-tool-detail', 'task-card-click', 'send-message', 'render-flush'])
 
 // Key helper: use msgId if available, otherwise msgIndex
 function key(bi) {
@@ -240,6 +228,13 @@ function statusLabel(task) {
     if (task.runningCount > 0) return `${t('chat.contentBlocks.statusRunning')} (${execLabel})`
     return `${t('chat.contentBlocks.statusActive')} (${execLabel})`
   }
+  if (task.status === 'paused') return t('chat.contentBlocks.statusPaused')
+  if (task.status === 'completed') return t('chat.contentBlocks.statusCompleted')
+  return task.status
+}
+
+function statusLabelSimple(task) {
+  if (task.status === 'active') return t('chat.contentBlocks.statusActive')
   if (task.status === 'paused') return t('chat.contentBlocks.statusPaused')
   if (task.status === 'completed') return t('chat.contentBlocks.statusCompleted')
   return task.status
@@ -645,65 +640,10 @@ onUnmounted(() => {
   margin-right: 4px;
 }
 
-.stask-history-btn {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--accent-color, #4a90d9);
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.stask-history-btn:hover {
-  background: color-mix(in srgb, var(--accent-color, #4a90d9) 20%, transparent);
-}
-
-.stask-history-btn svg {
-  flex-shrink: 0;
-  opacity: 0.8;
-}
-
-.stask-delete-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--accent-color, #4a90d9);
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-}
-
-.stask-delete-btn:hover {
-  background: rgba(211, 47, 47, 0.1);
-  color: #d32f2f;
-}
-
-.stask-delete-btn svg {
-  flex-shrink: 0;
-  opacity: 0.8;
-}
-
-.stask-delete-btn:hover svg {
-  opacity: 1;
-}
-
 .stask-body {
   padding: 10px 12px;
   font-size: 12px;
   line-height: 1.6;
-  cursor: pointer;
 }
 
 .stask-row {
@@ -717,47 +657,28 @@ onUnmounted(() => {
   color: var(--text-secondary, #495057);
 }
 
-.stask-status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  display: inline-block;
-  flex-shrink: 0;
-  align-self: center;
-}
-
-.stask-status-dot.status-active {
-  background: #4caf50;
-}
-
-.stask-status-dot.status-paused {
-  background: #ff9800;
-}
-
-.stask-status-dot.status-completed {
-  background: #9e9e9e;
-}
-
-.stask-actions {
+.stask-view-btn {
   display: flex;
-  gap: 6px;
-  padding-top: 6px;
-  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 0;
+  font-size: 12px;
+  color: var(--accent-color, #0066cc);
+  font-weight: 500;
 }
 
-.stask-action-btn {
-  padding: 3px 10px;
-  border: 1px solid color-mix(in srgb, var(--accent-color, #4a90d9) 25%, var(--border-color, #ddd));
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--accent-color, #4a90d9) 6%, var(--bg-secondary, #f5f5f5));
-  color: var(--text-primary);
-  cursor: pointer;
-  font-size: 0.85em;
+.stask-status-badge {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-weight: 500;
+  margin-left: auto;
 }
 
-.stask-action-btn:hover {
-  background: color-mix(in srgb, var(--accent-color, #4a90d9) 12%, var(--bg-hover, #e0e0e0));
-}
+.stask-status-badge.active { background: rgba(34, 197, 94, 0.12); color: #22c55e; }
+.stask-status-badge.paused { background: rgba(234, 179, 8, 0.12); color: #eab308; }
+.stask-status-badge.completed { background: var(--bg-tertiary, #e9ecef); color: var(--text-muted, #999); }
 </style>
 
 <style>
