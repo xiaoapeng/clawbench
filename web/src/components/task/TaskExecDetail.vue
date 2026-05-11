@@ -59,7 +59,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, provide, onUnmounted, inject } from 'vue'
+import { ref, computed, watch, nextTick, provide, onUnmounted, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Info } from 'lucide-vue-next'
 import TaskBreadcrumb from '@/components/task/TaskBreadcrumb.vue'
@@ -80,7 +80,7 @@ const emit = defineEmits(['close', 'navigate', 'open-file'])
 
 const { t } = useI18n()
 const theme = inject('theme', ref('light'))
-const { openFilePath } = useFilePathAnnotation()
+const { openFilePath, verifyFilePaths } = useFilePathAnnotation()
 const switchTab = inject('switchTab', () => {})
 
 // ── Agents (for getAgentIcon/getAgentName) ──
@@ -211,6 +211,18 @@ watch(() => props.execDetail, () => {
   expandedTools.value = {}
   toolDetailOverlay.value.show = false
   metadataModal.value.show = false
+  // Verify file path annotations after content re-renders.
+  // ChatRender.renderMarkdown calls verifyFilePaths targeting #aiChatMessages,
+  // but this component renders outside that container, so non-existent file
+  // path buttons are never removed. Run verification against our own container.
+  nextTick(() => {
+    if (contentRef.value) {
+      const paths = [...contentRef.value.querySelectorAll('.chat-file-open-btn[data-file-path]')]
+        .map(btn => btn.getAttribute('data-file-path'))
+        .filter(Boolean)
+      if (paths.length > 0) verifyFilePaths([...new Set(paths)], contentRef.value)
+    }
+  })
 })
 
 onUnmounted(() => {
