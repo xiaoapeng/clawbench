@@ -74,4 +74,11 @@ function handleHeaderClick() {
   opacity: 1;
   pointer-events: auto;
 }
+
+/* Tab panels sit directly below AppHeader which already has a border-bottom;
+   no need for another border on the tab header — child components like
+   .dir-nav provide their own dividers where needed. */
+.tab-panel > .bs-header {
+  border-bottom: none;
+}
 </style>

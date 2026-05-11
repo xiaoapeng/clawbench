@@ -62,7 +62,7 @@
 /* Inline Code */
 .markdown-body code,
 .chat-message.assistant code {
-    background: var(--code-bg);
+    background: var(--bg-tertiary);
     border-radius: 4px;
 }
 
@@ -75,7 +75,7 @@
 /* Code Block */
 .markdown-body pre,
 .chat-message.assistant pre {
-    background: var(--code-bg);
+    background: var(--bg-tertiary);
     overflow-x: auto;
 }
 
