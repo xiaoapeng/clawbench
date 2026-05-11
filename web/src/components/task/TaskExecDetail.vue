@@ -2,12 +2,7 @@
   <div class="exec-detail-page">
     <!-- Header: breadcrumb + info button -->
     <div class="exec-detail-header">
-      <TaskBreadcrumb
-        currentView="exec"
-        :taskName="taskName"
-        :execDetailOpen="true"
-        @navigate="onBreadcrumbNavigate"
-      />
+      <TaskBreadcrumb :taskName="taskName" />
       <button class="info-btn" @click="showMetadata"><Info :size="16" /></button>
     </div>
 
@@ -76,7 +71,7 @@ const props = defineProps({
   taskName: String,
 })
 
-const emit = defineEmits(['close', 'navigate', 'open-file'])
+const emit = defineEmits(['close', 'open-file'])
 
 const { t } = useI18n()
 const theme = inject('theme', ref('light'))
@@ -183,11 +178,6 @@ function showMetadata() {
   metadataModal.value.sessionId = ''
   metadataModal.value.indexed = false
   metadataModal.value.show = true
-}
-
-// ── Breadcrumb navigation ──
-function onBreadcrumbNavigate(view) {
-  emit('navigate', view)
 }
 
 // ── Delegated click handler for .chat-file-open-btn ──

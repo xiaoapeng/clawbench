@@ -44,6 +44,14 @@ export function useTaskTab() {
         }
     }
 
+    function navigateToList() {
+        formViewOpen.value = false
+        execDetailOpen.value = false
+        selectedExecId.value = null
+        currentView.value = 'list'
+        selectedTaskId.value = null
+    }
+
     function openExecDetail(execId: string, execData?: any) {
         selectedExecId.value = execId
         selectedExecData.value = execData || null
@@ -139,6 +147,7 @@ export function useTaskTab() {
         // Navigation methods
         navigateToTaskSettings,
         navigateToTaskHistory,
+        navigateToList,
         goBack,
         openExecDetail,
         closeExecDetail,

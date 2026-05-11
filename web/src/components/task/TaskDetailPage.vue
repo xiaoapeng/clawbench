@@ -2,11 +2,7 @@
   <div class="task-detail-page">
     <!-- Compact header: breadcrumb only -->
     <div class="detail-header">
-      <TaskBreadcrumb
-        currentView="settings"
-        :taskName="task?.name"
-        @navigate="onBreadcrumbNavigate"
-      />
+      <TaskBreadcrumb :taskName="task?.name" />
     </div>
     <!-- Settings content -->
     <div class="detail-content">
@@ -16,30 +12,18 @@
 </template>
 
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n'
 import TaskBreadcrumb from '@/components/task/TaskBreadcrumb.vue'
 import TaskOverviewTab from '@/components/task/TaskOverviewTab.vue'
-import { useTaskTab } from '@/composables/useTaskTab'
-
-const { t } = useI18n()
-const { goBack } = useTaskTab()
 
 defineProps<{
   task: any
 }>()
 
 defineEmits<{
-  back: []
   edit: []
   deleted: []
   history: []
 }>()
-
-function onBreadcrumbNavigate(view: string) {
-  if (view === 'list') {
-    goBack()
-  }
-}
 </script>
 
 <style scoped>

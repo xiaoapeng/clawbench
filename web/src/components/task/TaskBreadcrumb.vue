@@ -3,34 +3,32 @@
     <!-- Root crumb: 任务列表 -->
     <span
       class="task-crumb"
-      :class="{ current: currentView === 'list' && !formOpen, clickable: currentView !== 'list' || formOpen }"
-      @click="(currentView !== 'list' || formOpen) && $emit('navigate', 'list')"
+      :class="{ current: isList, clickable: !isList }"
+      @click="!isList && navigate('list')"
     >{{ t('task.title') }}</span>
 
-    <!-- Task crumb (shown when a task is selected) -->
+    <!-- Task name crumb -->
     <template v-if="taskName">
       <span class="task-crumb-sep">›</span>
       <span
         class="task-crumb"
-        :class="{ current: (currentView === 'settings') && !execDetailOpen && !formOpen, clickable: (currentView === 'history' || currentView === 'exec') || formOpen }"
-        @click="((currentView === 'history' || currentView === 'exec') || formOpen) && $emit('navigate', 'settings')"
+        :class="{ current: isSettings, clickable: !isSettings }"
+        @click="!isSettings && navigate('settings')"
       >{{ taskName }}</span>
     </template>
 
-    <!-- History crumb -->
-    <template v-if="currentView === 'history' && !execDetailOpen && !formOpen">
+    <!-- History crumb (when on history or exec detail from history) -->
+    <template v-if="showHistoryCrumb">
       <span class="task-crumb-sep">›</span>
-      <span class="task-crumb current">{{ t('task.exec.title') }}</span>
-    </template>
-
-    <!-- Exec crumb (shown when viewing execution detail) -->
-    <template v-if="execDetailOpen">
-      <span class="task-crumb-sep">›</span>
-      <span class="task-crumb current">{{ t('task.exec.title') }}</span>
+      <span
+        class="task-crumb"
+        :class="{ current: isHistory, clickable: !isHistory }"
+        @click="!isHistory && navigate('history')"
+      >{{ t('task.exec.title') }}</span>
     </template>
 
     <!-- Form crumb -->
-    <template v-if="formOpen">
+    <template v-if="formViewOpen">
       <span class="task-crumb-sep">›</span>
       <span class="task-crumb current">{{ formMode === 'create' ? t('task.form.createTitle') : t('task.form.editTitle') }}</span>
     </template>
@@ -38,19 +36,40 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useTaskTab } from '@/composables/useTaskTab'
 
 const { t } = useI18n()
+const { currentView, selectedTaskId, execDetailOpen, formViewOpen, formMode, navigateToList, navigateToTaskSettings, navigateToTaskHistory } = useTaskTab()
 
-defineProps({
-  currentView: { type: String, default: 'list' },
+const props = defineProps({
   taskName: String,
-  execDetailOpen: Boolean,
-  formOpen: Boolean,
-  formMode: { type: String, default: 'create' },
 })
 
-defineEmits(['navigate'])
+// Derived state
+const isList = computed(() => currentView.value === 'list' && !formViewOpen.value)
+const isSettings = computed(() => currentView.value === 'settings' && !execDetailOpen.value && !formViewOpen.value)
+const isHistory = computed(() => currentView.value === 'history' && !execDetailOpen.value && !formViewOpen.value)
+
+const showHistoryCrumb = computed(() => {
+  // Show when on history page, or when exec detail is open from history
+  if (formViewOpen.value) return false
+  return currentView.value === 'history'
+})
+
+// Centralized navigation — no more per-page handlers
+function navigate(target) {
+  if (target === 'list') {
+    navigateToList()
+  } else if (target === 'settings') {
+    const tid = selectedTaskId.value
+    if (tid) navigateToTaskSettings(tid)
+  } else if (target === 'history') {
+    const tid = selectedTaskId.value
+    if (tid) navigateToTaskHistory(tid)
+  }
+}
 </script>
 
 <style scoped>
@@ -77,7 +96,6 @@ defineEmits(['navigate'])
   transition: background 0.15s, color 0.15s;
 }
 
-/* Clickable crumb: has navigation target */
 .task-crumb.clickable {
   cursor: pointer;
 }

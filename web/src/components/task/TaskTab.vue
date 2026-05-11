@@ -2,9 +2,9 @@
   <div class="task-tab" v-show="active">
     <Transition name="slide-view" mode="out-in">
       <TaskListPage v-if="currentView === 'list' && !formViewOpen" key="list" ref="listPageRef" @create="onCreate" @select="onTaskSelect" />
-      <TaskDetailPage v-else-if="currentView === 'settings' && !execDetailOpen && !formViewOpen" key="settings" :task="selectedTaskData" @back="goBack" @edit="onEdit" @deleted="onTaskDeleted" @history="onTaskHistory" />
+      <TaskDetailPage v-else-if="currentView === 'settings' && !execDetailOpen && !formViewOpen" key="settings" :task="selectedTaskData" @edit="onEdit" @deleted="onTaskDeleted" @history="onTaskHistory" />
       <TaskHistoryTab v-else-if="currentView === 'history' && !execDetailOpen && !formViewOpen" key="history" :task="selectedTaskData" @open-file="onOpenFile" />
-      <TaskExecDetail v-else-if="execDetailOpen && !formViewOpen" key="exec" :execDetail="selectedExecData" :taskName="selectedTaskData?.name" @close="closeExecDetail" @navigate="onExecNavigate" @open-file="onOpenFile" />
+      <TaskExecDetail v-else-if="execDetailOpen && !formViewOpen" key="exec" :execDetail="selectedExecData" :taskName="selectedTaskData?.name" @close="closeExecDetail" @open-file="onOpenFile" />
       <TaskFormPage v-else-if="formViewOpen" key="form" :mode="formMode" :task="formMode === 'edit' ? selectedTaskData : null" @close="closeForm" @saved="onFormSaved" />
     </Transition>
   </div>
@@ -28,7 +28,7 @@ const emit = defineEmits<{
   'open-file': [filePath: string]
 }>()
 
-const { currentView, selectedTaskId, selectedExecData, execDetailOpen, formViewOpen, formMode, navigateToTaskSettings, navigateToTaskHistory, goBack, closeExecDetail, openCreateForm, openEditForm, closeForm, loadTasks } = useTaskTab()
+const { currentView, selectedTaskId, selectedExecData, execDetailOpen, formViewOpen, formMode, navigateToTaskSettings, navigateToTaskHistory, navigateToList, closeExecDetail, openCreateForm, openEditForm, closeForm, loadTasks } = useTaskTab()
 
 // Read from store directly — NOT from listPageRef (Vue refs don't expose internal computed)
 const selectedTaskData = computed(() =>
@@ -55,7 +55,7 @@ async function onFormSaved(newTaskId: string) {
 }
 
 function onTaskDeleted() {
-  goBack()
+  navigateToList()
   loadTasks()
   listPageRef.value?.refresh?.()
 }
@@ -70,13 +70,6 @@ function onTaskSelect(taskId: string) {
 
 function onTaskHistory() {
   navigateToTaskHistory(selectedTaskId.value!)
-}
-
-function onExecNavigate(view: string) {
-  closeExecDetail()
-  if (view === 'list') {
-    goBack()
-  }
 }
 </script>
 

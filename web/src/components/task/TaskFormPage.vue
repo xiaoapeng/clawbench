@@ -2,13 +2,7 @@
   <div class="task-form-page">
     <!-- Compact header: breadcrumb -->
     <div class="form-header">
-      <TaskBreadcrumb
-        currentView="detail"
-        :taskName="task?.name"
-        :formOpen="true"
-        :formMode="mode"
-        @navigate="onBreadcrumbNavigate"
-      />
+      <TaskBreadcrumb :taskName="task?.name" />
     </div>
 
     <!-- Scrollable form content -->
@@ -173,11 +167,9 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import TaskBreadcrumb from '@/components/task/TaskBreadcrumb.vue'
 import { useAgents } from '@/composables/useAgents.ts'
-import { useTaskTab } from '@/composables/useTaskTab.ts'
 import { humanizeCron } from '@/utils/format.ts'
 
 const { t } = useI18n()
-const { goBack } = useTaskTab()
 
 const props = defineProps({
   mode: { type: String, default: 'create' },  // 'create' | 'edit'
@@ -341,16 +333,6 @@ async function submit() {
     errors.value = { cronExpr: err.message || t('common.networkError') }
   } finally {
     saving.value = false
-  }
-}
-
-// Breadcrumb navigation
-function onBreadcrumbNavigate(view) {
-  if (view === 'list') {
-    goBack() // close form first, then go back to list
-    goBack()
-  } else if (view === 'detail') {
-    goBack() // close form, return to detail
   }
 }
 

@@ -2,11 +2,7 @@
   <div class="task-history-page">
     <!-- Header with breadcrumb -->
     <div class="history-header">
-      <TaskBreadcrumb
-        currentView="history"
-        :taskName="task?.name"
-        @navigate="onBreadcrumbNavigate"
-      />
+      <TaskBreadcrumb :taskName="task?.name" />
     </div>
     <!-- History content -->
     <div class="task-history-tab">
@@ -80,7 +76,7 @@ const emit = defineEmits(['open-file'])
 const { t } = useI18n()
 const dialog = useDialog()
 const toast = useToast()
-const { openExecDetail, goBack, navigateToTaskSettings, selectedTaskId } = useTaskTab()
+const { openExecDetail } = useTaskTab()
 
 const chatRender = useChatRender({ messages: ref([]), theme: ref('light'), currentSessionId: ref('') })
 
@@ -197,15 +193,6 @@ async function markExecRead(execId) {
     })
   } catch (err) {
     // Silently ignore read-mark failures
-  }
-}
-
-function onBreadcrumbNavigate(view) {
-  if (view === 'list') {
-    goBack()
-  } else if (view === 'settings') {
-    const tid = selectedTaskId.value
-    if (tid) navigateToTaskSettings(tid)
   }
 }
 
