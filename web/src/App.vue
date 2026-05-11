@@ -139,7 +139,7 @@
           <!-- Tasks Tab -->
           <TabPanel tabId="tasks" :activeTab="activeTab">
             <template #header>
-              <Clock :size="16" class="bs-header-icon" />
+              <CalendarDays :size="16" class="bs-header-icon" />
               <span class="bs-header-title">{{ t('nav.tasks') }}</span>
             </template>
             <TaskTab :active="activeTab === 'tasks'" @open-file="handleTaskOpenFile" />
@@ -198,18 +198,37 @@
             <button class="dock-btn" :class="{ active: activeTab === 'viewer' }" @click.stop="switchTab('viewer')" :title="t('nav.fileViewer')">
               <FileText />
             </button>
-            <button class="dock-btn" :class="{ active: activeTab === 'history' }" @click.stop="switchTab('history')" :title="t('nav.history')">
-              <GitBranch />
-            </button>
             <button class="dock-btn" :class="{ active: activeTab === 'tasks', 'has-unread': store.state.taskUnread && activeTab !== 'tasks' }" @click.stop="switchTab('tasks')" :title="t('nav.tasks')">
-              <Clock />
+              <CalendarDays />
             </button>
-            <button class="dock-btn" :class="{ active: activeTab === 'proxy' }" @click.stop="switchTab('proxy')" :title="t('nav.portForward')">
-              <EthernetPort />
-            </button>
-            <button class="dock-btn" :class="{ active: activeTab === 'terminal' }" @click.stop="handleDockTerminal" :title="t('terminal.title')">
-              <TerminalIcon />
-            </button>
+            <div class="dock-overflow-wrapper">
+              <button
+                class="dock-btn dock-overflow-btn"
+                :class="{ active: isOverflowTabActive }"
+                @click.stop="toggleOverflowMenu"
+                :title="overflowButtonTitle"
+                :aria-expanded="overflowMenuOpen"
+                aria-haspopup="menu"
+              >
+                <component :is="overflowButtonIcon" />
+              </button>
+              <Transition name="dock-popup">
+                <div v-if="overflowMenuOpen" class="dock-overflow-popup" @keydown.escape="overflowMenuOpen = false">
+                  <button class="dock-overflow-item" :class="{ active: activeTab === 'history' }" @click.stop="handleOverflowSelect('history')">
+                    <GitBranch :size="16" />
+                    <span>{{ t('git.history.projectHistory') }}</span>
+                  </button>
+                  <button class="dock-overflow-item" :class="{ active: activeTab === 'proxy' }" @click.stop="handleOverflowSelect('proxy')">
+                    <EthernetPort :size="16" />
+                    <span>{{ t('nav.portForward') }}</span>
+                  </button>
+                  <button class="dock-overflow-item" :class="{ active: activeTab === 'terminal' }" @click.stop="handleOverflowSelect('terminal')">
+                    <TerminalIcon :size="16" />
+                    <span>{{ t('terminal.title') }}</span>
+                  </button>
+                </div>
+              </Transition>
+            </div>
           </div>
         </div>
         <div class="dock-safe-area"></div>
@@ -224,7 +243,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, provide, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { MessageSquare, Folder, FolderOpen, FileText, GitBranch, EthernetPort, Terminal as TerminalIcon, Clock } from 'lucide-vue-next'
+import { MessageSquare, Folder, FolderOpen, FileText, GitBranch, EthernetPort, Terminal as TerminalIcon, CalendarDays, MoreHorizontal } from 'lucide-vue-next'
 import AppHeader from './components/common/AppHeader.vue'
 import TabPanel from './components/common/TabPanel.vue'
 import WelcomeView from './components/WelcomeView.vue'
@@ -275,6 +294,10 @@ function switchTab(tab) {
   }
   if (tab === 'tasks') {
     store.state.taskUnread = false
+  }
+  // Close overflow menu when switching to a main tab
+  if (!overflowTabs.includes(tab)) {
+    overflowMenuOpen.value = false
   }
 }
 
@@ -446,9 +469,60 @@ function handleDockTerminal() {
     switchTab('terminal')
 }
 
+// Overflow menu state
+const overflowMenuOpen = ref(false)
+const overflowTabs = ['history', 'proxy', 'terminal']
+const overflowTabMeta = {
+  history: { icon: GitBranch, titleKey: 'git.history.projectHistory' },
+  proxy:   { icon: EthernetPort, titleKey: 'nav.portForward' },
+  terminal:{ icon: TerminalIcon, titleKey: 'terminal.title' },
+}
+
+const isOverflowTabActive = computed(() => overflowTabs.includes(activeTab.value))
+
+const overflowButtonIcon = computed(() =>
+  overflowTabMeta[activeTab.value]?.icon ?? MoreHorizontal
+)
+
+const overflowButtonTitle = computed(() =>
+  overflowTabMeta[activeTab.value] ? t(overflowTabMeta[activeTab.value].titleKey) : t('nav.more')
+)
+
+function toggleOverflowMenu() {
+  if (isOverflowTabActive.value && !overflowMenuOpen.value) {
+    // If already on an overflow tab, first click opens menu to allow switching
+    overflowMenuOpen.value = true
+  } else if (overflowMenuOpen.value) {
+    overflowMenuOpen.value = false
+  } else {
+    overflowMenuOpen.value = true
+  }
+}
+
+function handleOverflowSelect(tab) {
+  if (activeTab.value === tab) {
+    // Already on this tab, just close the menu
+    overflowMenuOpen.value = false
+    return
+  }
+  overflowMenuOpen.value = false
+  if (tab === 'terminal') {
+    handleDockTerminal()
+  } else {
+    switchTab(tab)
+  }
+}
+
+// Close overflow menu on outside click
+function handleOverflowOutsideClick(e) {
+  if (overflowMenuOpen.value && !e.target.closest('.dock-overflow-wrapper')) {
+    overflowMenuOpen.value = false
+  }
+}
+
 function handleOpenTerminal(cwd) {
     terminalRequestedCwd.value = cwd || null
-    activeTab.value = 'terminal'
+    switchTab('terminal')
 }
 
 function scrollToLine(line) {
@@ -525,6 +599,7 @@ onMounted(async () => {
     startTaskPolling()
     window.addEventListener('open-file-manager', handleOpenFileManager)
     window.addEventListener('quote-sent', playQuoteEmitAnimation)
+    document.addEventListener('click', handleOverflowOutsideClick)
     applyTheme(theme.value)
     let resp
     try {
@@ -587,6 +662,7 @@ onUnmounted(() => {
     stopTaskPolling()
     window.removeEventListener('open-file-manager', handleOpenFileManager)
     window.removeEventListener('quote-sent', playQuoteEmitAnimation)
+    document.removeEventListener('click', handleOverflowOutsideClick)
 })
 </script>
 
@@ -623,7 +699,7 @@ onUnmounted(() => {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: 12px;
 }
 
 .dock-btn {
@@ -716,5 +792,82 @@ onUnmounted(() => {
     0% { transform: scale(1); box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-color, #0066cc) 60%, transparent); }
     40% { transform: scale(1.25); box-shadow: 0 0 14px 4px color-mix(in srgb, var(--accent-color, #0066cc) 40%, transparent); }
     100% { transform: scale(1); box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-color, #0066cc) 0%, transparent); }
+}
+
+/* Overflow menu */
+.dock-overflow-wrapper {
+    position: relative;
+}
+
+.dock-overflow-popup {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    right: 0;
+    background: var(--bg-elevated, var(--bg-primary));
+    border: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
+    border-radius: 12px;
+    padding: 4px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    z-index: 100;
+    min-width: 140px;
+}
+
+.dock-overflow-popup::after {
+    content: '';
+    position: absolute;
+    bottom: -6px;
+    right: 14px;
+    width: 12px;
+    height: 12px;
+    background: var(--bg-elevated, var(--bg-primary));
+    border-right: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
+    transform: rotate(45deg);
+}
+
+.dock-overflow-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 8px 12px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    white-space: nowrap;
+}
+
+.dock-overflow-item:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+@media (hover: none) {
+    .dock-overflow-item:hover {
+        background: transparent;
+        color: var(--text-secondary);
+    }
+}
+
+.dock-overflow-item.active {
+    background: color-mix(in srgb, var(--accent-color) 15%, transparent);
+    color: var(--accent-color);
+}
+
+/* Popup transition */
+.dock-popup-enter-active {
+    transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.dock-popup-leave-active {
+    transition: opacity 0.1s ease, transform 0.1s ease;
+}
+.dock-popup-enter-from,
+.dock-popup-leave-to {
+    opacity: 0;
+    transform: translateY(4px) scale(0.95);
 }
 </style>

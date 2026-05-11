@@ -28,6 +28,7 @@ export default {
     tasks: '定时任务',
     portForward: '端口转发',
     refresh: '刷新',
+    more: '更多',
   },
   toast: {
     portForwardAppOnly: '端口转发仅在移动端APP支持',

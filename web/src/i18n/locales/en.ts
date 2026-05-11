@@ -28,6 +28,7 @@ export default {
     tasks: 'Tasks',
     portForward: 'Port Forward',
     refresh: 'Refresh',
+    more: 'More',
   },
   toast: {
     portForwardAppOnly: 'Port forwarding is only available in the mobile app',
