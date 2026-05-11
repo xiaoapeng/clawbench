@@ -61,30 +61,30 @@
         <Pencil :size="14" />
       </button>
       <template v-if="task.status === 'active'">
-        <button class="action-btn primary" :disabled="actionLoading" @click="triggerTask">
-          {{ t('chat.contentBlocks.trigger') }}
+        <button class="action-btn accent" :disabled="actionLoading" @click="triggerTask">
+          <Zap :size="13" /> {{ t('chat.contentBlocks.trigger') }}
         </button>
-        <button class="action-btn" :disabled="actionLoading" @click="pauseTask">
-          {{ t('chat.contentBlocks.pause') }}
+        <button class="action-btn warn" :disabled="actionLoading" @click="pauseTask">
+          <Pause :size="13" /> {{ t('chat.contentBlocks.pause') }}
         </button>
         <button class="action-btn danger" :disabled="actionLoading" @click="deleteTask">
-          {{ t('chat.contentBlocks.delete') }}
+          <Trash2 :size="13" />
         </button>
       </template>
       <template v-else-if="task.status === 'paused'">
-        <button class="action-btn primary" :disabled="actionLoading" @click="triggerTask">
-          {{ t('chat.contentBlocks.trigger') }}
+        <button class="action-btn accent" :disabled="actionLoading" @click="triggerTask">
+          <Zap :size="13" /> {{ t('chat.contentBlocks.trigger') }}
         </button>
-        <button class="action-btn" :disabled="actionLoading" @click="resumeTask">
-          {{ t('chat.contentBlocks.resume') }}
+        <button class="action-btn success" :disabled="actionLoading" @click="resumeTask">
+          <Play :size="13" /> {{ t('chat.contentBlocks.resume') }}
         </button>
         <button class="action-btn danger" :disabled="actionLoading" @click="deleteTask">
-          {{ t('chat.contentBlocks.delete') }}
+          <Trash2 :size="13" />
         </button>
       </template>
       <template v-else-if="task.status === 'completed'">
         <button class="action-btn danger" :disabled="actionLoading" @click="deleteTask">
-          {{ t('chat.contentBlocks.delete') }}
+          <Trash2 :size="13" />
         </button>
       </template>
     </div>
@@ -93,7 +93,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { Pencil } from 'lucide-vue-next'
+import { Pencil, Pause, Play, Zap, Trash2 } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 import { useTaskTab } from '@/composables/useTaskTab'
 import { useDialog } from '@/composables/useDialog'
@@ -408,6 +408,40 @@ async function deleteTask() {
   .action-btn.primary:hover:not(:disabled) {
     opacity: 0.9;
     background: var(--accent-color, #0066cc);
+  }
+}
+
+.action-btn.accent {
+  background: var(--accent-color, #0066cc);
+  color: #fff;
+  border-color: var(--accent-color, #0066cc);
+}
+
+@media (hover: hover) {
+  .action-btn.accent:hover:not(:disabled) {
+    opacity: 0.9;
+  }
+}
+
+.action-btn.warn {
+  color: #eab308;
+  border-color: rgba(234, 179, 8, 0.4);
+}
+
+@media (hover: hover) {
+  .action-btn.warn:hover:not(:disabled) {
+    background: rgba(234, 179, 8, 0.08);
+  }
+}
+
+.action-btn.success {
+  color: #22c55e;
+  border-color: rgba(34, 197, 94, 0.4);
+}
+
+@media (hover: hover) {
+  .action-btn.success:hover:not(:disabled) {
+    background: rgba(34, 197, 94, 0.08);
   }
 }
 

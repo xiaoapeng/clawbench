@@ -160,15 +160,6 @@
 
     <!-- Fixed bottom bar -->
     <div class="form-footer">
-      <template v-if="mode === 'edit' && task">
-        <button v-if="task.status === 'active'" class="footer-btn warn" :disabled="saving" @click="pauseTask">
-          <Pause :size="13" /> {{ t('task.pause') }}
-        </button>
-        <button v-if="task.status === 'paused'" class="footer-btn success" :disabled="saving" @click="resumeTask">
-          <Play :size="13" /> {{ t('task.resume') }}
-        </button>
-        <span class="footer-spacer"></span>
-      </template>
       <button class="footer-btn primary" :disabled="saving" @click="submit">
         {{ mode === 'create' ? t('task.form.create') : t('task.form.save') }}
       </button>
@@ -180,7 +171,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Pause, Play } from 'lucide-vue-next'
 import TaskBreadcrumb from '@/components/task/TaskBreadcrumb.vue'
 import { useAgents } from '@/composables/useAgents.ts'
 import { useTaskTab } from '@/composables/useTaskTab.ts'
@@ -349,41 +339,6 @@ async function submit() {
     emit('saved', result.task?.id)
   } catch (err) {
     errors.value = { cronExpr: err.message || t('common.networkError') }
-  } finally {
-    saving.value = false
-  }
-}
-
-// Pause / Resume task
-async function pauseTask() {
-  if (!form.value.id || saving.value) return
-  saving.value = true
-  try {
-    await fetch(`/api/tasks/${form.value.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'pause' }),
-    })
-    emit('saved')
-  } catch (err) {
-    console.error('Failed to pause task:', err)
-  } finally {
-    saving.value = false
-  }
-}
-
-async function resumeTask() {
-  if (!form.value.id || saving.value) return
-  saving.value = true
-  try {
-    await fetch(`/api/tasks/${form.value.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'resume' }),
-    })
-    emit('saved')
-  } catch (err) {
-    console.error('Failed to resume task:', err)
   } finally {
     saving.value = false
   }
@@ -685,10 +640,6 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
-.footer-spacer {
-  flex: 1;
-}
-
 .footer-btn {
   padding: 6px 12px;
   border: none;
@@ -723,23 +674,5 @@ onMounted(() => {
 
 .footer-btn.secondary:hover {
   background: #e0e0e0;
-}
-
-.footer-btn.warn {
-  background: rgba(234, 179, 8, 0.12);
-  color: #eab308;
-}
-
-.footer-btn.warn:hover:not(:disabled) {
-  background: rgba(234, 179, 8, 0.2);
-}
-
-.footer-btn.success {
-  background: rgba(34, 197, 94, 0.12);
-  color: #22c55e;
-}
-
-.footer-btn.success:hover:not(:disabled) {
-  background: rgba(34, 197, 94, 0.2);
 }
 </style>
