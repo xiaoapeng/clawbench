@@ -1,6 +1,6 @@
 <template>
   <div class="task-form-page">
-    <!-- Compact header: breadcrumb + tabs -->
+    <!-- Compact header: breadcrumb -->
     <div class="form-header">
       <TaskBreadcrumb
         currentView="detail"
@@ -9,21 +9,10 @@
         :formMode="mode"
         @navigate="onBreadcrumbNavigate"
       />
-      <div class="form-tabs">
-        <button class="form-tab" :class="{ active: activeTab === 'settings' }" @click="activeTab = 'settings'">
-          <Settings :size="12" />
-          {{ t('task.form.tabSettings') }}
-        </button>
-        <button class="form-tab" :class="{ active: activeTab === 'prompt', 'has-error': errors.prompt }" @click="activeTab = 'prompt'">
-          <FileText :size="12" />
-          {{ t('task.form.tabPrompt') }}
-          <span class="required-dot">*</span>
-        </button>
-      </div>
     </div>
 
-    <!-- Settings tab -->
-    <div v-show="activeTab === 'settings'" class="form-scroll">
+    <!-- Scrollable form content -->
+    <div class="form-scroll">
       <div v-if="saving" class="saving-indicator">{{ t('task.form.saving') }}</div>
 
       <!-- Task name -->
@@ -160,23 +149,13 @@
         <label class="form-label">{{ t('task.form.maxRuns') }}</label>
         <input type="number" class="form-input" v-model.number="form.maxRuns" min="1" />
       </div>
-    </div>
 
-    <!-- Prompt tab -->
-    <div v-show="activeTab === 'prompt'" class="form-scroll">
-      <div v-if="saving" class="saving-indicator">{{ t('task.form.saving') }}</div>
-      <div class="prompt-toolbar">
-        <button class="preview-toggle" :class="{ active: promptPreview }" :title="promptPreview ? t('task.form.editPrompt') : t('task.form.previewPrompt')" @click="togglePromptPreview">
-          <EyeOff v-if="promptPreview" :size="13" />
-          <Eye v-else :size="13" />
-          {{ promptPreview ? t('task.form.editPrompt') : t('task.form.previewPrompt') }}
-        </button>
+      <!-- Prompt -->
+      <div class="form-group">
+        <label class="form-label">{{ t('task.form.prompt') }} <span class="required">*</span></label>
+        <textarea class="form-textarea prompt-textarea" v-model="form.prompt" :placeholder="t('task.form.promptPlaceholder')"></textarea>
+        <div v-if="errors.prompt" class="form-error">{{ errors.prompt }}</div>
       </div>
-      <div class="prompt-editor-wrap">
-        <textarea v-if="!promptPreview" class="form-textarea prompt-textarea" v-model="form.prompt" :placeholder="t('task.form.promptPlaceholder')"></textarea>
-        <div v-else class="prompt-preview markdown-body" v-html="renderedPromptHtml"></div>
-      </div>
-      <div v-if="errors.prompt" class="form-error">{{ errors.prompt }}</div>
     </div>
 
     <!-- Fixed bottom bar -->
@@ -199,12 +178,11 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Pause, Play, Eye, EyeOff, Settings, FileText } from 'lucide-vue-next'
+import { Pause, Play } from 'lucide-vue-next'
 import TaskBreadcrumb from '@/components/task/TaskBreadcrumb.vue'
 import { useAgents } from '@/composables/useAgents.ts'
-import { useMarkdownRenderer } from '@/composables/useMarkdownRenderer.ts'
 import { useTaskTab } from '@/composables/useTaskTab.ts'
 import { humanizeCron } from '@/utils/format.ts'
 
@@ -220,18 +198,6 @@ const emit = defineEmits(['close', 'saved'])
 
 const saving = ref(false)
 const { agents, loadAgents } = useAgents()
-const { renderMarkdown } = useMarkdownRenderer()
-const promptPreview = ref(false)
-const activeTab = ref('settings')
-
-const renderedPromptHtml = computed(() => {
-  if (!form.value.prompt) return '<p style="color:var(--text-muted,#999);font-style:italic">' + t('task.form.promptPlaceholder') + '</p>'
-  return renderMarkdown(form.value.prompt, { renderMermaid: false })
-})
-
-function togglePromptPreview() {
-  promptPreview.value = !promptPreview.value
-}
 
 // Frequency preset
 const presets = computed(() => [
@@ -339,16 +305,6 @@ function validate() {
     e.cronExpr = t('task.form.cronRequired')
   }
   errors.value = e
-
-  // Auto-switch to the tab with the first error
-  if (Object.keys(e).length > 0) {
-    if (e.prompt) {
-      activeTab.value = 'prompt'
-    } else {
-      activeTab.value = 'settings'
-    }
-  }
-
   return Object.keys(e).length === 0
 }
 
@@ -446,8 +402,6 @@ function onBreadcrumbNavigate(view) {
 // Initialize form on mount
 onMounted(() => {
   errors.value = {}
-  promptPreview.value = true
-  activeTab.value = 'settings'
 
   if (props.mode === 'edit' && props.task) {
     form.value = {
@@ -494,56 +448,12 @@ onMounted(() => {
   overflow: hidden;
 }
 
-/* Compact header: breadcrumb + tabs */
+/* Compact header */
 .form-header {
   display: flex;
   align-items: center;
   padding: 6px 12px;
-  gap: 8px;
   flex-shrink: 0;
-}
-
-.form-tabs {
-  display: flex;
-  gap: 2px;
-  background: var(--bg-secondary, #f0f0f0);
-  border-radius: 6px;
-  padding: 2px;
-  flex-shrink: 0;
-}
-
-.form-tab {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  padding: 3px 10px;
-  border: none;
-  background: transparent;
-  color: var(--text-muted, #999);
-  font-size: 11px;
-  font-weight: 500;
-  cursor: pointer;
-  border-radius: 4px;
-  transition: background 0.15s, color 0.15s;
-}
-
-.form-tab.active {
-  background: var(--bg-primary, #fff);
-  color: var(--accent-color, #0066cc);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-}
-
-.form-tab.has-error {
-  color: #dc3545;
-}
-
-.form-tab.has-error.active {
-  color: #dc3545;
-}
-
-.required-dot {
-  color: #dc3545;
-  font-size: 11px;
 }
 
 /* Scrollable form content */
@@ -622,61 +532,11 @@ onMounted(() => {
   margin-top: 2px;
 }
 
-/* Prompt tab */
-.prompt-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  padding: 4px 0;
-  flex-shrink: 0;
-}
-
-.prompt-editor-wrap {
-  display: flex;
-  flex-direction: column;
-}
-
+/* Prompt textarea */
 .prompt-textarea {
-  height: 50vh;
-  min-height: 200px;
+  height: 40vh;
+  min-height: 120px;
   resize: vertical;
-}
-
-.prompt-preview {
-  height: 50vh;
-  min-height: 200px;
-  overflow-y: auto;
-  padding: 8px 10px;
-  border: 1px solid var(--border-color, #e5e5e5);
-  border-radius: 4px;
-  background: var(--bg-primary, #fff);
-  font-size: 13px;
-  line-height: 1.6;
-}
-
-/* Preview toggle button */
-.preview-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--text-muted, #999);
-  cursor: pointer;
-  padding: 3px 8px;
-  font-size: 12px;
-  transition: color 0.15s, background 0.15s;
-}
-
-.preview-toggle:hover {
-  color: var(--accent-color, #0066cc);
-  background: var(--bg-tertiary, #f0f0f0);
-}
-
-.preview-toggle.active {
-  color: var(--accent-color, #0066cc);
-  background: var(--bg-tertiary, #f0f0f0);
 }
 
 /* Preset buttons */
@@ -819,7 +679,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 12px;
+  padding: 6px 12px;
   border-top: 1px solid var(--border-color, #e5e5e5);
   background: var(--bg-primary, #fff);
   flex-shrink: 0;
