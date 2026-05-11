@@ -102,7 +102,7 @@ function navigate(target) {
   white-space: nowrap;
   cursor: default;
   color: var(--text-secondary, #666);
-  background: var(--bg-secondary, #f0f0f0);
+  background: var(--bg-tertiary, #e9ecef);
   transition: background 0.15s, color 0.15s;
 }
 
@@ -112,7 +112,7 @@ function navigate(target) {
   border-radius: 4px 0 0 4px;
 }
 
-/* Right arrow — ::after triangle that overlaps the next crumb */
+/* Right arrow — slightly darker than bg to show chevron edge */
 .crumb::after {
   content: '';
   position: absolute;
@@ -122,7 +122,7 @@ function navigate(target) {
   height: 0;
   border-style: solid;
   border-width: 11px 0 11px 8px;
-  border-color: transparent transparent transparent var(--border-color, #ddd);
+  border-color: transparent transparent transparent color-mix(in srgb, var(--bg-tertiary, #e9ecef) 85%, #000);
   transition: border-color 0.15s;
   z-index: 1;
 }
@@ -139,7 +139,7 @@ function navigate(target) {
   }
 
   .crumb.clickable:hover::after {
-    border-left-color: var(--border-color, #ccc);
+    border-left-color: color-mix(in srgb, var(--bg-secondary, #dde1e6) 80%, #000);
   }
 }
 
@@ -148,18 +148,18 @@ function navigate(target) {
 }
 
 .crumb.clickable:active::after {
-  border-left-color: var(--border-color, #bbb);
+  border-left-color: color-mix(in srgb, var(--bg-secondary, #d0d5da) 80%, #000);
 }
 
-/* ── Current (active) crumb ── */
+/* ── Current (active) crumb — accent color darkened ── */
 .crumb.current {
-  background: var(--text-primary, #444);
+  background: color-mix(in srgb, var(--accent-color, #0066cc) 75%, #000);
   color: #fff;
   font-weight: 600;
 }
 
 .crumb.current::after {
-  border-left-color: var(--text-primary, #444);
+  border-left-color: color-mix(in srgb, var(--accent-color, #0066cc) 65%, #000);
 }
 
 /* Last crumb: no arrow */
@@ -169,12 +169,12 @@ function navigate(target) {
 
 @media (hover: hover) {
   .crumb.current:hover {
-    background: var(--text-primary, #444);
+    background: color-mix(in srgb, var(--accent-color, #0066cc) 75%, #000);
     color: #fff;
   }
 
   .crumb.current:hover::after {
-    border-left-color: var(--text-primary, #444);
+    border-left-color: color-mix(in srgb, var(--accent-color, #0066cc) 65%, #000);
   }
 }
 </style>
