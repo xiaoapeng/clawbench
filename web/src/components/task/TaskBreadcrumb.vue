@@ -2,42 +2,38 @@
   <div class="task-breadcrumb">
     <!-- Root crumb: 任务列表 -->
     <span
-      class="task-crumb"
+      class="crumb"
       :class="{ current: isList, clickable: !isList }"
       @click="!isList && navigate('list')"
     >{{ t('task.title') }}</span>
 
     <!-- Task name crumb -->
-    <template v-if="taskName">
-      <span class="task-crumb-sep">›</span>
-      <span
-        class="task-crumb"
-        :class="{ current: isSettings, clickable: !isSettings }"
-        @click="!isSettings && navigate('settings')"
-      >{{ taskName }}</span>
-    </template>
+    <span
+      v-if="taskName"
+      class="crumb"
+      :class="{ current: isSettings, clickable: !isSettings }"
+      @click="!isSettings && navigate('settings')"
+    >{{ taskName }}</span>
 
     <!-- History crumb -->
-    <template v-if="showHistoryCrumb">
-      <span class="task-crumb-sep">›</span>
-      <span
-        class="task-crumb"
-        :class="{ current: isHistory, clickable: !isHistory }"
-        @click="!isHistory && navigate('history')"
-      >{{ t('task.exec.title') }}</span>
-    </template>
+    <span
+      v-if="showHistoryCrumb"
+      class="crumb"
+      :class="{ current: isHistory, clickable: !isHistory }"
+      @click="!isHistory && navigate('history')"
+    >{{ t('task.exec.title') }}</span>
 
     <!-- Exec detail crumb -->
-    <template v-if="execDetailOpen">
-      <span class="task-crumb-sep">›</span>
-      <span class="task-crumb current">{{ t('task.exec.detail') }}</span>
-    </template>
+    <span
+      v-if="execDetailOpen"
+      class="crumb current"
+    >{{ t('task.exec.detail') }}</span>
 
     <!-- Form crumb -->
-    <template v-if="formViewOpen">
-      <span class="task-crumb-sep">›</span>
-      <span class="task-crumb current">{{ formMode === 'create' ? t('task.form.createTitle') : t('task.form.editTitle') }}</span>
-    </template>
+    <span
+      v-if="formViewOpen"
+      class="crumb current"
+    >{{ formMode === 'create' ? t('task.form.createTitle') : t('task.form.editTitle') }}</span>
   </div>
 </template>
 
@@ -62,12 +58,11 @@ const isSettings = computed(() => currentView.value === 'settings' && !execDetai
 const isHistory = computed(() => currentView.value === 'history' && !execDetailOpen.value && !formViewOpen.value)
 
 const showHistoryCrumb = computed(() => {
-  // Show when on history page or when exec detail is open (from history)
   if (formViewOpen.value) return false
   return currentView.value === 'history'
 })
 
-// Centralized navigation — no more per-page handlers
+// Centralized navigation
 function navigate(target) {
   if (target === 'list') {
     navigateToList()
@@ -85,48 +80,75 @@ function navigate(target) {
 .task-breadcrumb {
   display: flex;
   align-items: center;
-  gap: 2px;
   overflow-x: auto;
-  font-size: 12px;
-  color: var(--text-muted, #999);
   scrollbar-width: none;
   flex: 1;
   min-width: 0;
+  /* Arrow height = font-size * line-height + padding-y * 2 */
+  height: 22px;
 }
 
 .task-breadcrumb::-webkit-scrollbar {
   display: none;
 }
 
-.task-crumb {
-  padding: 1px 4px;
-  border-radius: 3px;
+/* ── Arrow-shaped crumb ── */
+.crumb {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 0 12px 0 16px;
+  height: 100%;
+  font-size: 11px;
+  font-weight: 500;
   white-space: nowrap;
+  color: var(--text-secondary, #666);
+  background: var(--bg-tertiary, #e9ecef);
+  cursor: default;
   transition: background 0.15s, color 0.15s;
+
+  /* Arrow shape: right edge is a pointed arrow */
+  clip-path: polygon(8px 0, 100% 50%, 8px 100%, 0 50%);
 }
 
-.task-crumb.clickable {
+/* First crumb: flat left edge instead of arrow notch */
+.crumb:first-child {
+  padding-left: 10px;
+  clip-path: polygon(0 0, 100% 50%, 0 100%);
+}
+
+/* Overlap each crumb onto the previous one so arrows nest */
+.crumb + .crumb {
+  margin-left: -6px;
+}
+
+/* ── Clickable (past) crumb ── */
+.crumb.clickable {
   cursor: pointer;
 }
 
-.task-crumb.clickable:hover {
-  background: var(--bg-secondary, #e0e0e0);
-  color: var(--accent-color, #4a90d9);
+@media (hover: hover) {
+  .crumb.clickable:hover {
+    background: var(--bg-secondary, #dde1e6);
+    color: var(--accent-color, #4a90d9);
+  }
 }
 
-.task-crumb.current {
+.crumb.clickable:active {
+  background: var(--bg-secondary, #d0d5da);
+}
+
+/* ── Current (active) crumb ── */
+.crumb.current {
+  background: var(--accent-color, #0066cc);
+  color: #fff;
   font-weight: 600;
-  color: var(--text-primary, #1a1a1a);
-  cursor: default;
 }
 
-.task-crumb.current:hover {
-  background: none;
-  color: var(--text-primary, #1a1a1a);
-}
-
-.task-crumb-sep {
-  color: var(--text-muted, #999);
-  font-size: 10px;
+@media (hover: hover) {
+  .crumb.current:hover {
+    background: var(--accent-color, #0066cc);
+    color: #fff;
+  }
 }
 </style>
