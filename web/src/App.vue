@@ -20,7 +20,6 @@
           <!-- Chat Tab -->
           <TabPanel tabId="chat" :activeTab="activeTab">
             <template #header>
-              <MessageSquare :size="16" class="bs-header-icon" />
               <span class="bs-header-title">{{ sessionIdentity.agentHeaderTitle.value }}</span>
               <div v-if="sessionIdentity.currentSessionTitle.value" class="bs-header-description">
                 <HeaderMarquee :text="sessionIdentity.currentSessionTitle.value">{{ sessionIdentity.currentSessionTitle.value }}</HeaderMarquee>
@@ -37,11 +36,7 @@
           </TabPanel>
 
           <!-- File Browse Tab -->
-          <TabPanel tabId="browse" :activeTab="activeTab">
-            <template #header>
-              <Folder :size="16" class="bs-header-icon" />
-              <span class="bs-header-title">{{ t('file.manager') }}</span>
-            </template>
+          <TabPanel tabId="browse" :activeTab="activeTab" :noHeader="true">
             <FileManagerContent
               :entries="dirEntries"
               :current-dir="currentDir"
@@ -108,11 +103,7 @@
           </TabPanel>
 
           <!-- History Tab -->
-          <TabPanel tabId="history" :activeTab="activeTab">
-            <template #header>
-              <GitBranch :size="16" class="bs-header-icon" />
-              <span class="bs-header-title">{{ t('git.history.projectHistory') }}</span>
-            </template>
+          <TabPanel tabId="history" :activeTab="activeTab" :noHeader="true">
             <GitHistoryContent
               mode="project"
               @open-file="handleSelectFile"
@@ -120,11 +111,7 @@
           </TabPanel>
 
           <!-- Proxy Tab -->
-          <TabPanel tabId="proxy" :activeTab="activeTab">
-            <template #header>
-              <EthernetPort :size="16" class="bs-header-icon" />
-              <span class="bs-header-title">{{ t('proxy.title') }}</span>
-            </template>
+          <TabPanel tabId="proxy" :activeTab="activeTab" :noHeader="true">
             <ProxyPanelContent />
           </TabPanel>
 
@@ -137,11 +124,7 @@
           </TabPanel>
 
           <!-- Tasks Tab -->
-          <TabPanel tabId="tasks" :activeTab="activeTab">
-            <template #header>
-              <CalendarDays :size="16" class="bs-header-icon" />
-              <span class="bs-header-title">{{ t('nav.tasks') }}</span>
-            </template>
+          <TabPanel tabId="tasks" :activeTab="activeTab" :noHeader="true">
             <TaskTab :active="activeTab === 'tasks'" @open-file="handleTaskOpenFile" />
           </TabPanel>
         </div>
@@ -243,7 +226,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, provide, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { MessageSquare, Folder, FolderOpen, FileText, GitBranch, EthernetPort, Terminal as TerminalIcon, CalendarDays, MoreHorizontal } from 'lucide-vue-next'
+import { MessageSquare, FolderOpen, FileText, GitBranch, EthernetPort, Terminal as TerminalIcon, CalendarDays, MoreHorizontal } from 'lucide-vue-next'
 import AppHeader from './components/common/AppHeader.vue'
 import TabPanel from './components/common/TabPanel.vue'
 import WelcomeView from './components/WelcomeView.vue'
