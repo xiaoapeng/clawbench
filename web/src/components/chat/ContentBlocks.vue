@@ -58,6 +58,10 @@
           <div v-if="!blockTasks[sKey].deleted && !blockTasks[sKey].loading && blockTasks[sKey].task" class="stask-body">
             <div class="stask-row"><strong>{{ t('chat.contentBlocks.frequency') }}</strong>{{ humanizeCron(blockTasks[sKey].task.cronExpr) }}</div>
             <div class="stask-row"><strong>{{ t('chat.contentBlocks.executor') }}</strong>{{ getAgentIcon(blockTasks[sKey].task.agentId) }} {{ getAgentName(blockTasks[sKey].task.agentId) }}</div>
+            <div class="stask-row"><strong>{{ t('chat.contentBlocks.repeat') }}</strong>{{ repeatLabel(blockTasks[sKey].task.repeatMode, blockTasks[sKey].task.maxRuns) }}</div>
+            <div class="stask-row"><strong>{{ t('chat.contentBlocks.status') }}</strong><span class="stask-status-dot" :class="statusClass(blockTasks[sKey].task)"></span>{{ statusLabel(blockTasks[sKey].task) }}</div>
+            <div v-if="blockTasks[sKey].task.lastRunAt" class="stask-row"><strong>{{ t('chat.contentBlocks.lastRun') }}</strong>{{ formatTime(blockTasks[sKey].task.lastRunAt) }}</div>
+            <div v-if="blockTasks[sKey].task.nextRunAt" class="stask-row"><strong>{{ t('chat.contentBlocks.nextRun') }}</strong>{{ formatTime(blockTasks[sKey].task.nextRunAt) }}</div>
           </div>
           <div class="stask-view-btn" v-if="!blockTasks[sKey].deleted && !blockTasks[sKey].loading && blockTasks[sKey].task">
             {{ t('chat.contentBlocks.viewDetail') }}
@@ -679,6 +683,27 @@ onUnmounted(() => {
 .stask-status-badge.active { background: rgba(34, 197, 94, 0.12); color: #22c55e; }
 .stask-status-badge.paused { background: rgba(234, 179, 8, 0.12); color: #eab308; }
 .stask-status-badge.completed { background: var(--bg-tertiary, #e9ecef); color: var(--text-muted, #999); }
+
+.stask-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+  margin-right: 4px;
+}
+
+.stask-status-dot.status-active {
+  background: #4caf50;
+}
+
+.stask-status-dot.status-paused {
+  background: #ff9800;
+}
+
+.stask-status-dot.status-completed {
+  background: #9e9e9e;
+}
 </style>
 
 <style>
