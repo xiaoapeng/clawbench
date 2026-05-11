@@ -3,7 +3,7 @@
     <!-- Root crumb: 任务列表 -->
     <span
       class="crumb"
-      :class="{ current: isList, clickable: !isList, first: true }"
+      :class="{ current: isList, clickable: !isList, first: true, alt: !isList }"
       @click="!isList && navigate('list')"
     >{{ t('task.title') }}</span>
 
@@ -11,7 +11,7 @@
     <span
       v-if="taskName"
       class="crumb"
-      :class="{ current: isSettings, clickable: !isSettings }"
+      :class="{ current: isSettings, clickable: !isSettings, alt: !isSettings && isList }"
       @click="!isSettings && navigate('settings')"
     >{{ taskName }}</span>
 
@@ -19,7 +19,7 @@
     <span
       v-if="showHistoryCrumb"
       class="crumb"
-      :class="{ current: isHistory, clickable: !isHistory }"
+      :class="{ current: isHistory, clickable: !isHistory, alt: !isHistory && !isSettings }"
       @click="!isHistory && navigate('history')"
     >{{ t('task.exec.title') }}</span>
 
@@ -106,13 +106,28 @@ function navigate(target) {
   transition: background 0.15s, color 0.15s;
 }
 
-/* First crumb: rounded left, no left indent for arrow notch */
+/* First crumb: rounded left */
 .crumb.first {
   padding-left: 10px;
   border-radius: 4px 0 0 4px;
 }
 
-/* Right arrow — same color as crumb bg, with light edge seam */
+/* Last crumb: rounded right */
+.crumb:last-child {
+  border-radius: 0 4px 4px 0;
+}
+
+/* Only crumb: fully rounded */
+.crumb:only-child {
+  border-radius: 4px;
+}
+
+/* First + last same element: fully rounded */
+.crumb.first:last-child {
+  border-radius: 4px;
+}
+
+/* Right arrow — same color as crumb body */
 .crumb::after {
   content: '';
   position: absolute;
@@ -125,8 +140,15 @@ function navigate(target) {
   border-color: transparent transparent transparent var(--bg-tertiary, #e9ecef);
   transition: border-color 0.15s;
   z-index: 1;
-  /* Thin light line along the diagonal edge of the arrow */
-  filter: drop-shadow(1px 0 0 rgba(255, 255, 255, 0.4));
+}
+
+/* Alternate shade for non-current crumbs — slightly darker than base */
+.crumb.alt {
+  background: color-mix(in srgb, var(--bg-tertiary, #e9ecef) 88%, #000);
+}
+
+.crumb.alt::after {
+  border-left-color: color-mix(in srgb, var(--bg-tertiary, #e9ecef) 88%, #000);
 }
 
 /* ── Clickable crumb ── */
@@ -136,21 +158,21 @@ function navigate(target) {
 
 @media (hover: hover) {
   .crumb.clickable:hover {
-    background: var(--bg-secondary, #dde1e6);
+    background: color-mix(in srgb, var(--bg-tertiary, #e9ecef) 80%, var(--accent-color, #4a90d9));
     color: var(--accent-color, #4a90d9);
   }
 
   .crumb.clickable:hover::after {
-    border-left-color: var(--bg-secondary, #dde1e6);
+    border-left-color: color-mix(in srgb, var(--bg-tertiary, #e9ecef) 80%, var(--accent-color, #4a90d9));
   }
 }
 
 .crumb.clickable:active {
-  background: var(--bg-secondary, #d0d5da);
+  background: color-mix(in srgb, var(--bg-tertiary, #e9ecef) 82%, #000);
 }
 
 .crumb.clickable:active::after {
-  border-left-color: var(--bg-secondary, #d0d5da);
+  border-left-color: color-mix(in srgb, var(--bg-tertiary, #e9ecef) 82%, #000);
 }
 
 /* ── Current (active) crumb — accent color darkened ── */
