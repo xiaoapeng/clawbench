@@ -76,6 +76,7 @@ func main() {
 		fmt.Println("Commands:")
 		fmt.Println("  task    Manage scheduled tasks (cron-based AI execution)")
 		fmt.Println("  rag     Search and retrieve conversation history")
+		fmt.Println("  migrate Migrate old task_executions data to chat sessions")
 		fmt.Println()
 		fmt.Println("Run \"clawbench <command> --help\" for more information.")
 		fmt.Println()
@@ -93,6 +94,11 @@ func main() {
 	// RAG subcommand dispatch (e.g., "clawbench rag search -q ...")
 	if len(os.Args) > 1 && os.Args[1] == "rag" {
 		os.Exit(cli.RunRAGCommand(os.Args[2:]))
+	}
+
+	// Migrate subcommand dispatch
+	if len(os.Args) > 1 && os.Args[1] == "migrate" {
+		os.Exit(cli.RunMigrateCommand(os.Args[2:]))
 	}
 
 	// Parse CLI flags
