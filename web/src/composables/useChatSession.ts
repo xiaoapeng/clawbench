@@ -55,27 +55,24 @@ export function useChatSession(options: UseChatSessionOptions) {
   const { currentSessionTitle, currentBackend, currentAgentId, currentModelId, currentModelName, runningSessions } = identity
 
   // ── Agents from singleton ──
-  const { agents, loadAgents, getAgentIcon, getAgentName, getDefaultModelId } = useAgents()
+  const { agents, loadAgents, getAgentIcon, getAgentName, syncModelFromAgent, getAgentModel, agentHeaderTitle: makeAgentTitle } = useAgents()
 
   // Helper: sync model state from agent config when agent changes
-  function syncModelFromAgent(agentId) {
-    const modelId = getDefaultModelId(agentId)
+  function syncModelFromAgentLocal(agentId: string) {
+    const { modelId, modelName } = syncModelFromAgent(agentId)
     currentModelId.value = modelId
-    const agent = agents.value.find(a => a.id === agentId)
-    const model = agent?.models?.find(m => m.id === modelId)
-    currentModelName.value = model?.name || modelId
+    currentModelName.value = modelName
   }
 
   // Helper: sync model state from server data, preferring the persisted modelId
   // over the agent default. Falls back to agent default when server has no model.
-  function syncModelFromData(agentId, modelIdFromServer) {
+  function syncModelFromData(agentId: string, modelIdFromServer: string) {
     if (modelIdFromServer) {
       currentModelId.value = modelIdFromServer
-      const agent = agents.value.find(a => a.id === agentId)
-      const model = agent?.models?.find(m => m.id === modelIdFromServer)
+      const model = getAgentModel(agentId, modelIdFromServer)
       currentModelName.value = model?.name || modelIdFromServer
     } else {
-      syncModelFromAgent(agentId)
+      syncModelFromAgentLocal(agentId)
     }
   }
 
@@ -94,11 +91,7 @@ export function useChatSession(options: UseChatSessionOptions) {
   const loadingMore = ref(false)
   const hasMore = computed(() => messages.value.length < totalMessages.value)
 
-  const agentHeaderTitle = computed(() => {
-    const agent = agents.value.find(a => a.id === currentAgentId.value)
-    if (agent) return `${agent.icon} ${agent.name}`
-    return gt('chat.session.aiDialog')
-  })
+  const agentHeaderTitle = computed(() => makeAgentTitle(currentAgentId.value))
 
   // Guard against concurrent switchSession calls — only the last one wins
   let switchSessionSeq = 0
@@ -292,7 +285,7 @@ export function useChatSession(options: UseChatSessionOptions) {
       currentSessionTitle.value = data.title || ''
       currentBackend.value = data.backend || ''
       currentAgentId.value = data.agentId || agentId || ''
-      syncModelFromAgent(currentAgentId.value)
+      syncModelFromAgentLocal(currentAgentId.value)
       messages.value = []
       totalMessages.value = 0
       lastMessageSnapshot = ''  // New session — no messages yet

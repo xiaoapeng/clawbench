@@ -60,11 +60,11 @@ export function registerSessionActions(actions: SessionActions) {
  * before ChatPanel is opened.
  */
 export async function initSessionFromAPI() {
-  const agents = useAgents()
+  const agentsApi = useAgents()
   try {
     const [chatResp] = await Promise.all([
       fetch('/api/ai/chat?limit=1'),
-      agents.loadAgents(),
+      agentsApi.loadAgents(),
     ])
     if (chatResp.ok) {
       const data = await chatResp.json()
@@ -74,10 +74,9 @@ export async function initSessionFromAPI() {
         currentBackend.value = data.backend || ''
         currentAgentId.value = data.agentId || ''
         // Initialize model from agent default
-        currentModelId.value = agents.getDefaultModelId(data.agentId || '')
-        const models = agents.getAgentModels(data.agentId || '')
-        const defaultModel = models.find(m => m.id === currentModelId.value)
-        currentModelName.value = defaultModel?.name || currentModelId.value
+        const { modelId, modelName } = agentsApi.syncModelFromAgent(data.agentId || '')
+        currentModelId.value = modelId
+        currentModelName.value = modelName
       }
     }
   } catch (_) {
@@ -90,10 +89,9 @@ export async function initSessionFromAPI() {
 // ───────────────────────────────────────────────────────────
 
 const agentHeaderTitle = computed(() => {
-  const { agents, getAgentName } = useAgents()
-  const agent = agents.value.find(a => a.id === currentAgentId.value)
-  if (agent) return `${agent.icon} ${agent.name}`
-  return currentAgentId.value ? `${getAgentName(currentAgentId.value)}` : gt('chat.session.aiDialog')
+  const { agentHeaderTitle: makeTitle } = useAgents()
+  if (currentAgentId.value) return makeTitle(currentAgentId.value)
+  return gt('chat.session.aiDialog')
 })
 
 // ───────────────────────────────────────────────────────────
@@ -136,10 +134,9 @@ export function useSessionIdentity() {
         currentBackend.value = data.backend || ''
         currentAgentId.value = data.agentId || agentId || ''
         // Initialize model from agent default
-        currentModelId.value = agents.getDefaultModelId(currentAgentId.value)
-        const models = agents.getAgentModels(currentAgentId.value)
-        const defaultModel = models.find(m => m.id === currentModelId.value)
-        currentModelName.value = defaultModel?.name || currentModelId.value
+        const { modelId, modelName } = agentsApi.syncModelFromAgent(currentAgentId.value)
+        currentModelId.value = modelId
+        currentModelName.value = modelName
       }
     } catch (err) {
       console.error('Failed to create session:', err)

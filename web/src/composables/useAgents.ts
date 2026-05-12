@@ -61,6 +61,46 @@ function isMultiModel(agentId: string): boolean {
     return (agent?.models?.length || 0) > 1
 }
 
+/** Get the raw agent object by id. Returns undefined if not found. */
+function getAgent(agentId: string) {
+    return agents.value.find(a => a.id === agentId)
+}
+
+/**
+ * Get the display name of an agent's default model.
+ * Returns the model name, or the modelId itself if the model is not found.
+ */
+function getAgentDefaultModelName(agentId: string): string {
+    const modelId = getDefaultModelId(agentId)
+    const models = getAgentModels(agentId)
+    const model = models.find(m => m.id === modelId)
+    return model?.name || modelId
+}
+
+/** Build the "icon name" header string for an agent. */
+function agentHeaderTitle(agentId: string): string {
+    const agent = getAgent(agentId)
+    if (agent) return `${agent.icon} ${agent.name}`
+    return agentId ? getAgentName(agentId) : gt('chat.session.aiDialog')
+}
+
+/**
+ * Sync modelId and modelName from an agent's default model.
+ * Returns { modelId, modelName } so callers can assign to their refs.
+ */
+function syncModelFromAgent(agentId: string): { modelId: string; modelName: string } {
+    const modelId = getDefaultModelId(agentId)
+    const models = getAgentModels(agentId)
+    const model = models.find(m => m.id === modelId)
+    return { modelId, modelName: model?.name || modelId }
+}
+
+/** Get a specific model by id for an agent. Returns undefined if not found. */
+function getAgentModel(agentId: string, modelId: string) {
+    const models = getAgentModels(agentId)
+    return models.find(m => m.id === modelId)
+}
+
 export function useAgents() {
     return {
         agents,
@@ -72,5 +112,10 @@ export function useAgents() {
         getDefaultModelId,
         getAgentModels,
         isMultiModel,
+        getAgent,
+        getAgentModel,
+        getAgentDefaultModelName,
+        agentHeaderTitle,
+        syncModelFromAgent,
     }
 }

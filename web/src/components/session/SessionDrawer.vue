@@ -98,16 +98,12 @@ const emit = defineEmits(['close', 'select', 'create', 'delete'])
 const bottomSheetRef = ref(null)
 const sessions = ref([])
 const loading = ref(false)
-const { agents, loadAgents, getAgentIcon, getAgentName, isDefaultAgent, getDefaultModelId } = useAgents()
+const { agents, loadAgents, getAgentIcon, getAgentName, isDefaultAgent, getAgentDefaultModelName } = useAgents()
 const dialog = useDialog()
 
 /** Get the display name of an agent's default model. */
 function agentDefaultModelName(agentId) {
-  const agent = agents.value.find(a => a.id === agentId)
-  if (!agent?.models?.length) return ''
-  const modelId = getDefaultModelId(agentId)
-  const model = agent.models.find(m => m.id === modelId)
-  return model?.name || modelId
+  return getAgentDefaultModelName(agentId)
 }
 const showAgentSelector = ref(false)
 // Guard against accidental clicks right after opening the agent selector

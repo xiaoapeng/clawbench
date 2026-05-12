@@ -173,7 +173,7 @@ const emit = defineEmits(['open', 'message', 'open-file', 'task-card-click'])
 // ── Singletons ──
 const identity = useSessionIdentity()
 const agentsComposable = useAgents()
-const { agents: agentsList, getAgentIcon, getAgentName, getAgentModels, isMultiModel, getDefaultModelId } = agentsComposable
+const { agents: agentsList, getAgent, getAgentIcon, getAgentName, getAgentModels, isMultiModel, getDefaultModelId } = agentsComposable
 // Expose as `agents` for template access to getAgentModels/isMultiModel
 const agents = agentsComposable
 
@@ -183,11 +183,7 @@ const loading = ref(false)
 // Incremented when the panel reopens, so ChatMessageItem can re-check
 // overflow after being hidden (display:none gives scrollHeight=0).
 const layoutRefreshKey = ref(0)
-const currentAgent = computed(() => {
-  const agentId = identity.currentAgentId.value
-  if (!agentId) return null
-  return agentsList.value.find(a => a.id === agentId) || null
-})
+const currentAgent = computed(() => getAgent(identity.currentAgentId.value) || null)
 const sessionDrawerRef = ref(null)
 const inputBarRef = ref(null)
 const messageListRef = ref(null)
