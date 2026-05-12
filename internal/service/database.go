@@ -171,6 +171,15 @@ func InitDB(runFromServer ...bool) error {
 		return fmt.Errorf("failed to create tables: %w", err)
 	}
 
+	// Schema migrations: add columns that may not exist in older databases.
+	var hasReadAt int
+	DB.QueryRow("SELECT COUNT(*) FROM pragma_table_info('task_executions') WHERE name='read_at'").Scan(&hasReadAt)
+	if hasReadAt == 0 {
+		if _, err := DB.Exec("ALTER TABLE task_executions ADD COLUMN read_at DATETIME"); err != nil {
+			return fmt.Errorf("failed to add read_at column: %w", err)
+		}
+	}
+
 	// Clean up orphaned streaming messages from previous crashes/restarts.
 	// Any message with streaming=1 at startup can never be finalized since
 	// its stream no longer exists. Mark them as cancelled so the UI shows

@@ -48,7 +48,7 @@ import { humanizeCron, repeatLabel, statusLabel, formatDateTime } from '@/utils/
 import { store } from '@/stores/app'
 
 const { t } = useI18n()
-const { loadTasks, markAllTasksRead } = useTaskTab()
+const { loadTasks } = useTaskTab()
 const { loadAgents, getAgentIcon } = useAgents()
 
 const tasks = computed(() => store.state.tasks)
@@ -63,7 +63,6 @@ async function refresh() {
   loading.value = true
   try {
     await Promise.all([loadTasks(), loadAgents()])
-    markAllTasksRead()
   } finally {
     loading.value = false
   }

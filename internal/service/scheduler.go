@@ -607,7 +607,7 @@ func GetTasks(projectPath string) ([]model.ScheduledTask, error) {
 			s.status, s.repeat_mode, s.max_runs, s.last_run_at, s.next_run_at, s.run_count,
 			s.last_read_at, s.created_at, s.updated_at,
 			(SELECT COUNT(*) FROM task_executions e
-			 WHERE e.task_id = s.id
+			 WHERE e.task_id = s.id AND e.read_at IS NULL
 			 AND (s.last_read_at IS NULL OR e.created_at > s.last_read_at)) AS unread_count
 			FROM scheduled_tasks s WHERE s.status != 'deleted' ORDER BY s.created_at DESC`
 	} else {
@@ -615,7 +615,7 @@ func GetTasks(projectPath string) ([]model.ScheduledTask, error) {
 			s.status, s.repeat_mode, s.max_runs, s.last_run_at, s.next_run_at, s.run_count,
 			s.last_read_at, s.created_at, s.updated_at,
 			(SELECT COUNT(*) FROM task_executions e
-			 WHERE e.task_id = s.id
+			 WHERE e.task_id = s.id AND e.read_at IS NULL
 			 AND (s.last_read_at IS NULL OR e.created_at > s.last_read_at)) AS unread_count
 			FROM scheduled_tasks s WHERE s.project_path = ? AND s.status != 'deleted' ORDER BY s.created_at DESC`
 		args = []interface{}{projectPath}
@@ -715,6 +715,15 @@ func UpdateTaskLastRead(taskID string) error {
 	return err
 }
 
+// MarkExecutionRead marks a single execution as read by setting its read_at timestamp.
+func MarkExecutionRead(executionID string) error {
+	_, err := DB.Exec(
+		"UPDATE task_executions SET read_at = CURRENT_TIMESTAMP WHERE id = ?",
+		executionID,
+	)
+	return err
+}
+
 // HasUnreadTasks checks if any task for the given project has unread executions.
 func HasUnreadTasks(projectPath string) (bool, error) {
 	var count int
@@ -724,7 +733,7 @@ func HasUnreadTasks(projectPath string) (bool, error) {
 			`SELECT COUNT(*) FROM scheduled_tasks s
 			 WHERE s.status != 'deleted'
 			 AND (SELECT COUNT(*) FROM task_executions e
-			      WHERE e.task_id = s.id
+			      WHERE e.task_id = s.id AND e.read_at IS NULL
 			      AND (s.last_read_at IS NULL OR e.created_at > s.last_read_at)) > 0`,
 		).Scan(&count)
 	} else {
@@ -732,7 +741,7 @@ func HasUnreadTasks(projectPath string) (bool, error) {
 			`SELECT COUNT(*) FROM scheduled_tasks s
 			 WHERE s.project_path = ? AND s.status != 'deleted'
 			 AND (SELECT COUNT(*) FROM task_executions e
-			      WHERE e.task_id = s.id
+			      WHERE e.task_id = s.id AND e.read_at IS NULL
 			      AND (s.last_read_at IS NULL OR e.created_at > s.last_read_at)) > 0`,
 			projectPath,
 		).Scan(&count)

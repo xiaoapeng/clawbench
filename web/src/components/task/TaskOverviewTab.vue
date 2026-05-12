@@ -4,6 +4,11 @@
     <div class="overview-scroll">
       <!-- Info card -->
       <div class="overview-card">
+        <!-- Task ID -->
+        <div class="overview-row">
+          <span class="overview-label">ID</span>
+          <span class="overview-value task-id-value" @click="copyId" :title="t('common.copy')">{{ task.id }}</span>
+        </div>
         <!-- Status -->
         <div class="overview-row">
           <span class="overview-label">{{ t('chat.contentBlocks.status') }}</span>
@@ -57,38 +62,47 @@
 
     <!-- Fixed bottom action bar -->
     <div class="overview-actions">
-      <button class="action-btn" @click="$emit('edit')" :title="t('task.form.editTitle')">
-        <Pencil :size="15" />
+      <button class="action-btn" @click="$emit('edit')">
+        <Pencil :size="14" />
+        <span class="action-text">{{ t('common.edit') }}</span>
       </button>
-      <button v-if="task.runCount > 0 || task.runningCount > 0" class="action-btn" @click="$emit('history')" :title="t('task.exec.title')">
-        <Clock :size="15" />
+      <button v-if="task.runCount > 0 || task.runningCount > 0" class="action-btn" @click="$emit('history')">
+        <Clock :size="14" />
+        <span class="action-text">{{ t('task.history') }}</span>
       </button>
       <span class="actions-spacer"></span>
       <template v-if="task.status === 'active'">
-        <button class="action-btn accent" :disabled="actionLoading" @click="triggerTask" :title="t('chat.contentBlocks.trigger')">
-          <Zap :size="15" />
+        <button class="action-btn accent" :disabled="actionLoading" @click="triggerTask">
+          <Zap :size="14" />
+          <span class="action-text">{{ t('task.run') }}</span>
         </button>
-        <button class="action-btn warn" :disabled="actionLoading" @click="pauseTask" :title="t('chat.contentBlocks.pause')">
-          <Pause :size="15" />
+        <button class="action-btn warn" :disabled="actionLoading" @click="pauseTask">
+          <Pause :size="14" />
+          <span class="action-text">{{ t('task.pause') }}</span>
         </button>
-        <button class="action-btn danger" :disabled="actionLoading" @click="deleteTask" :title="t('chat.contentBlocks.delete')">
-          <Trash2 :size="15" />
+        <button class="action-btn danger" :disabled="actionLoading" @click="deleteTask">
+          <Trash2 :size="14" />
+          <span class="action-text">{{ t('task.delete') }}</span>
         </button>
       </template>
       <template v-else-if="task.status === 'paused'">
-        <button class="action-btn accent" :disabled="actionLoading" @click="triggerTask" :title="t('chat.contentBlocks.trigger')">
-          <Zap :size="15" />
+        <button class="action-btn accent" :disabled="actionLoading" @click="triggerTask">
+          <Zap :size="14" />
+          <span class="action-text">{{ t('task.run') }}</span>
         </button>
-        <button class="action-btn success" :disabled="actionLoading" @click="resumeTask" :title="t('chat.contentBlocks.resume')">
-          <Play :size="15" />
+        <button class="action-btn success" :disabled="actionLoading" @click="resumeTask">
+          <Play :size="14" />
+          <span class="action-text">{{ t('task.resume') }}</span>
         </button>
-        <button class="action-btn danger" :disabled="actionLoading" @click="deleteTask" :title="t('chat.contentBlocks.delete')">
-          <Trash2 :size="15" />
+        <button class="action-btn danger" :disabled="actionLoading" @click="deleteTask">
+          <Trash2 :size="14" />
+          <span class="action-text">{{ t('task.delete') }}</span>
         </button>
       </template>
       <template v-else-if="task.status === 'completed'">
-        <button class="action-btn danger" :disabled="actionLoading" @click="deleteTask" :title="t('chat.contentBlocks.delete')">
-          <Trash2 :size="15" />
+        <button class="action-btn danger" :disabled="actionLoading" @click="deleteTask">
+          <Trash2 :size="14" />
+          <span class="action-text">{{ t('task.delete') }}</span>
         </button>
       </template>
     </div>
@@ -129,6 +143,12 @@ const { actionLoading, triggerTask, pauseTask, resumeTask, deleteTask } = useTas
 })
 
 const promptExpanded = ref(true)
+
+function copyId() {
+  if (props.task.id) {
+    navigator.clipboard.writeText(props.task.id).catch(() => {})
+  }
+}
 
 const statusText = computed(() => {
   if (props.task.runningCount > 0) return t('chat.contentBlocks.statusRunning')
@@ -193,6 +213,21 @@ const renderedPrompt = computed(() => {
   gap: 5px;
   text-align: right;
   word-break: break-word;
+}
+
+.task-id-value {
+  font-size: 11px;
+  font-family: monospace;
+  color: var(--text-muted, #999);
+  cursor: pointer;
+  user-select: all;
+  padding: 1px 4px;
+  border-radius: 3px;
+  transition: background 0.15s;
+}
+
+.task-id-value:active {
+  background: var(--bg-tertiary, rgba(0, 0, 0, 0.06));
 }
 
 .status-dot {
@@ -309,8 +344,8 @@ const renderedPrompt = computed(() => {
   align-items: center;
   gap: 6px;
   padding: 8px 12px;
-  border-top: 1px solid var(--border-color, #e5e5e5);
-  background: var(--bg-primary, #fff);
+  border-top: none;
+  background: transparent;
   flex-shrink: 0;
 }
 
@@ -319,18 +354,24 @@ const renderedPrompt = computed(() => {
 }
 
 .action-btn {
-  width: 34px;
-  height: 34px;
+  height: 30px;
   border: none;
-  border-radius: 50%;
-  background: var(--bg-secondary, #f0f0f0);
+  border-radius: 15px;
+  background: var(--bg-tertiary, rgba(0, 0, 0, 0.06));
   color: var(--text-secondary, #666);
   cursor: pointer;
   transition: all 0.15s;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
+  gap: 4px;
+  padding: 0 10px;
   flex-shrink: 0;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.action-text {
+  line-height: 1;
 }
 
 .action-btn:disabled {
@@ -340,13 +381,13 @@ const renderedPrompt = computed(() => {
 
 @media (hover: hover) {
   .action-btn:hover:not(:disabled) {
-    background: var(--bg-tertiary, rgba(0, 0, 0, 0.08));
+    background: rgba(0, 0, 0, 0.1);
     color: var(--text-primary, #1a1a1a);
   }
 }
 
 .action-btn:active:not(:disabled) {
-  transform: scale(0.92);
+  transform: scale(0.95);
 }
 
 .action-btn.accent {
@@ -363,37 +404,37 @@ const renderedPrompt = computed(() => {
 }
 
 .action-btn.warn {
-  background: rgba(234, 179, 8, 0.12);
-  color: #eab308;
+  background: rgba(234, 179, 8, 0.15);
+  color: #c9970a;
 }
 
 @media (hover: hover) {
   .action-btn.warn:hover:not(:disabled) {
-    background: rgba(234, 179, 8, 0.22);
-    color: #d4a006;
+    background: rgba(234, 179, 8, 0.25);
+    color: #b5890a;
   }
 }
 
 .action-btn.success {
-  background: rgba(34, 197, 94, 0.12);
-  color: #22c55e;
+  background: rgba(34, 197, 94, 0.15);
+  color: #1a9e50;
 }
 
 @media (hover: hover) {
   .action-btn.success:hover:not(:disabled) {
-    background: rgba(34, 197, 94, 0.22);
-    color: #1ba84a;
+    background: rgba(34, 197, 94, 0.25);
+    color: #168a44;
   }
 }
 
 .action-btn.danger {
-  background: rgba(220, 53, 69, 0.08);
-  color: #dc3545;
+  background: rgba(220, 53, 69, 0.1);
+  color: #c4293c;
 }
 
 @media (hover: hover) {
   .action-btn.danger:hover:not(:disabled) {
-    background: rgba(220, 53, 69, 0.16);
+    background: rgba(220, 53, 69, 0.18);
   }
 }
 </style>

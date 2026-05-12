@@ -277,6 +277,7 @@ function switchTab(tab) {
   }
   if (tab === 'tasks') {
     store.state.taskUnread = false
+    markAllTasksRead()
   }
   // Close overflow menu when switching to a main tab
   if (!overflowTabs.includes(tab)) {
@@ -312,7 +313,7 @@ useFileWatch({
 
 const { isAppMode } = useAppMode()
 const { syncToNative } = usePortForward()
-const { startTaskPolling, stopTaskPolling, navigateToTaskSettings } = useTaskTab()
+const { startTaskPolling, stopTaskPolling, markAllTasksRead, navigateToTaskSettings } = useTaskTab()
 const terminalRequestedCwd = ref(null)
 
 const quoteQuestion = useQuoteQuestion()

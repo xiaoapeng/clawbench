@@ -261,6 +261,9 @@ export default {
     nextRun: 'Next run: {time}',
     pause: 'Disable',
     resume: 'Enable',
+    run: 'Run',
+    history: 'History',
+    delete: 'Delete',
     status: {
       active: 'Enabled',
       paused: 'Disabled',

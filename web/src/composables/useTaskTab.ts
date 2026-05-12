@@ -13,6 +13,10 @@ const formMode = ref<'create' | 'edit'>('create')
 // Module-level polling timer
 let pollingTimer: ReturnType<typeof setInterval> | null = null
 
+// Guard: when markAllTasksRead is in progress, suppress loadTasks
+// from overwriting taskUnread back to true (race condition fix)
+let markingReadInProgress = false
+
 export function useTaskTab() {
     // --- Navigation methods ---
 
@@ -85,7 +89,11 @@ export function useTaskTab() {
             const resp = await fetch('/api/tasks')
             if (!resp.ok) return
             const data = await resp.json()
-            store.state.taskUnread = !!data.hasUnread
+            // Race condition guard: if markAllTasksRead is in progress,
+            // don't let a stale hasUnread flip taskUnread back to true
+            if (!markingReadInProgress) {
+                store.state.taskUnread = !!data.hasUnread
+            }
             const newTasks = data.tasks || []
             // Diff-check to avoid unnecessary watcher triggers
             if (
@@ -94,7 +102,8 @@ export function useTaskTab() {
                     (t: any, i: number) =>
                         t.id !== store.state.tasks[i]?.id ||
                         t.status !== store.state.tasks[i]?.status ||
-                        t.runCount !== store.state.tasks[i]?.runCount
+                        t.runCount !== store.state.tasks[i]?.runCount ||
+                        t.unreadCount !== store.state.tasks[i]?.unreadCount
                 )
             ) {
                 store.state.tasks = newTasks
@@ -107,16 +116,31 @@ export function useTaskTab() {
     async function markAllTasksRead() {
         const unreadTasks = store.state.tasks.filter((t: any) => t.unreadCount > 0)
         if (unreadTasks.length === 0) return
-        await Promise.all(
-            unreadTasks.map((t: any) =>
-                fetch(`/api/tasks/${t.id}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'read' }),
-                }).catch(() => {})
+        markingReadInProgress = true
+        try {
+            await Promise.all(
+                unreadTasks.map((t: any) =>
+                    fetch(`/api/tasks/${t.id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'read' }),
+                    }).then(r => {
+                        if (!r.ok) throw new Error(`mark read failed: ${r.status}`)
+                    })
+                )
             )
-        )
-        store.state.taskUnread = false
+            // Optimistically clear unread counts in local store
+            for (const t of store.state.tasks) {
+                if ((t as any).unreadCount > 0) {
+                    (t as any).unreadCount = 0
+                }
+            }
+            store.state.taskUnread = false
+        } catch {
+            // Mark-read failed — don't clear badge, next poll will correct
+        } finally {
+            markingReadInProgress = false
+        }
     }
 
     // --- Polling ---

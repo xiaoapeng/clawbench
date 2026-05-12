@@ -171,9 +171,18 @@ func ServeTaskByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if req.Action == "read" {
-			if err := service.UpdateTaskLastRead(taskID); err != nil {
-				model.WriteError(w, model.Internal(err))
-				return
+			if req.ExecutionID != "" {
+				// Per-execution read: only mark this single execution
+				if err := service.MarkExecutionRead(req.ExecutionID); err != nil {
+					model.WriteError(w, model.Internal(err))
+					return
+				}
+			} else {
+				// Task-level read: mark all executions as read
+				if err := service.UpdateTaskLastRead(taskID); err != nil {
+					model.WriteError(w, model.Internal(err))
+					return
+				}
 			}
 			writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 			return
@@ -274,6 +283,7 @@ func serveTaskExecutions(w http.ResponseWriter, r *http.Request, taskID string, 
 	}
 
 	type Execution struct {
+		ID          int64   `json:"id"`
 		SessionID   string  `json:"sessionId"`
 		TriggerType string  `json:"triggerType"`
 		Status      string  `json:"status"`
@@ -283,7 +293,8 @@ func serveTaskExecutions(w http.ResponseWriter, r *http.Request, taskID string, 
 	}
 
 	rows, err := service.DB.Query(`
-		SELECT te.session_id, te.trigger_type, te.status, te.created_at,
+		SELECT te.id, te.session_id, te.trigger_type, te.status, te.created_at,
+		       te.read_at,
 		       ch.content AS assistant_content
 		FROM task_executions te
 		LEFT JOIN chat_history ch ON ch.session_id = te.session_id
@@ -303,14 +314,18 @@ func serveTaskExecutions(w http.ResponseWriter, r *http.Request, taskID string, 
 	for rows.Next() {
 		var exec Execution
 		var content sql.NullString
-		if err := rows.Scan(&exec.SessionID, &exec.TriggerType, &exec.Status, &exec.CreatedAt, &content); err != nil {
+		var readAt sql.NullTime
+		if err := rows.Scan(&exec.ID, &exec.SessionID, &exec.TriggerType, &exec.Status, &exec.CreatedAt, &readAt, &content); err != nil {
 			model.WriteError(w, model.Internal(fmt.Errorf("failed to scan execution record")))
 			return
 		}
 		if content.Valid {
 			exec.Content = &content.String
 		}
-		if task.LastReadAt == nil {
+		// An execution is unread if it has no read_at AND (task has never been read OR execution is newer than last_read_at)
+		if readAt.Valid {
+			exec.IsUnread = false
+		} else if task.LastReadAt == nil {
 			exec.IsUnread = true
 		} else {
 			createdAt, parseErr := time.Parse(time.RFC3339, exec.CreatedAt)

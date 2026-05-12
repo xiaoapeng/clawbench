@@ -63,6 +63,7 @@ import ChatMetadataModal from '@/components/chat/ChatMetadataModal.vue'
 import { useChatRender } from '@/composables/useChatRender.ts'
 import { useAgents } from '@/composables/useAgents.ts'
 import { useFilePathAnnotation } from '@/composables/useFilePathAnnotation.ts'
+import { useAutoSpeech } from '@/composables/useAutoSpeech.ts'
 import { formatToolOutput } from '@/utils/renderToolDetail.ts'
 
 const props = defineProps({
@@ -97,7 +98,7 @@ provide('chatRender', {
 })
 provide('chatSession', { getAgentIcon, getAgentName })
 provide('chatUI', { closeSheet: () => emit('close') })
-provide('autoSpeech', { isActive: () => false, isGeneratingText: () => false, isPlayingAudio: () => false, speakText: () => {}, stopAudio: () => {} })
+provide('autoSpeech', useAutoSpeech())
 provide('layoutRefreshKey', ref(0))
 
 // ── Build a synthetic message object for ChatMessageItem ──

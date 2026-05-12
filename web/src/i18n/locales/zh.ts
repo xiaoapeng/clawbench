@@ -261,6 +261,9 @@ export default {
     nextRun: '下次执行: {time}',
     pause: '禁用',
     resume: '启用',
+    run: '执行',
+    history: '记录',
+    delete: '删除',
     status: {
       active: '已启用',
       paused: '已禁用',
