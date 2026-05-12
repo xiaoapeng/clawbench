@@ -73,6 +73,7 @@ func InitDB(runFromServer ...bool) error {
 			agent_source TEXT DEFAULT 'default',
 			model TEXT DEFAULT '',
 			external_session_id TEXT DEFAULT '',
+			session_type TEXT NOT NULL DEFAULT 'chat',
 			deleted INTEGER NOT NULL DEFAULT 0,
 			last_read_at DATETIME,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -106,8 +107,9 @@ func InitDB(runFromServer ...bool) error {
 		CREATE TABLE IF NOT EXISTS task_executions (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			task_id TEXT NOT NULL,
-			content TEXT NOT NULL DEFAULT '',
+			session_id TEXT NOT NULL,
 			trigger_type TEXT NOT NULL DEFAULT 'auto',
+			status TEXT NOT NULL DEFAULT 'completed',
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		);
 
@@ -126,6 +128,8 @@ func InitDB(runFromServer ...bool) error {
 		CREATE INDEX IF NOT EXISTS idx_sessions_project_backend ON chat_sessions(project_path, backend);
 		CREATE INDEX IF NOT EXISTS idx_raw_responses_session ON ai_raw_responses(session_id, created_at DESC);
 		CREATE INDEX IF NOT EXISTS idx_raw_responses_message ON ai_raw_responses(message_id);
+		CREATE INDEX IF NOT EXISTS idx_executions_session ON task_executions(session_id);
+		CREATE INDEX IF NOT EXISTS idx_sessions_type ON chat_sessions(session_type, project_path, deleted);
 
 		CREATE TABLE IF NOT EXISTS tts_summaries (
 			cache_key TEXT PRIMARY KEY,

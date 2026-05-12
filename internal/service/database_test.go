@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"clawbench/internal/model"
 	_ "modernc.org/sqlite"
 
 	"github.com/stretchr/testify/assert"
@@ -105,6 +106,89 @@ func setupTestDBForQuickSend(t *testing.T) (*sql.DB, func()) {
 		db.Close()
 	}
 	return db, teardown
+}
+
+// ---------- Schema: session_type, task_executions columns, new indexes ----------
+
+func TestSchema_SessionTypeColumnExists(t *testing.T) {
+	tmpDir := t.TempDir()
+	origBinDir := model.BinDir
+	model.BinDir = tmpDir
+	defer func() { model.BinDir = origBinDir }()
+
+	err := InitDB()
+	assert.NoError(t, err)
+	defer DB.Close()
+
+	columns := getTableColumns(t, DB, "chat_sessions")
+	assert.Contains(t, columns, "session_type", "chat_sessions should have session_type column")
+}
+
+func TestSchema_TaskExecutionsColumns(t *testing.T) {
+	tmpDir := t.TempDir()
+	origBinDir := model.BinDir
+	model.BinDir = tmpDir
+	defer func() { model.BinDir = origBinDir }()
+
+	err := InitDB()
+	assert.NoError(t, err)
+	defer DB.Close()
+
+	columns := getTableColumns(t, DB, "task_executions")
+	assert.Contains(t, columns, "session_id", "task_executions should have session_id column")
+	assert.Contains(t, columns, "status", "task_executions should have status column")
+	assert.NotContains(t, columns, "content", "task_executions should NOT have content column")
+}
+
+func TestSchema_NewIndexes(t *testing.T) {
+	tmpDir := t.TempDir()
+	origBinDir := model.BinDir
+	model.BinDir = tmpDir
+	defer func() { model.BinDir = origBinDir }()
+
+	err := InitDB()
+	assert.NoError(t, err)
+	defer DB.Close()
+
+	indexes := getIndexes(t, DB)
+	assert.Contains(t, indexes, "idx_executions_session", "idx_executions_session index should exist")
+	assert.Contains(t, indexes, "idx_sessions_type", "idx_sessions_type index should exist")
+}
+
+// getTableColumns returns a set of column names for the given table.
+func getTableColumns(t *testing.T, db *sql.DB, table string) map[string]bool {
+	t.Helper()
+	rows, err := db.Query("PRAGMA table_info('" + table + "')")
+	assert.NoError(t, err)
+	defer rows.Close()
+
+	cols := make(map[string]bool)
+	for rows.Next() {
+		var cid int
+		var name, typ string
+		var notNull int
+		var dfltVal sql.NullString
+		var pk int
+		assert.NoError(t, rows.Scan(&cid, &name, &typ, &notNull, &dfltVal, &pk))
+		cols[name] = true
+	}
+	return cols
+}
+
+// getIndexes returns a set of index names from sqlite_master.
+func getIndexes(t *testing.T, db *sql.DB) map[string]bool {
+	t.Helper()
+	rows, err := db.Query("SELECT name FROM sqlite_master WHERE type='index'")
+	assert.NoError(t, err)
+	defer rows.Close()
+
+	indexes := make(map[string]bool)
+	for rows.Next() {
+		var name string
+		assert.NoError(t, rows.Scan(&name))
+		indexes[name] = true
+	}
+	return indexes
 }
 
 // ---------- Table creation ----------
