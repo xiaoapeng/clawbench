@@ -19,7 +19,7 @@ const mockFetch = vi.fn()
 vi.stubGlobal('fetch', mockFetch)
 
 // Import after mocks are set up
-import { apiGet, apiPost, apiDelete, cancelChat } from '@/utils/api.ts'
+import { apiGet, apiPost, apiPut, apiDelete, cancelChat } from '@/utils/api.ts'
 
 beforeEach(() => {
   mockFetch.mockReset()
@@ -164,5 +164,103 @@ describe('cancelChat', () => {
     })
 
     await expect(cancelChat('bad-session')).rejects.toThrow('Not Found')
+  })
+})
+
+// ── External AbortSignal support ──
+
+describe('apiGet with signal', () => {
+  it('passes external signal to fetch call', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ data: 'test' }),
+    })
+
+    const externalController = new AbortController()
+    await apiGet('/api/test', { signal: externalController.signal })
+
+    // The signal passed to fetch should be an AbortSignal (our merged one)
+    expect(mockFetch).toHaveBeenCalledWith('/api/test', expect.objectContaining({
+      signal: expect.any(AbortSignal),
+    }))
+  })
+
+  it('rejects immediately when external signal is already aborted', async () => {
+    const controller = new AbortController()
+    controller.abort()
+
+    await expect(apiGet('/api/test', { signal: controller.signal })).rejects.toThrow()
+  })
+})
+
+describe('apiPut', () => {
+  it('makes PUT request with JSON body and locale header', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ task: { id: '1' } }),
+    })
+
+    const result = await apiPut('/api/tasks/1', { action: 'pause' })
+    expectFetchCalledWith('/api/tasks/1', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'X-Locale': 'en' },
+      body: JSON.stringify({ action: 'pause' }),
+    })
+    expect(result).toEqual({ task: { id: '1' } })
+  })
+
+  it('throws error with data.error message on non-ok response', async () => {
+    mockFetch.mockResolvedValue({
+      ok: false,
+      json: () => Promise.resolve({ error: 'Invalid cron' }),
+    })
+
+    await expect(apiPut('/api/tasks/1', {})).rejects.toThrow('Invalid cron')
+  })
+
+  it('forwards external signal to fetch', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({}),
+    })
+
+    const externalSignal = new AbortController().signal
+    await apiPut('/api/tasks/1', { action: 'trigger' }, { signal: externalSignal })
+
+    expect(mockFetch).toHaveBeenCalledWith('/api/tasks/1', expect.objectContaining({
+      signal: expect.any(AbortSignal),
+    }))
+  })
+})
+
+describe('apiPost with signal', () => {
+  it('forwards external signal to fetch', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ task: { id: 'new' } }),
+    })
+
+    const externalSignal = new AbortController().signal
+    await apiPost('/api/tasks', { name: 'test' }, { signal: externalSignal })
+
+    expect(mockFetch).toHaveBeenCalledWith('/api/tasks', expect.objectContaining({
+      signal: expect.any(AbortSignal),
+    }))
+  })
+})
+
+describe('apiDelete with signal', () => {
+  it('forwards external signal to fetch', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({}),
+    })
+
+    const externalSignal = new AbortController().signal
+    await apiDelete('/api/tasks/1', { signal: externalSignal })
+
+    expect(mockFetch).toHaveBeenCalledWith('/api/tasks/1', expect.objectContaining({
+      signal: expect.any(AbortSignal),
+    }))
   })
 })

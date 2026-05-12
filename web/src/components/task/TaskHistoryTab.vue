@@ -16,7 +16,7 @@
             <div class="execution-time-row">
               <span class="exec-running-dot"></span>
               <span class="exec-running-label">{{ t('task.exec.running') }}</span>
-              <span class="exec-relative-time">{{ chatRender.formatMessageTime(exec.startedAt) }}</span>
+              <span class="exec-relative-time">{{ formatRelativeTime(exec.startedAt) }}</span>
               <span v-if="exec.triggerType === 'manual'" class="exec-trigger-type manual">{{ t('task.exec.manual') }}</span>
               <span v-else class="exec-trigger-type auto">{{ t('task.exec.auto') }}</span>
             </div>
@@ -27,13 +27,13 @@
         </div>
       </div>
       <!-- Completed executions -->
-      <div v-for="(exec, idx) in executions" :key="idx" class="execution-item" :class="{ unread: exec.isUnread }" @click="openDetail(exec)">
+      <div v-for="(exec, idx) in executions" :key="idx" class="execution-item" :class="{ unread: isUnreadDisplay(exec) }" @click="openDetail(exec)">
         <div class="execution-row">
           <div class="execution-info">
             <div class="execution-time-row">
               <span class="exec-absolute-time">{{ formatAbsoluteTime(exec.createdAt) }}</span>
-              <span class="exec-relative-time">{{ chatRender.formatMessageTime(exec.createdAt) }}</span>
-              <span v-if="exec.isUnread" class="exec-unread-dot"></span>
+              <span class="exec-relative-time">{{ formatRelativeTime(exec.createdAt) }}</span>
+              <span v-if="isUnreadDisplay(exec)" class="exec-unread-dot"></span>
               <span v-if="exec.triggerType === 'manual'" class="exec-trigger-type manual">{{ t('task.exec.manual') }}</span>
               <span v-else class="exec-trigger-type auto">{{ t('task.exec.auto') }}</span>
             </div>
@@ -57,14 +57,11 @@
 </template>
 
 <script setup>
-import { ref, watch, onUnmounted } from 'vue'
+import { ref, watch, onUnmounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ChevronRight, Square } from 'lucide-vue-next'
 import TaskBreadcrumb from '@/components/task/TaskBreadcrumb.vue'
-import { useChatRender } from '@/composables/useChatRender.ts'
-import { useToast } from '@/composables/useToast.ts'
-import { useDialog } from '@/composables/useDialog.ts'
-import { useTaskTab } from '@/composables/useTaskTab.ts'
+import { useTaskHistory } from '@/composables/useTaskHistory.ts'
 import { formatDuration } from '@/utils/format.ts'
 
 const props = defineProps({
@@ -74,11 +71,20 @@ const props = defineProps({
 const emit = defineEmits(['open-file'])
 
 const { t } = useI18n()
-const dialog = useDialog()
-const toast = useToast()
-const { openExecDetail } = useTaskTab()
 
-const chatRender = useChatRender({ messages: ref([]), theme: ref('light'), currentSessionId: ref('') })
+// Task history composable (ISS-011 + ISS-015 + ISS-016)
+const {
+  loading,
+  executions,
+  runningExecutions,
+  locallyReadIds,
+  loadExecutions,
+  loadRunningStatus,
+  cancelExecution,
+  openDetail,
+  isUnreadDisplay,
+  onTaskChange,
+} = useTaskHistory({ task: computed(() => props.task) })
 
 function formatTokens(meta) {
   const parts = []
@@ -98,25 +104,17 @@ function formatAbsoluteTime(createdAt) {
   return `${y}-${mo}-${day} ${h}:${mi}:${s}`
 }
 
-function extractSummary(exec) {
-  const { blocks } = chatRender.parseAssistantContent(exec.content)
-  for (const block of blocks) {
-    if (block.type === 'text' && block.text) {
-      const clean = block.text
-        .replace(/<scheduled-task\s+id="[^"]+"\s*\/>/g, '')
-        .replace(/[#*`_~\[\]()]/g, '')
-        .trim()
-      if (clean) {
-        return clean.length > 120 ? clean.substring(0, 120) + '...' : clean
-      }
-    }
-  }
-  return ''
+function formatRelativeTime(createdAt) {
+  const diff = Date.now() - new Date(createdAt).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return t('common.justNow')
+  if (mins < 60) return `${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  return `${days}d ago`
 }
 
-const loading = ref(false)
-const executions = ref([])
-const runningExecutions = ref([])
 let pollTimer = null
 
 function startPolling() {
@@ -131,79 +129,6 @@ function stopPolling() {
   }
 }
 
-async function loadExecutions() {
-  if (!props.task?.id) return
-  loading.value = true
-  try {
-    const resp = await fetch(`/api/tasks/${props.task.id}/executions`)
-    const data = await resp.json()
-    const rawExecutions = data.executions || []
-    executions.value = rawExecutions.map(exec => {
-      const { blocks, metadata } = chatRender.parseAssistantContent(exec.content)
-      const summary = extractSummary(exec)
-      return { ...exec, blocks, metadata, summary }
-    })
-  } catch (err) {
-    console.error('Failed to load executions:', err)
-  } finally {
-    loading.value = false
-  }
-}
-
-async function loadRunningStatus() {
-  if (!props.task?.id) return
-  try {
-    const resp = await fetch(`/api/tasks/${props.task.id}`)
-    if (resp.ok) {
-      const data = await resp.json()
-      runningExecutions.value = data.runningExecutions || []
-    }
-  } catch (err) {
-    console.error('Failed to load running status:', err)
-  }
-}
-
-async function cancelExecution(execId) {
-  if (!props.task?.id) return
-  if (!await dialog.confirm(t('task.exec.confirmCancel'))) return
-  try {
-    const resp = await fetch(`/api/tasks/${props.task.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'cancel', executionId: execId }),
-    })
-    if (resp.ok) {
-      toast.show(t('task.exec.cancelled'), { type: 'success' })
-    } else if (resp.status === 404) {
-      toast.show(t('task.exec.alreadyFinished'), { type: 'info' })
-    }
-    await loadRunningStatus()
-  } catch (err) {
-    console.error('Failed to cancel execution:', err)
-  }
-}
-
-async function markExecRead(execId) {
-  if (!props.task?.id || !execId) return
-  try {
-    await fetch(`/api/tasks/${props.task.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'read', executionId: execId }),
-    })
-  } catch (err) {
-    // Silently ignore read-mark failures
-  }
-}
-
-function openDetail(exec) {
-  if (exec.isUnread) {
-    exec.isUnread = false
-    markExecRead(exec.id)
-  }
-  openExecDetail(exec.id, exec)
-}
-
 function onOpenFile(filePath) {
   emit('open-file', filePath)
 }
@@ -211,10 +136,9 @@ function onOpenFile(filePath) {
 watch(() => props.task?.id, (newId) => {
   if (!newId) {
     stopPolling()
-    executions.value = []
-    runningExecutions.value = []
     return
   }
+  onTaskChange()
   loadExecutions()
   loadRunningStatus()
   startPolling()
@@ -222,6 +146,7 @@ watch(() => props.task?.id, (newId) => {
 
 onUnmounted(() => {
   stopPolling()
+  onTaskChange() // Abort in-flight requests (ISS-016)
 })
 </script>
 

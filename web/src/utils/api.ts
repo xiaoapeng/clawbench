@@ -8,63 +8,95 @@ function localeHeaders(): Record<string, string> {
 // Default timeout for API requests (10 seconds)
 const API_TIMEOUT_MS = 10_000
 
-export async function apiGet<T = unknown>(url: string): Promise<T> {
+/** Options shared by all API helper functions */
+export interface ApiOptions {
+    signal?: AbortSignal
+}
+
+/**
+ * Create an AbortSignal that aborts when either:
+ * - The internal timeout fires (API_TIMEOUT_MS)
+ * - The external signal (if provided) aborts
+ * Returns the combined signal and a cleanup function.
+ */
+function createSignal(opts: ApiOptions = {}): { signal: AbortSignal; cleanup: () => void } {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS)
+
+    // If external signal is already aborted, abort immediately
+    if (opts.signal?.aborted) {
+        clearTimeout(timer)
+        controller.abort()
+    }
+
+    // Forward external abort to our controller
+    const onExternalAbort = () => {
+        clearTimeout(timer)
+        controller.abort()
+    }
+    opts.signal?.addEventListener('abort', onExternalAbort)
+
+    const cleanup = () => {
+        clearTimeout(timer)
+        opts.signal?.removeEventListener('abort', onExternalAbort)
+    }
+
+    return { signal: controller.signal, cleanup }
+}
+
+export async function apiGet<T = unknown>(url: string, opts: ApiOptions = {}): Promise<T> {
+    const { signal, cleanup } = createSignal(opts)
     try {
-        const resp = await fetch(url, { headers: localeHeaders(), signal: controller.signal })
+        const resp = await fetch(url, { headers: localeHeaders(), signal })
         if (!resp.ok) throw new Error(await resp.text())
         return resp.json()
     } finally {
-        clearTimeout(timer)
+        cleanup()
     }
 }
 
-export async function apiPost<T = unknown>(url: string, body: unknown): Promise<T> {
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS)
+export async function apiPost<T = unknown>(url: string, body: unknown, opts: ApiOptions = {}): Promise<T> {
+    const { signal, cleanup } = createSignal(opts)
     try {
         const resp = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...localeHeaders() },
             body: JSON.stringify(body),
-            signal: controller.signal,
+            signal,
         })
         const data = await resp.json().catch(() => ({})) as Record<string, unknown>
         if (!resp.ok) throw new Error(data.error ? String(data.error) : resp.statusText)
         return data as T
     } finally {
-        clearTimeout(timer)
+        cleanup()
     }
 }
 
-export async function apiPut<T = unknown>(url: string, body: unknown): Promise<T> {
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS)
+export async function apiPut<T = unknown>(url: string, body: unknown, opts: ApiOptions = {}): Promise<T> {
+    const { signal, cleanup } = createSignal(opts)
     try {
         const resp = await fetch(url, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', ...localeHeaders() },
             body: JSON.stringify(body),
-            signal: controller.signal,
+            signal,
         })
         const data = await resp.json().catch(() => ({})) as Record<string, unknown>
         if (!resp.ok) throw new Error(data.error ? String(data.error) : resp.statusText)
         return data as T
     } finally {
-        clearTimeout(timer)
+        cleanup()
     }
 }
 
-export async function apiDelete<T = unknown>(url: string): Promise<T> {
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS)
+export async function apiDelete<T = unknown>(url: string, opts: ApiOptions = {}): Promise<T> {
+    const { signal, cleanup } = createSignal(opts)
     try {
-        const resp = await fetch(url, { method: 'DELETE', headers: localeHeaders(), signal: controller.signal })
+        const resp = await fetch(url, { method: 'DELETE', headers: localeHeaders(), signal })
         if (!resp.ok) throw new Error(resp.statusText)
         return resp.json()
     } finally {
-        clearTimeout(timer)
+        cleanup()
     }
 }
 

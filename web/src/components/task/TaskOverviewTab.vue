@@ -99,15 +99,12 @@
 import { ref, computed } from 'vue'
 import { Pencil, Pause, Play, Zap, Trash2, Clock } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
-import { useTaskTab } from '@/composables/useTaskTab'
-import { useDialog } from '@/composables/useDialog'
+import { useTaskOverview } from '@/composables/useTaskOverview.ts'
 import { useMarkdownRenderer } from '@/composables/useMarkdownRenderer'
 import { useAgents } from '@/composables/useAgents'
 import { humanizeCron, repeatLabel, formatDateTime } from '@/utils/format'
 
 const { t } = useI18n()
-const { loadTasks } = useTaskTab()
-const dialog = useDialog()
 const { renderMarkdown } = useMarkdownRenderer()
 const { getAgentIcon, getAgentName } = useAgents()
 
@@ -121,7 +118,16 @@ const emit = defineEmits<{
   (e: 'history'): void
 }>()
 
-const actionLoading = ref(false)
+// Task overview composable (ISS-011 + ISS-014)
+const { actionLoading, triggerTask, pauseTask, resumeTask, deleteTask } = useTaskOverview({
+  task: computed(() => props.task),
+  emit: {
+    deleted: () => emit('deleted'),
+    edit: () => emit('edit'),
+    history: () => emit('history'),
+  },
+})
+
 const promptExpanded = ref(true)
 
 const statusText = computed(() => {
@@ -137,71 +143,6 @@ const statusText = computed(() => {
 const renderedPrompt = computed(() => {
   return renderMarkdown(props.task.prompt || '', { sanitize: true })
 })
-
-async function triggerTask() {
-  actionLoading.value = true
-  try {
-    const resp = await fetch(`/api/tasks/${props.task.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'trigger' }),
-    })
-    if (resp.status === 409) {
-      // Already running — ignore
-    }
-    await loadTasks()
-  } catch (err) {
-    console.error('Failed to trigger task:', err)
-  } finally {
-    actionLoading.value = false
-  }
-}
-
-async function pauseTask() {
-  actionLoading.value = true
-  try {
-    await fetch(`/api/tasks/${props.task.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'pause' }),
-    })
-    await loadTasks()
-  } catch (err) {
-    console.error('Failed to pause task:', err)
-  } finally {
-    actionLoading.value = false
-  }
-}
-
-async function resumeTask() {
-  actionLoading.value = true
-  try {
-    await fetch(`/api/tasks/${props.task.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'resume' }),
-    })
-    await loadTasks()
-  } catch (err) {
-    console.error('Failed to resume task:', err)
-  } finally {
-    actionLoading.value = false
-  }
-}
-
-async function deleteTask() {
-  if (!await dialog.confirm(t('task.confirmDelete'), { dangerous: true })) return
-  actionLoading.value = true
-  try {
-    await fetch(`/api/tasks/${props.task.id}`, { method: 'DELETE' })
-    await loadTasks()
-    emit('deleted')
-  } catch (err) {
-    console.error('Failed to delete task:', err)
-  } finally {
-    actionLoading.value = false
-  }
-}
 </script>
 
 <style scoped>

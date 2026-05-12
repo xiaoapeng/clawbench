@@ -4,6 +4,8 @@ import { formatToolInput } from '@/utils/renderToolDetail.ts'
 import { renderKatexInString, renderMermaidInElement } from '@/composables/useMarkdownRenderer.ts'
 import { useFilePathAnnotation } from '@/composables/useFilePathAnnotation.ts'
 import { store } from '@/stores/app.ts'
+import { apiGet } from '@/utils/api.ts'
+import { createTaskBlockStore } from '@/utils/taskBlockStore.ts'
 import {
   extractScheduledTaskIds,
   stripScheduledTaskTags,
@@ -30,6 +32,16 @@ export function useChatRender(options) {
   const blockAskQuestions = reactive({})
   const expandedTools = ref({})
   let lastRenderedCount = 0
+
+  // ── Task block store for batch fetching (ISS-013) ──
+  const taskBlockStore = createTaskBlockStore()
+
+  // Sync taskBlockStore.blocks into blockTasks for template rendering
+  watch(() => ({ ...taskBlockStore.blocks }), (storeBlocks) => {
+    for (const key of Object.keys(storeBlocks)) {
+      blockTasks[key] = storeBlocks[key]
+    }
+  }, { deep: true })
 
   // ── StaticBlockCache for non-streaming re-renders ──
   const staticBlockCache = new StaticBlockCache()
@@ -66,56 +78,29 @@ export function useChatRender(options) {
 
   async function fetchTaskData(key, taskId) {
     if (blockTasks[key]?.task || blockTasks[key]?.loading) return
-    blockTasks[key] = { taskId, task: null, loading: true, deleted: false }
+    blockTasks[key] = { taskId, task: null, loading: true, deleted: false, error: false }
     try {
-      const resp = await fetch(`/api/tasks/${taskId}`)
-      if (resp.status === 404) {
+      const data = await apiGet(`/api/tasks/${taskId}`)
+      blockTasks[key].task = data
+    } catch (err: any) {
+      // 404 means task was deleted; other errors are transient
+      if (err?.message?.includes('404') || err?.message?.toLowerCase().includes('not found')) {
         blockTasks[key].deleted = true
-        blockTasks[key].loading = false
-        return
+      } else {
+        blockTasks[key].error = true
       }
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-      blockTasks[key].task = await resp.json()
-    } catch {
-      blockTasks[key].deleted = true
     } finally {
       blockTasks[key].loading = false
     }
   }
 
   // Batch-fetch task data using the list API to avoid per-task loading flicker.
-  // All entries transition from loading→loaded at the same time.
+  // ISS-013: delegates to taskBlockStore which does NOT mark deleted on network error.
   async function fetchBatchTaskData(taskKeys) {
-    const pending = taskKeys.filter(({ key, taskId }) =>
-      !blockTasks[key]?.task && !blockTasks[key]?.loading
-    )
-    if (pending.length === 0) return
-
-    // Mark all as loading
-    for (const { key, taskId } of pending) {
-      blockTasks[key] = { taskId, task: null, loading: true, deleted: false }
-    }
-
-    try {
-      const resp = await fetch('/api/tasks')
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-      const data = await resp.json()
-      const taskMap = new Map((data.tasks || []).map(t => [t.id, t]))
-
-      for (const { key, taskId } of pending) {
-        const task = taskMap.get(taskId)
-        if (task) {
-          blockTasks[key].task = task
-        } else {
-          blockTasks[key].deleted = true
-        }
-        blockTasks[key].loading = false
-      }
-    } catch {
-      for (const { key } of pending) {
-        blockTasks[key].deleted = true
-        blockTasks[key].loading = false
-      }
+    await taskBlockStore.fetchBatchData(taskKeys)
+    // Sync store blocks into our reactive blockTasks
+    for (const key of Object.keys(taskBlockStore.blocks)) {
+      blockTasks[key] = taskBlockStore.blocks[key]
     }
   }
 
@@ -123,14 +108,15 @@ export function useChatRender(options) {
     for (const key of Object.keys(blockTasks)) {
       if (blockTasks[key].taskId === taskId && !blockTasks[key].deleted) {
         try {
-          const resp = await fetch(`/api/tasks/${taskId}`)
-          if (resp.status === 404) {
+          const data = await apiGet(`/api/tasks/${taskId}`)
+          blockTasks[key].task = data
+        } catch (err: any) {
+          if (err?.message?.includes('404') || err?.message?.toLowerCase().includes('not found')) {
             blockTasks[key].deleted = true
             blockTasks[key].task = null
-          } else if (resp.ok) {
-            blockTasks[key].task = await resp.json()
           }
-        } catch { /* ignore */ }
+          // Other errors: leave existing data, don't mark deleted
+        }
       }
     }
   }

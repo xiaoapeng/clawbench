@@ -150,6 +150,9 @@
         <textarea class="form-textarea prompt-textarea" v-model="form.prompt" :placeholder="t('task.form.promptPlaceholder')"></textarea>
         <div v-if="errors.prompt" class="form-error">{{ errors.prompt }}</div>
       </div>
+
+      <!-- General form error (ISS-012: network/server errors) -->
+      <div v-if="formError" class="form-error form-error-general">{{ formError }}</div>
     </div>
 
     <!-- Fixed bottom bar -->
@@ -167,6 +170,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import TaskBreadcrumb from '@/components/task/TaskBreadcrumb.vue'
 import { useAgents } from '@/composables/useAgents.ts'
+import { useTaskForm } from '@/composables/useTaskForm.ts'
 import { humanizeCron } from '@/utils/format.ts'
 
 const { t } = useI18n()
@@ -178,8 +182,15 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'saved'])
 
-const saving = ref(false)
 const { agents, loadAgents } = useAgents()
+
+// Task form composable (ISS-011 + ISS-012)
+const { form, errors, formError, saving, validate, submit: _submit, init } = useTaskForm({
+  mode: computed(() => props.mode),
+  task: computed(() => props.task),
+  onSuccess: (taskId) => emit('saved', taskId),
+  onClose: () => emit('close'),
+})
 
 // Frequency preset
 const presets = computed(() => [
@@ -197,20 +208,6 @@ const hour = ref(9)
 const weekday = ref(1)     // 0=Sun, 1=Mon, ..., 6=Sat
 const monthDay = ref(1)
 const customCron = ref('')
-
-// Form data
-const form = ref({
-  id: '',
-  name: '',
-  cronExpr: '',
-  agentId: '',
-  prompt: '',
-  repeatMode: 'unlimited',
-  maxRuns: 0,
-})
-
-// Validation errors
-const errors = ref({})
 
 // Generate cron from preset
 const generatedCron = computed(() => {
@@ -277,8 +274,8 @@ function detectPreset(cron) {
   return 'custom'
 }
 
-// Validate form
-function validate() {
+// Validate form (delegates to composable + cron-specific check)
+function validateForm() {
   const e = {}
   if (!form.value.name.trim()) e.name = t('task.form.nameRequired')
   if (!form.value.agentId) e.agentId = t('task.form.agentRequired')
@@ -290,78 +287,20 @@ function validate() {
   return Object.keys(e).length === 0
 }
 
-// Submit
+// Submit (delegates to composable, but updates cron_expr from preset)
 async function submit() {
-  if (!validate()) return
-  if (saving.value) return
-  saving.value = true
-
-  const payload = {
-    name: form.value.name,
-    cron_expr: effectiveCron.value,
-    agent_id: form.value.agentId,
-    prompt: form.value.prompt,
-    repeat_mode: form.value.repeatMode,
-    max_runs: form.value.maxRuns,
-  }
-
-  try {
-    let resp
-    if (props.mode === 'create') {
-      resp = await fetch('/api/tasks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-    } else {
-      resp = await fetch(`/api/tasks/${form.value.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-    }
-
-    if (!resp.ok) {
-      const err = await resp.json()
-      errors.value = { cronExpr: err.error || t('task.form.operationFailed') }
-      return
-    }
-
-    const result = await resp.json()
-    emit('saved', result.task?.id)
-  } catch (err) {
-    errors.value = { cronExpr: err.message || t('common.networkError') }
-  } finally {
-    saving.value = false
-  }
+  if (!validateForm()) return
+  form.value.cronExpr = effectiveCron.value
+  await _submit()
 }
 
 // Initialize form on mount
 onMounted(() => {
-  errors.value = {}
+  init(props.mode === 'edit' ? props.task : null)
 
   if (props.mode === 'edit' && props.task) {
-    form.value = {
-      id: props.task.id,
-      name: props.task.name,
-      cronExpr: props.task.cronExpr,
-      agentId: props.task.agentId,
-      prompt: props.task.prompt,
-      repeatMode: props.task.repeatMode || 'unlimited',
-      maxRuns: props.task.maxRuns || 0,
-    }
     preset.value = detectPreset(props.task.cronExpr)
   } else {
-    // Create mode: reset form
-    form.value = {
-      id: '',
-      name: '',
-      cronExpr: '',
-      agentId: '',
-      prompt: '',
-      repeatMode: 'unlimited',
-      maxRuns: 0,
-    }
     preset.value = 'daily'
     const now = new Date()
     hour.value = now.getHours()
