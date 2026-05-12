@@ -430,6 +430,21 @@ func (s *Server) loadOrGenerateHostKey() (gossh.Signer, error) {
 func (s *Server) loadHostKey(path string) (gossh.Signer, error) {
 	data, err := os.ReadFile(path)
 	if err == nil {
+		// Security: check that the host key file has restrictive permissions (ISS-021).
+		// Private key files must not be readable by other users.
+		if info, statErr := os.Stat(path); statErr == nil {
+			perm := info.Mode().Perm()
+			if perm&0077 != 0 {
+				slog.Warn("ssh: host key file has overly permissive permissions, fixing",
+					slog.String("path", path),
+					slog.String("mode", fmt.Sprintf("%04o", perm)),
+				)
+				if chmodErr := os.Chmod(path, 0600); chmodErr != nil {
+					slog.Warn("ssh: could not fix host key file permissions", slog.String("err", chmodErr.Error()))
+				}
+			}
+		}
+
 		signer, err := gossh.ParsePrivateKey(data)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse host key from %s: %w", path, err)

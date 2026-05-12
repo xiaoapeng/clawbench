@@ -167,7 +167,7 @@ func TestReorderFlagsFirst_NoPositional(t *testing.T) {
 }
 
 func TestReadFlagOrFile_PlainValue(t *testing.T) {
-	val, err := readFlagOrFile("hello world")
+	val, err := readFlagOrFile("hello world", "")
 	assert.NoError(t, err)
 	assert.Equal(t, "hello world", val)
 }
@@ -180,13 +180,13 @@ func TestReadFlagOrFile_FileReference(t *testing.T) {
 	err := os.WriteFile(promptFile, []byte(content), 0644)
 	assert.NoError(t, err)
 
-	val, err := readFlagOrFile("@" + promptFile)
+	val, err := readFlagOrFile("@"+promptFile, tmpDir)
 	assert.NoError(t, err)
 	assert.Equal(t, content, val)
 }
 
 func TestReadFlagOrFile_FileNotFound(t *testing.T) {
-	_, err := readFlagOrFile("@/nonexistent/path/file.txt")
+	_, err := readFlagOrFile("@/nonexistent/path/file.txt", "")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "read file")
 }
@@ -197,13 +197,59 @@ func TestReadFlagOrFile_EmptyFile(t *testing.T) {
 	err := os.WriteFile(promptFile, []byte(""), 0644)
 	assert.NoError(t, err)
 
-	val, err := readFlagOrFile("@" + promptFile)
+	val, err := readFlagOrFile("@"+promptFile, tmpDir)
 	assert.NoError(t, err)
 	assert.Equal(t, "", val)
 }
 
 func TestReadFlagOrFile_AtSignAlone(t *testing.T) {
 	// "@" alone means read from a file named "" — should error
-	_, err := readFlagOrFile("@")
+	_, err := readFlagOrFile("@", "")
 	assert.Error(t, err)
+}
+
+func TestReadFlagOrFile_PathTraversal(t *testing.T) {
+	tmpDir := t.TempDir()
+	// Try to read /etc/hostname with project set to tmpDir — should be denied
+	_, err := readFlagOrFile("@/etc/hostname", tmpDir)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "access denied")
+}
+
+func TestReadFlagOrFile_OutsideProject(t *testing.T) {
+	tmpDir := t.TempDir()
+	subDir := filepath.Join(tmpDir, "project")
+	os.MkdirAll(subDir, 0755)
+	outsideFile := filepath.Join(tmpDir, "outside.txt")
+	os.WriteFile(outsideFile, []byte("secret"), 0644)
+
+	// Reading a file outside the project should be denied
+	_, err := readFlagOrFile("@"+outsideFile, subDir)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "access denied")
+}
+
+func TestReadFlagOrFile_InsideProject(t *testing.T) {
+	tmpDir := t.TempDir()
+	promptFile := filepath.Join(tmpDir, "prompt.txt")
+	content := "project prompt"
+	err := os.WriteFile(promptFile, []byte(content), 0644)
+	assert.NoError(t, err)
+
+	val, err := readFlagOrFile("@"+promptFile, tmpDir)
+	assert.NoError(t, err)
+	assert.Equal(t, content, val)
+}
+
+func TestReadFlagOrFile_NoProjectRestriction(t *testing.T) {
+	// When projectPath is empty, @path can read any file (backward compat)
+	tmpDir := t.TempDir()
+	promptFile := filepath.Join(tmpDir, "prompt.txt")
+	content := "any content"
+	err := os.WriteFile(promptFile, []byte(content), 0644)
+	assert.NoError(t, err)
+
+	val, err := readFlagOrFile("@"+promptFile, "")
+	assert.NoError(t, err)
+	assert.Equal(t, content, val)
 }

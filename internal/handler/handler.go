@@ -220,8 +220,8 @@ func RegisterRoutes(mux *http.ServeMux) {
 	register("/api/proxy/ports", middleware.Auth(ServeProxyPortAction))
 	register("/api/proxy/detect", middleware.Auth(ServeProxyDetect))
 
-	// SSH tunnel info (no auth required — port number and fingerprint are not sensitive)
-	register("/api/ssh/info", ServeSSHInfo)
+	// SSH tunnel info
+	register("/api/ssh/info", middleware.Auth(ServeSSHInfo))
 
 	// Terminal (interactive web terminal with PTY + WebSocket + xterm.js)
 	register("/api/terminal/ws", middleware.Auth(TerminalWebSocket))

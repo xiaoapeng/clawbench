@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -155,12 +156,58 @@ var listAgentsHelp = HelpInfo{
 // case the rest is treated as a file path and the file's contents are returned.
 // This allows passing long text (e.g. --prompt @/path/to/file.txt) without
 // shell variable expansion or argument length issues.
-func readFlagOrFile(val string) (string, error) {
+//
+// Security: @path is restricted to files under the project directory to prevent
+// arbitrary file reads by AI agents (ISS-026). If projectPath is empty, the
+// restriction is not applied (backward compat for non-task CLI usage).
+func readFlagOrFile(val string, projectPath string) (string, error) {
 	if !strings.HasPrefix(val, "@") {
 		return val, nil
 	}
 	path := val[1:]
-	data, err := os.ReadFile(path)
+	if path == "" {
+		return "", fmt.Errorf("empty file path after @")
+	}
+
+	// Resolve to absolute path for containment check
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", fmt.Errorf("invalid path %s: %w", path, err)
+	}
+
+	// Security: only allow reading files within the project directory
+	if projectPath != "" {
+		absProject, err := filepath.Abs(projectPath)
+		if err != nil {
+			return "", fmt.Errorf("invalid project path %s: %w", projectPath, err)
+		}
+		// Resolve symlinks on both sides for robust containment check
+		evalProject, err := filepath.EvalSymlinks(absProject)
+		if err == nil {
+			absProject = evalProject
+		}
+		// For the file path, try to resolve; if file doesn't exist, resolve parent
+		evalPath, err := filepath.EvalSymlinks(absPath)
+		if err == nil {
+			absPath = evalPath
+		} else if os.IsNotExist(err) {
+			// File doesn't exist yet — resolve the parent directory
+			parent := filepath.Dir(absPath)
+			evalParent, err := filepath.EvalSymlinks(parent)
+			if err != nil {
+				return "", fmt.Errorf("cannot resolve parent directory for %s: %w", path, err)
+			}
+			absPath = filepath.Join(evalParent, filepath.Base(absPath))
+		} else {
+			return "", fmt.Errorf("cannot resolve path %s: %w", path, err)
+		}
+
+		if !strings.HasPrefix(absPath, absProject+string(filepath.Separator)) && absPath != absProject {
+			return "", fmt.Errorf("access denied: file %s is outside project directory %s", path, projectPath)
+		}
+	}
+
+	data, err := os.ReadFile(absPath)
 	if err != nil {
 		return "", fmt.Errorf("read file %s: %w", path, err)
 	}
@@ -268,7 +315,7 @@ func runCreate(args []string) int {
 	}
 
 	// Resolve @file syntax for prompt
-	promptVal, err := readFlagOrFile(*prompt)
+	promptVal, err := readFlagOrFile(*prompt, *projectPath)
 	if err != nil {
 		return outputError(fmt.Sprintf("%v", err))
 	}
@@ -343,6 +390,13 @@ func runGet(args []string) int {
 }
 
 func runUpdate(args []string) int {
+	// Anti-recursion: scheduled executions cannot modify tasks either.
+	// While 'create' creates new tasks, 'update' can modify existing task
+	// prompts/crons to achieve recursive behavior (ISS-031).
+	if os.Getenv("CLAWBENCH_SCHEDULED") == "1" {
+		return outputError("scheduled execution cannot modify tasks")
+	}
+
 	// Go's flag package stops parsing at the first non-flag argument.
 	// "clawbench task update task-ID --prompt text" would fail because task-ID
 	// comes before --prompt. Reorder so all flags come first, then positional args.
@@ -371,7 +425,7 @@ func runUpdate(args []string) int {
 	// Resolve @file syntax for prompt
 	promptVal := ""
 	if *prompt != "" {
-		val, err := readFlagOrFile(*prompt)
+		val, err := readFlagOrFile(*prompt, *projectPath)
 		if err != nil {
 			return outputError(fmt.Sprintf("%v", err))
 		}

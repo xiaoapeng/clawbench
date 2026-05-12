@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"clawbench/internal/middleware"
 	"clawbench/internal/model"
 )
 
@@ -18,10 +17,14 @@ func ServeFileRename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	projectPath, ok := requireProject(w, r)
+	if !ok {
+		return
+	}
+
 	var req struct {
-		Path     string `json:"path"`
-		Name     string `json:"name"`
-		BasePath string `json:"basePath,omitempty"` // Optional: overrides project cookie path
+		Path string `json:"path"`
+		Name string `json:"name"`
 	}
 	if !decodeJSON(w, r, &req) {
 		return
@@ -31,17 +34,7 @@ func ServeFileRename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Use provided basePath or fall back to project cookie
-	basePath := req.BasePath
-	if basePath == "" {
-		basePath = middleware.GetProjectFromCookie(r)
-		if basePath == "" {
-			writeLocalizedError(w, r, model.Forbidden(model.ErrProjectNotSet, "NoProjectSelected"))
-			return
-		}
-	}
-
-	baseAbs, err := filepath.Abs(basePath)
+	baseAbs, err := filepath.Abs(projectPath)
 	if err != nil {
 		model.WriteError(w, model.Internal(fmt.Errorf("failed to resolve base path: %w", err)))
 		return
@@ -129,9 +122,13 @@ func ServeFileDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	projectPath, ok := requireProject(w, r)
+	if !ok {
+		return
+	}
+
 	var req struct {
-		Path     string `json:"path"`
-		BasePath string `json:"basePath,omitempty"` // Optional: overrides project cookie path
+		Path string `json:"path"`
 	}
 	if !decodeJSON(w, r, &req) {
 		return
@@ -141,17 +138,7 @@ func ServeFileDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Use provided basePath or fall back to project cookie
-	basePath := req.BasePath
-	if basePath == "" {
-		basePath = middleware.GetProjectFromCookie(r)
-		if basePath == "" {
-			writeLocalizedError(w, r, model.Forbidden(model.ErrProjectNotSet, "NoProjectSelected"))
-			return
-		}
-	}
-
-	baseAbs, err := filepath.Abs(basePath)
+	baseAbs, err := filepath.Abs(projectPath)
 	if err != nil {
 		model.WriteError(w, model.Internal(fmt.Errorf("failed to resolve base path: %w", err)))
 		return
@@ -183,9 +170,13 @@ func ServeFileBatchDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	projectPath, ok := requireProject(w, r)
+	if !ok {
+		return
+	}
+
 	var req struct {
-		Paths    []string `json:"paths"`
-		BasePath string   `json:"basePath,omitempty"`
+		Paths []string `json:"paths"`
 	}
 	if !decodeJSON(w, r, &req) {
 		return
@@ -195,16 +186,7 @@ func ServeFileBatchDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	basePath := req.BasePath
-	if basePath == "" {
-		basePath = middleware.GetProjectFromCookie(r)
-		if basePath == "" {
-			writeLocalizedError(w, r, model.Forbidden(model.ErrProjectNotSet, "NoProjectSelected"))
-			return
-		}
-	}
-
-	baseAbs, err := filepath.Abs(basePath)
+	baseAbs, err := filepath.Abs(projectPath)
 	if err != nil {
 		model.WriteError(w, model.Internal(fmt.Errorf("failed to resolve base path: %w", err)))
 		return
