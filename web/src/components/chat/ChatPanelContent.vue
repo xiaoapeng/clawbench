@@ -161,6 +161,7 @@ import { playNotificationSound } from '@/composables/useNotificationSound.ts'
 import { useAutoSpeech } from '@/composables/useAutoSpeech.ts'
 import { useSwipeSession } from '@/composables/useSwipeSession.ts'
 import { store } from '@/stores/app.ts'
+import { renderMarkdown } from '@/composables/useMarkdownRenderer.ts'
 
 const { t } = useI18n()
 
@@ -554,20 +555,11 @@ function handleShowThinkingDetail({ text }) {
     show: true,
     name: 'DeepThink',
     summary: '',
-    inputHtml: `<pre class="thinking-overlay-text">${escapeHtml(text)}</pre>`,
+    inputHtml: `<div class="thinking-overlay-md">${renderMarkdown(text)}</div>`,
     outputHtml: '',
     status: '',
     done: true,
   }
-}
-
-function escapeHtml(str) {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;')
 }
 
 function handleFileOpenInOverlay(filePath) {

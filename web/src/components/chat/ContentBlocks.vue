@@ -2,13 +2,11 @@
   <div class="content-blocks">
     <template v-for="(block, bi) in blocks" :key="bi">
       <!-- Thinking block -->
-      <div v-if="block.type === 'thinking'" class="chat-thinking" :class="{ expanded: thinkingExpanded[key(bi)] }" @click.stop="toggleThinking(key(bi))">
+      <div v-if="block.type === 'thinking'" class="chat-thinking" @click.stop="handleThinkingClick(block)">
         <div class="thinking-header">
-          <CircleHelp :size="12" />
+          <Brain :size="12" />
           <span class="thinking-label">{{ t('chat.message.deepThinking') }}</span>
-          <ChevronDown :size="12" class="thinking-chevron" />
         </div>
-        <pre v-if="thinkingExpanded[key(bi)]" class="thinking-text">{{ block.text }}</pre>
       </div>
       <!-- Tool use block -->
       <template v-else-if="block.type === 'tool_use'">
@@ -96,7 +94,7 @@ import { ref, watch, onUnmounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { handleToolAction, shouldAutoExpandTool } from '@/utils/renderToolDetail.ts'
 import { getToolIcon } from '@/utils/icons'
-import { CircleHelp, ChevronDown, ChevronRight, CheckCircle2, AlertCircle, AlertTriangle, XCircle } from 'lucide-vue-next'
+import { Brain, ChevronRight, CheckCircle2, AlertCircle, AlertTriangle, XCircle } from 'lucide-vue-next'
 
 const { t, locale } = useI18n()
 
@@ -176,7 +174,7 @@ const props = defineProps({
   staticBlockCache: { type: Object, default: null },
 })
 
-const emit = defineEmits(['toggle-tool', 'show-tool-detail', 'task-card-click', 'send-message', 'render-flush'])
+const emit = defineEmits(['toggle-tool', 'show-tool-detail', 'show-thinking-detail', 'task-card-click', 'send-message', 'render-flush'])
 
 // Key helper: use msgId if available, otherwise msgIndex
 function key(bi) {
@@ -262,10 +260,8 @@ function formatTime(iso) {
   return d.toLocaleDateString(locale.value === 'zh' ? 'zh-CN' : 'en-US')
 }
 
-const thinkingExpanded = ref({})
-
-function toggleThinking(k) {
-  thinkingExpanded.value = { ...thinkingExpanded.value, [k]: !thinkingExpanded.value[k] }
+function handleThinkingClick(block) {
+  emit('show-thinking-detail', { text: block.text })
 }
 
 /** Generate a short summary for an ask-question block (from <ask-question> tag). */
@@ -462,8 +458,8 @@ onUnmounted(() => {
 
 /* Thinking block */
 .chat-thinking {
-  background: color-mix(in srgb, var(--accent-color, #0066cc) 6%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent-color, #0066cc) 15%, transparent);
+  background: color-mix(in srgb, var(--text-secondary, #666) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text-secondary, #666) 18%, transparent);
   border-radius: 6px;
   margin: 4px 0;
   cursor: pointer;
