@@ -2,11 +2,13 @@
   <div class="content-blocks">
     <template v-for="(block, bi) in blocks" :key="bi">
       <!-- Thinking block -->
-      <div v-if="block.type === 'thinking'" class="chat-thinking" @click.stop="handleThinkingClick(block, key(bi))">
+      <div v-if="block.type === 'thinking'" class="chat-thinking" :class="{ expanded: thinkingExpanded[key(bi)] }" @click.stop="toggleThinking(key(bi))">
         <div class="thinking-header">
-          <component :is="Brain" :size="12" />
+          <CircleHelp :size="12" />
           <span class="thinking-label">{{ t('chat.message.deepThinking') }}</span>
+          <ChevronDown :size="12" class="thinking-chevron" />
         </div>
+        <pre v-if="thinkingExpanded[key(bi)]" class="thinking-text">{{ block.text }}</pre>
       </div>
       <!-- Tool use block -->
       <template v-else-if="block.type === 'tool_use'">
@@ -94,7 +96,7 @@ import { ref, watch, onUnmounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { handleToolAction, shouldAutoExpandTool } from '@/utils/renderToolDetail.ts'
 import { getToolIcon } from '@/utils/icons'
-import { Brain, ChevronRight, CheckCircle2, AlertCircle, AlertTriangle, XCircle } from 'lucide-vue-next'
+import { CircleHelp, ChevronDown, ChevronRight, CheckCircle2, AlertCircle, AlertTriangle, XCircle } from 'lucide-vue-next'
 
 const { t, locale } = useI18n()
 
@@ -174,7 +176,7 @@ const props = defineProps({
   staticBlockCache: { type: Object, default: null },
 })
 
-const emit = defineEmits(['toggle-tool', 'show-tool-detail', 'show-thinking-detail', 'task-card-click', 'send-message', 'render-flush'])
+const emit = defineEmits(['toggle-tool', 'show-tool-detail', 'task-card-click', 'send-message', 'render-flush'])
 
 // Key helper: use msgId if available, otherwise msgIndex
 function key(bi) {
@@ -260,10 +262,10 @@ function formatTime(iso) {
   return d.toLocaleDateString(locale.value === 'zh' ? 'zh-CN' : 'en-US')
 }
 
-// thinkingExpanded is no longer needed — thinking now uses overlay
+const thinkingExpanded = ref({})
 
-function handleThinkingClick(block, k) {
-  emit('show-thinking-detail', { text: block.text || '' })
+function toggleThinking(k) {
+  thinkingExpanded.value = { ...thinkingExpanded.value, [k]: !thinkingExpanded.value[k] }
 }
 
 /** Generate a short summary for an ask-question block (from <ask-question> tag). */
