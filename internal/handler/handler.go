@@ -156,10 +156,12 @@ func requireSessionID(w http.ResponseWriter, r *http.Request) (string, bool) {
 // RegisterRoutes registers all HTTP routes with the given mux
 func RegisterRoutes(mux *http.ServeMux) {
 	register := func(pattern string, handler http.HandlerFunc) {
-		wrapped := middleware.RecoverPanic(
-			middleware.WithRequestID(
-				middleware.RequestLogger(
-					middleware.WithLocalizer(handler))))
+		wrapped := middleware.Chain(
+			middleware.RecoverPanic,
+			middleware.WithRequestID,
+			middleware.RequestLogger,
+			middleware.WithLocalizer,
+		)(handler)
 		mux.HandleFunc(pattern, wrapped)
 	}
 
