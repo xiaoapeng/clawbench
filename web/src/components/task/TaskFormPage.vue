@@ -13,7 +13,7 @@
       </div>
 
       <div class="form-section">
-        <h3 class="section-title">{{ t('task.form.basicInfo') || 'Basic Info' }}</h3>
+        <h3 class="section-title">{{ t('task.form.basicInfo') }}</h3>
         <!-- Task name -->
         <div class="form-group">
           <label class="form-label">{{ t('task.form.taskName') }} <span class="required">*</span></label>
@@ -38,7 +38,7 @@
       </div>
 
       <div class="form-section">
-        <h3 class="section-title">{{ t('task.form.scheduleInfo') || 'Schedule' }}</h3>
+        <h3 class="section-title">{{ t('task.form.scheduleInfo') }}</h3>
         <!-- Frequency preset -->
         <div class="form-group">
           <label class="form-label">{{ t('task.form.frequency') }}</label>
@@ -173,7 +173,7 @@
       </div>
 
       <div class="form-section flex-fill">
-        <h3 class="section-title">{{ t('task.form.promptInfo') || 'Prompt' }}</h3>
+        <h3 class="section-title">{{ t('task.form.promptInfo') }}</h3>
         <!-- Prompt -->
         <div class="form-group prompt-group">
           <textarea class="form-textarea prompt-textarea" v-model="form.prompt" :placeholder="t('task.form.promptPlaceholder')"></textarea>
@@ -510,7 +510,7 @@ onMounted(() => {
 
 .prompt-textarea {
   height: 100%;
-  min-height: 140px;
+  min-height: 280px;
 }
 
 .form-hint {
