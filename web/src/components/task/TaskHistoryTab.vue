@@ -7,53 +7,49 @@
     <!-- History content -->
     <div class="task-history-tab">
     <div v-if="loading" class="history-empty">{{ t('common.loading') }}</div>
-    <div v-else-if="executions.length === 0 && runningExecutions.length === 0" class="history-empty">{{ t('task.exec.noExecutions') }}</div>
-    <template v-else>
-      <!-- Running executions -->
-      <div v-for="exec in runningExecutions" :key="exec.id" class="execution-item running" @click.self>
+    <div v-else-if="allExecutions.length === 0" class="history-empty">{{ t('task.exec.noExecutions') }}</div>
+    <div v-else>
+      <div v-for="exec in allExecutions" :key="exec.id" class="execution-item" :class="{ running: isRunning(exec), unread: !isRunning(exec) && isUnreadDisplay(exec) }" @click="!isRunning(exec) && openDetail(exec)">
         <div class="execution-row">
           <div class="execution-info">
             <div class="execution-time-row">
-              <span class="exec-running-dot"></span>
-              <span class="exec-running-label">{{ t('task.exec.running') }}</span>
-              <span class="exec-relative-time">{{ formatRelativeTime(exec.startedAt) }}</span>
+              <template v-if="isRunning(exec)">
+                <span class="exec-running-dot"></span>
+                <span class="exec-running-label">{{ t('task.exec.running') }}</span>
+                <span class="exec-relative-time">{{ formatRelativeTime(exec.createdAt) }}</span>
+              </template>
+              <template v-else>
+                <span class="exec-absolute-time">{{ formatAbsoluteTime(exec.createdAt) }}</span>
+                <span class="exec-relative-time">{{ formatRelativeTime(exec.createdAt) }}</span>
+                <span v-if="isUnreadDisplay(exec)" class="exec-unread-dot"></span>
+              </template>
               <span v-if="exec.triggerType === 'manual'" class="exec-trigger-type manual">{{ t('task.exec.manual') }}</span>
               <span v-else class="exec-trigger-type auto">{{ t('task.exec.auto') }}</span>
+              <template v-if="!isRunning(exec)">
+                <span v-if="exec.status === 'cancelled'" class="exec-status-badge cancelled">{{ t('task.exec.statusCancelled') }}</span>
+                <span v-else-if="exec.status === 'failed'" class="exec-status-badge failed">{{ t('task.exec.statusFailed') }}</span>
+              </template>
             </div>
+            <template v-if="!isRunning(exec)">
+              <div class="exec-summary-row">
+                <div v-if="exec.summary" class="exec-summary">{{ exec.summary }}</div>
+                <div v-else class="exec-summary empty">{{ t('task.exec.noTextOutput') }}</div>
+              </div>
+              <div v-if="exec.metadata" class="exec-meta-row">
+                <span v-if="exec.metadata.wallMs" class="exec-meta-tag exec-meta-duration">{{ formatDuration(exec.metadata.wallMs) }}</span>
+                <span v-if="exec.metadata.model" class="exec-meta-tag">{{ exec.metadata.model }}</span>
+                <span v-if="exec.metadata.inputTokens || exec.metadata.outputTokens" class="exec-meta-tag">{{ formatTokens(exec.metadata) }}</span>
+                <span v-if="exec.metadata.costUsd" class="exec-meta-tag">${{ exec.metadata.costUsd.toFixed(4) }}</span>
+              </div>
+            </template>
           </div>
-          <button class="cancel-exec-btn" @click.stop="cancelExecution(exec.id)" :title="t('task.exec.cancel')">
+          <button v-if="isRunning(exec)" class="cancel-exec-btn" @click.stop="cancelExecution(exec.id)" :title="t('task.exec.cancel')">
             <Square :size="12" />
           </button>
+          <ChevronRight v-else :size="14" class="exec-chevron" />
         </div>
       </div>
-      <!-- Completed executions -->
-      <div v-for="(exec, idx) in executions" :key="idx" class="execution-item" :class="{ unread: isUnreadDisplay(exec) }" @click="openDetail(exec)">
-        <div class="execution-row">
-          <div class="execution-info">
-            <div class="execution-time-row">
-              <span class="exec-absolute-time">{{ formatAbsoluteTime(exec.createdAt) }}</span>
-              <span class="exec-relative-time">{{ formatRelativeTime(exec.createdAt) }}</span>
-              <span v-if="isUnreadDisplay(exec)" class="exec-unread-dot"></span>
-              <span v-if="exec.triggerType === 'manual'" class="exec-trigger-type manual">{{ t('task.exec.manual') }}</span>
-              <span v-else class="exec-trigger-type auto">{{ t('task.exec.auto') }}</span>
-              <span v-if="exec.status === 'cancelled'" class="exec-status-badge cancelled">{{ t('task.exec.statusCancelled') }}</span>
-              <span v-else-if="exec.status === 'failed'" class="exec-status-badge failed">{{ t('task.exec.statusFailed') }}</span>
-            </div>
-            <div class="exec-summary-row">
-              <div v-if="exec.summary" class="exec-summary">{{ exec.summary }}</div>
-              <div v-else class="exec-summary empty">{{ t('task.exec.noTextOutput') }}</div>
-            </div>
-            <div v-if="exec.metadata" class="exec-meta-row">
-              <span v-if="exec.metadata.wallMs" class="exec-meta-tag exec-meta-duration">{{ formatDuration(exec.metadata.wallMs) }}</span>
-              <span v-if="exec.metadata.model" class="exec-meta-tag">{{ exec.metadata.model }}</span>
-              <span v-if="exec.metadata.inputTokens || exec.metadata.outputTokens" class="exec-meta-tag">{{ formatTokens(exec.metadata) }}</span>
-              <span v-if="exec.metadata.costUsd" class="exec-meta-tag">${{ exec.metadata.costUsd.toFixed(4) }}</span>
-            </div>
-          </div>
-          <ChevronRight :size="14" class="exec-chevron" />
-        </div>
-      </div>
-    </template>
+    </div>
     </div>
   </div>
 </template>
@@ -77,8 +73,8 @@ const { t } = useI18n()
 // Task history composable (ISS-011 + ISS-015 + ISS-016)
 const {
   loading,
-  executions,
-  runningExecutions,
+  allExecutions,
+  isRunning,
   locallyReadIds,
   loadExecutions,
   loadRunningStatus,
@@ -106,22 +102,6 @@ function formatAbsoluteTime(createdAt) {
   return `${y}-${mo}-${day} ${h}:${mi}:${s}`
 }
 
-
-function extractSummary(exec) {
-  const { blocks } = chatRender.parseAssistantContent(exec.content || '{}')
-  for (const block of blocks) {
-    if (block.type === 'text' && block.text) {
-      const clean = block.text
-        .replace(/<scheduled-task\s+id="[^"]+"\s*\/>/g, '')
-        .replace(/[#*`_~\[\]()]/g, '')
-        .trim()
-      if (clean) {
-        return clean.length > 120 ? clean.substring(0, 120) + '...' : clean
-      }
-    }
-  }
-  return ''
-}
 
 let pollTimer = null
 

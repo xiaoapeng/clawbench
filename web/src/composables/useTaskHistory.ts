@@ -1,4 +1,4 @@
-import { ref, reactive, type Ref } from 'vue'
+import { ref, reactive, computed, type Ref } from 'vue'
 import { apiGet, apiPut, type ApiOptions } from '@/utils/api.ts'
 import { useToast } from '@/composables/useToast.ts'
 import { useDialog } from '@/composables/useDialog.ts'
@@ -22,6 +22,23 @@ export function useTaskHistory(options: UseTaskHistoryOptions) {
   const executions = ref<any[]>([])
   const runningExecutions = ref<any[]>([])
 
+  // Unified list: running executions first (normalized to same shape), then completed
+  const allExecutions = computed(() => {
+    const running = runningExecutions.value.map(exec => ({
+      ...exec,
+      status: 'running',
+      createdAt: exec.startedAt,
+    }))
+    return [...running, ...executions.value]
+  })
+
+  function isRunning(exec: any): boolean {
+    return exec.status === 'running'
+  }
+
+  // Track previous running count to detect completions
+  let prevRunningCount = 0
+
   // ISS-015: Track locally-read execution IDs to prevent unread flash-back
   const locallyReadIds = reactive(new Set<number>())
 
@@ -36,6 +53,7 @@ export function useTaskHistory(options: UseTaskHistoryOptions) {
   function onTaskChange(): void {
     abortController.abort()
     abortController = new AbortController()
+    prevRunningCount = 0
   }
 
   function isUnreadDisplay(exec: any): boolean {
@@ -73,7 +91,14 @@ export function useTaskHistory(options: UseTaskHistoryOptions) {
         `/api/tasks/${task.value.id}`,
         { signal: abortController.signal },
       )
-      runningExecutions.value = data.runningExecutions || []
+      const newRunning = data.runningExecutions || []
+      const newCount = newRunning.length
+      // When running count decreases, an execution just completed — refresh the completed list
+      if (prevRunningCount > 0 && newCount < prevRunningCount) {
+        loadExecutions()
+      }
+      prevRunningCount = newCount
+      runningExecutions.value = newRunning
     } catch {
       // Silently ignore — polling will retry
     }
@@ -136,6 +161,8 @@ export function useTaskHistory(options: UseTaskHistoryOptions) {
     loading,
     executions,
     runningExecutions,
+    allExecutions,
+    isRunning,
     locallyReadIds,
     loadExecutions,
     loadRunningStatus,
