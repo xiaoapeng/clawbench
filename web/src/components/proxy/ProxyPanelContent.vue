@@ -200,7 +200,9 @@ const isValidPort = computed(() => {
 
 const detectedPortsNotRegistered = computed(() => {
   const registered = new Set(ports.value.map(p => p.port))
-  return detectedPorts.value.filter(p => !registered.has(p.port))
+  return detectedPorts.value
+    .filter(p => !registered.has(p.port))
+    .sort((a, b) => a.port - b.port)
 })
 
 async function handleAdd() {
@@ -538,8 +540,8 @@ async function handleRetryTunnel() {
 }
 
 .proxy-detected-chips {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: 6px;
 }
 
