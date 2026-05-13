@@ -175,18 +175,18 @@ const renderedPrompt = computed(() => {
 .overview-scroll {
   flex: 1;
   overflow-y: auto;
-  padding: 10px 12px;
+  padding: 8px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 /* Header section */
 .task-header {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding-bottom: 4px;
+  gap: 4px;
+  padding-bottom: 2px;
 }
 
 .task-title-row {
@@ -257,7 +257,7 @@ const renderedPrompt = computed(() => {
 .task-meta-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   font-size: 12px;
   color: var(--text-secondary, #666);
 }
@@ -284,10 +284,10 @@ const renderedPrompt = computed(() => {
   background: var(--bg-secondary, #f8f9fa);
   border: 1px solid var(--border-color, #e5e5e5);
   border-radius: 8px;
-  padding: 12px;
+  padding: 10px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .card-title {
@@ -314,7 +314,7 @@ const renderedPrompt = computed(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
 }
 
 .overview-row.highlight {
@@ -426,7 +426,7 @@ const renderedPrompt = computed(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 12px;
+  padding: 6px 8px;
   background: var(--bg-primary, #ffffff);
   border-top: 1px solid var(--border-color, #e5e5e5);
   flex-shrink: 0;

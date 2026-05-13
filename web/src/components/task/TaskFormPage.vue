@@ -360,7 +360,7 @@ onMounted(() => {
 .form-header {
   display: flex;
   align-items: center;
-  padding: 6px 12px;
+  padding: 4px 8px;
   flex-shrink: 0;
   border-bottom: 1px solid var(--border-color, #e5e5e5);
 }
@@ -369,10 +369,10 @@ onMounted(() => {
 .form-scroll {
   flex: 1;
   overflow-y: auto;
-  padding: 10px 12px;
+  padding: 8px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .saving-indicator {
@@ -401,10 +401,10 @@ onMounted(() => {
   background: var(--bg-secondary, #f8f9fa);
   border: 1px solid var(--border-color, #e5e5e5);
   border-radius: 8px;
-  padding: 12px;
+  padding: 10px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .form-section.flex-fill {
@@ -688,7 +688,7 @@ onMounted(() => {
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 6px 8px;
   background: var(--bg-primary, #ffffff);
   border-top: 1px solid var(--border-color, #e5e5e5);
   flex-shrink: 0;

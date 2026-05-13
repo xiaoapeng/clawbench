@@ -95,8 +95,8 @@ function navigate(target) {
   position: relative;
   display: flex;
   align-items: center;
-  height: 22px;
-  padding: 0 16px 0 18px;
+  height: 20px;
+  padding: 0 12px 0 14px;
   font-size: 11px;
   font-weight: 500;
   white-space: nowrap;
@@ -108,7 +108,7 @@ function navigate(target) {
 
 /* First crumb: rounded left */
 .crumb.first {
-  padding-left: 10px;
+  padding-left: 8px;
   border-radius: 4px 0 0 4px;
 }
 
@@ -131,12 +131,12 @@ function navigate(target) {
 .crumb::after {
   content: '';
   position: absolute;
-  right: -8px;
+  right: -6px;
   top: 0;
   width: 0;
   height: 0;
   border-style: solid;
-  border-width: 11px 0 11px 8px;
+  border-width: 10px 0 10px 6px;
   border-color: transparent transparent transparent var(--bg-tertiary, #e9ecef);
   transition: border-color 0.15s;
   z-index: 1;

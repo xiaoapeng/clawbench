@@ -104,10 +104,10 @@ onMounted(refresh)
 .list-header {
   display: flex;
   align-items: center;
-  padding: 6px 12px;
+  padding: 4px 8px;
   flex-shrink: 0;
   border-bottom: 1px solid var(--border-color, #e5e5e5);
-  gap: 8px;
+  gap: 6px;
 }
 
 /* Create button in header toolbar */
@@ -140,13 +140,13 @@ onMounted(refresh)
 .task-list-body {
   flex: 1;
   overflow-y: auto;
-  padding: 12px;
+  padding: 8px;
 }
 
 .task-items-container {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .task-loading,
@@ -177,7 +177,7 @@ onMounted(refresh)
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px;
+  padding: 10px;
   background: var(--bg-secondary, #f8f9fa);
   border: 1px solid var(--border-color, #e5e5e5);
   border-radius: 10px;
@@ -209,14 +209,14 @@ onMounted(refresh)
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
 }
 
 .task-item-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -304,7 +304,7 @@ onMounted(refresh)
 .task-item-meta {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   font-size: 12px;
   color: var(--text-secondary, #666);
   min-width: 0;

@@ -169,7 +169,7 @@ onUnmounted(() => {
 .history-header {
   display: flex;
   align-items: center;
-  padding: 6px 12px;
+  padding: 4px 8px;
   flex-shrink: 0;
   border-bottom: 1px solid var(--border-color, #e5e5e5);
 }
@@ -178,7 +178,7 @@ onUnmounted(() => {
   flex: 1;
   overflow-y: auto;
   min-height: 0;
-  padding: 12px;
+  padding: 8px;
 }
 
 /* ── Empty state ── */
@@ -241,8 +241,8 @@ onUnmounted(() => {
 .execution-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 14px;
+  gap: 6px;
+  padding: 10px 12px;
   cursor: pointer;
 }
 

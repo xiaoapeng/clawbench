@@ -269,7 +269,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
+  padding: 4px 8px;
   border-bottom: 1px solid var(--border-color, #e5e5e5);
   flex-shrink: 0;
 }
@@ -277,7 +277,7 @@ onUnmounted(() => {
 .exec-detail-content {
   flex: 1;
   overflow-y: auto;
-  padding: 16px 12px;
+  padding: 12px 8px;
 }
 
 .exec-tab-bar {

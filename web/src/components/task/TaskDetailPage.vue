@@ -38,7 +38,7 @@ defineEmits<{
 .detail-header {
   display: flex;
   align-items: center;
-  padding: 6px 12px;
+  padding: 4px 8px;
   flex-shrink: 0;
   border-bottom: 1px solid var(--border-color, #e5e5e5);
 }
