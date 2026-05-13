@@ -146,3 +146,98 @@ func TestPiBackendDefinition(t *testing.T) {
 	assert.Nil(t, piBackend.filterLine)
 	assert.Nil(t, piBackend.preStart)
 }
+
+// TestBuildPiStreamArgs_EndToEndResumeChain verifies the complete
+// buildPiStreamArgs behavior across the session lifecycle:
+//  1. New session → no session flag (Pi creates persistent session)
+//  2. Pi emits session event → external_session_id captured
+//  3. Resume with captured ID → --session <id>
+//  4. Resume without captured ID → --continue (fallback)
+func TestBuildPiStreamArgs_EndToEndResumeChain(t *testing.T) {
+	piSessionID := "019e2172-6ebd-743e-8bb6-39d51df91bde"
+
+	// Phase 1: New interactive session — should NOT use --no-session
+	// so Pi creates a persistent session file on disk.
+	newReq := ChatRequest{
+		Prompt:       "hello",
+		SystemPrompt: "you are helpful",
+		Model:        "minimax-cn/MiniMax-M2.7",
+		Resume:       false,
+	}
+	newArgs := buildPiStreamArgs(newReq)
+	assert.NotContains(t, newArgs, "--no-session",
+		"new interactive session must NOT use --no-session (would make session ephemeral)")
+	assert.NotContains(t, newArgs, "--session",
+		"new session should not pass --session")
+	assert.NotContains(t, newArgs, "--continue",
+		"new session should not pass --continue")
+
+	// Phase 2: Pi CLI emits session event with its own session ID.
+	// The handler captures this via PiStreamParser.GetCapturedSessionID()
+	// and persists it as external_session_id. We simulate this by
+	// constructing a ChatRequest with the captured ID.
+
+	// Phase 3: Resume with the Pi-assigned session ID → --session <id>
+	resumeWithIDReq := ChatRequest{
+		Prompt:   "continue",
+		SessionID: piSessionID,
+		Resume:   true,
+	}
+	resumeWithIDArgs := buildPiStreamArgs(resumeWithIDReq)
+	assert.Contains(t, resumeWithIDArgs, "--session")
+	idx := indexOf(resumeWithIDArgs, "--session")
+	assert.Equal(t, piSessionID, resumeWithIDArgs[idx+1],
+		"resume should pass the Pi-assigned session ID to --session")
+	assert.NotContains(t, resumeWithIDArgs, "--no-session")
+	assert.NotContains(t, resumeWithIDArgs, "--continue")
+
+	// Phase 4: Resume without a known session ID → --continue (fallback)
+	// This happens when the session_capture was missed (e.g. stream cancelled early)
+	resumeNoIDReq := ChatRequest{
+		Prompt:   "keep going",
+		SessionID: "",
+		Resume:   true,
+	}
+	resumeNoIDArgs := buildPiStreamArgs(resumeNoIDReq)
+	assert.Contains(t, resumeNoIDArgs, "--continue",
+		"resume without session ID should fall back to --continue")
+	assert.NotContains(t, resumeNoIDArgs, "--session")
+	assert.NotContains(t, resumeNoIDArgs, "--no-session")
+}
+
+// TestBuildPiStreamArgs_NewSessionNoNoSessionFlag specifically verifies
+// the Layer 2 fix: new interactive sessions must NOT pass --no-session.
+// Previously, --no-session was used, which made Pi sessions ephemeral.
+// The captured session ID was then useless for --session resume because
+// the session file was never saved to disk.
+func TestBuildPiStreamArgs_NewSessionNoNoSessionFlag(t *testing.T) {
+	req := ChatRequest{
+		Prompt: "hello",
+		Resume: false,
+	}
+	args := buildPiStreamArgs(req)
+
+	// The critical fix: no --no-session flag for new interactive sessions.
+	// Without this, Pi creates an ephemeral session that cannot be resumed.
+	assert.NotContains(t, args, "--no-session",
+		"BUG REGRESSION: --no-session must not be used for new interactive sessions. "+
+			"Pi creates ephemeral sessions with --no-session, making the captured "+
+			"session ID unusable for --session resume.")
+
+	// Should also not have any other session flag
+	assert.NotContains(t, args, "--session")
+	assert.NotContains(t, args, "--continue")
+}
+
+// TestBuildPiStreamArgs_ScheduledStillUsesNoSession verifies that
+// scheduled executions still use --no-session (they don't need persistence).
+func TestBuildPiStreamArgs_ScheduledStillUsesNoSession(t *testing.T) {
+	req := ChatRequest{
+		Prompt:             "scheduled task",
+		ScheduledExecution: true,
+		Resume:             false,
+	}
+	args := buildPiStreamArgs(req)
+	assert.Contains(t, args, "--no-session",
+		"scheduled executions should still use --no-session")
+}
