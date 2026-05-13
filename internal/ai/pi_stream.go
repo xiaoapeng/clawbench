@@ -3,6 +3,7 @@ package ai
 import (
 	"encoding/json"
 	"log/slog"
+	"strings"
 )
 
 // PiStreamMessage represents a single JSON line from `pi --mode json`.
@@ -71,16 +72,6 @@ type PiToolCallEnd struct {
 	Arguments json.RawMessage `json:"arguments"` // complete tool arguments
 }
 
-// PiToolCallItem represents an item in the message content array
-// (used during toolcall_start to get id and name).
-type PiToolCallItem struct {
-	Type        string `json:"type"`        // "toolCall"
-	ID          string `json:"id"`          // tool call ID
-	Name        string `json:"name"`        // tool name
-	Index       int    `json:"index"`       // matches contentIndex
-	PartialJSON string `json:"partialJson"` // accumulated partial JSON (toolcall_delta)
-}
-
 // PiToolResult represents the result field in tool_execution_end.
 type PiToolResult struct {
 	Content []PiToolResultContent `json:"content"`
@@ -94,9 +85,7 @@ type PiToolResultContent struct {
 
 // PiStreamParser parses JSON Lines output from `pi --mode json`.
 type PiStreamParser struct {
-	sessionID   string
-	activeTools map[string]*ToolCall // tracks in-progress tool calls by ID
-	toolInput   map[string]string    // accumulates partialJson for each tool call
+	sessionID string
 }
 
 // GetCapturedSessionID returns the session ID captured from session events.
@@ -112,14 +101,6 @@ func (p *PiStreamParser) ParseLine(line string, ch chan<- StreamEvent) {
 	if err := json.Unmarshal([]byte(line), &msg); err != nil {
 		slog.Debug("pi stream: skipping unparseable line", "line", line, "error", err)
 		return
-	}
-
-	// Lazy-init maps
-	if p.activeTools == nil {
-		p.activeTools = make(map[string]*ToolCall)
-	}
-	if p.toolInput == nil {
-		p.toolInput = make(map[string]string)
 	}
 
 	switch msg.Type {
@@ -169,19 +150,10 @@ func (p *PiStreamParser) parseMessageUpdate(msg *PiStreamMessage, ch chan<- Stre
 			ch <- StreamEvent{Type: "content", Content: evt.Delta}
 		}
 
-	case "toolcall_start":
-		// Extract id and name from message.content array
-		p.handleToolcallStart(msg, evt)
-
-	case "toolcall_delta":
-		// Accumulate partial JSON
-		if evt.Delta != "" {
-			idx := evt.ContentIndex
-			key := p.toolKeyByIndex(idx)
-			if key != "" {
-				p.toolInput[key] += evt.Delta
-			}
-		}
+	case "toolcall_start", "toolcall_delta":
+		// No event emitted — toolcall_end provides the complete arguments.
+		// Pi always provides full arguments in toolcall_end, so tracking
+		// partial state during start/delta is unnecessary.
 
 	case "toolcall_end":
 		if evt.ToolCall != nil {
@@ -197,47 +169,6 @@ func (p *PiStreamParser) parseMessageUpdate(msg *PiStreamMessage, ch chan<- Stre
 	case "thinking_start", "thinking_end", "text_start", "text_end":
 		// No additional event needed — deltas already streamed
 	}
-}
-
-// handleToolcallStart extracts tool call id and name from the message content array
-// during toolcall_start, and initializes tracking state.
-func (p *PiStreamParser) handleToolcallStart(msg *PiStreamMessage, evt *PiAssistantMessageEvent) {
-	if msg.Message == nil || len(msg.Message.Content) == 0 {
-		return
-	}
-
-	// Parse the content array to find the tool call item matching contentIndex
-	var items []PiToolCallItem
-	if err := json.Unmarshal(msg.Message.Content, &items); err != nil {
-		slog.Debug("pi stream: failed to parse message content in toolcall_start", "error", err)
-		return
-	}
-
-	for _, item := range items {
-		if item.Type == "toolCall" && item.Index == evt.ContentIndex {
-			p.activeTools[evt.ToolCallKey()] = &ToolCall{
-				Name: item.Name,
-				ID:   item.ID,
-			}
-			p.toolInput[evt.ToolCallKey()] = ""
-			break
-		}
-	}
-}
-
-// ToolCallKey returns a map key for tracking tool calls by content index.
-// We use a string key based on contentIndex for simplicity.
-func (evt *PiAssistantMessageEvent) ToolCallKey() string {
-	return "tc_" + string(rune('0'+evt.ContentIndex))
-}
-
-// toolKeyByIndex looks up the active tool call ID for a given content index.
-func (p *PiStreamParser) toolKeyByIndex(contentIndex int) string {
-	key := "tc_" + string(rune('0'+contentIndex))
-	if _, ok := p.activeTools[key]; ok {
-		return key
-	}
-	return ""
 }
 
 // parseMessageEnd handles message_end events — emits metadata and/or error.
@@ -288,7 +219,7 @@ func (p *PiStreamParser) parseToolExecutionEnd(msg *PiStreamMessage, ch chan<- S
 			}
 		}
 		if len(parts) > 0 {
-			outputText = parts[0] // Use first text content item
+			outputText = strings.Join(parts, "\n")
 		}
 	}
 

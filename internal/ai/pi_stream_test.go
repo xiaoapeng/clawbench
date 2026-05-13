@@ -139,6 +139,25 @@ func TestPiStreamParser_ToolExecutionEndError(t *testing.T) {
 	}
 }
 
+func TestPiStreamParser_ToolExecutionEndMultiContent(t *testing.T) {
+	parser := &PiStreamParser{}
+	ch := make(chan StreamEvent, 10)
+	parser.ParseLine(`{"type":"tool_execution_end","toolCallId":"call_3","toolName":"bash","result":{"content":[{"type":"text","text":"line1"},{"type":"text","text":"line2"}]},"isError":false}`, ch)
+
+	select {
+	case evt := <-ch:
+		if evt.Type != "tool_result" {
+			t.Errorf("expected tool_result event, got %s", evt.Type)
+		}
+		// Multiple text content items should be joined with newline
+		if evt.Tool.Output != "line1\nline2" {
+			t.Errorf("expected joined output 'line1\\nline2', got '%s'", evt.Tool.Output)
+		}
+	default:
+		t.Error("expected event on channel")
+	}
+}
+
 func TestPiStreamParser_MessageEndMetadata(t *testing.T) {
 	parser := &PiStreamParser{}
 	ch := make(chan StreamEvent, 10)
@@ -186,7 +205,7 @@ func TestPiStreamParser_ErrorMessage(t *testing.T) {
 	ch := make(chan StreamEvent, 10)
 	parser.ParseLine(`{"type":"message_end","message":{"role":"assistant","stopReason":"error","errorMessage":"403 forbidden"}}`, ch)
 
-	// Should emit both metadata (with error info) and error event
+	// Should emit error event
 	events := drainEvents(ch, 2)
 	var foundError bool
 	for _, evt := range events {
@@ -205,13 +224,22 @@ func TestPiStreamParser_ErrorMessage(t *testing.T) {
 func TestPiStreamParser_SkipsUnknownTypes(t *testing.T) {
 	parser := &PiStreamParser{}
 	ch := make(chan StreamEvent, 10)
-	parser.ParseLine(`{"type":"compaction_start","reason":"context_window"}`, ch)
-	parser.ParseLine(`{"type":"agent_start"}`, ch)
-	parser.ParseLine(`{"type":"turn_start"}`, ch)
-	parser.ParseLine(`{"type":"turn_end"}`, ch)
-	parser.ParseLine(`{"type":"message_start"}`, ch)
-	parser.ParseLine(`{"type":"tool_execution_update"}`, ch)
-	parser.ParseLine(`{"type":"auto_retry_start"}`, ch)
+	// All of these should produce no events
+	skipTypes := []string{
+		`{"type":"agent_start"}`,
+		`{"type":"turn_start"}`,
+		`{"type":"turn_end"}`,
+		`{"type":"message_start"}`,
+		`{"type":"tool_execution_update"}`,
+		`{"type":"compaction_start","reason":"context_window"}`,
+		`{"type":"compaction_end"}`,
+		`{"type":"auto_retry_start"}`,
+		`{"type":"auto_retry_end"}`,
+		`{"type":"queue_update"}`,
+	}
+	for _, line := range skipTypes {
+		parser.ParseLine(line, ch)
+	}
 
 	select {
 	case evt := <-ch:
@@ -221,31 +249,34 @@ func TestPiStreamParser_SkipsUnknownTypes(t *testing.T) {
 	}
 }
 
-func TestPiStreamParser_ToolcallDeltaAccumulates(t *testing.T) {
+func TestPiStreamParser_ToolcallStartAndDeltaNoEvent(t *testing.T) {
 	parser := &PiStreamParser{}
 	ch := make(chan StreamEvent, 10)
 
-	// toolcall_start — no event emitted, just tracks the tool
+	// toolcall_start — no event emitted
 	parser.ParseLine(`{"type":"message_update","assistantMessageEvent":{"type":"toolcall_start","contentIndex":1},"message":{"role":"assistant","content":[{"type":"toolCall","id":"call_abc","name":"edit","arguments":{},"partialJson":"","index":1}]}}`, ch)
 
-	// Verify no event from toolcall_start
 	select {
 	case evt := <-ch:
 		t.Errorf("expected no event from toolcall_start, got %+v", evt)
 	default:
 	}
 
-	// toolcall_delta — accumulate partial JSON
+	// toolcall_delta — no event emitted
 	parser.ParseLine(`{"type":"message_update","assistantMessageEvent":{"type":"toolcall_delta","contentIndex":1,"delta":"{\"path\": \"/tmp/test.go\"}"},"message":{"role":"assistant","content":[{"type":"toolCall","id":"call_abc","name":"edit","arguments":{},"partialJson":"{\"path\": \"/tmp/test.go\"}","index":1}]}}`, ch)
 
-	// Verify no event from toolcall_delta
 	select {
 	case evt := <-ch:
 		t.Errorf("expected no event from toolcall_delta, got %+v", evt)
 	default:
 	}
+}
 
-	// toolcall_end — emit tool_use with accumulated input and Done=true
+func TestPiStreamParser_ToolcallEndWithEdit(t *testing.T) {
+	parser := &PiStreamParser{}
+	ch := make(chan StreamEvent, 10)
+
+	// toolcall_end — emit tool_use with normalized name and input
 	parser.ParseLine(`{"type":"message_update","assistantMessageEvent":{"type":"toolcall_end","contentIndex":1,"toolCall":{"type":"toolCall","id":"call_abc","name":"edit","arguments":{"path":"/tmp/test.go","edits":[{"oldText":"foo","newText":"bar"}]}}},"message":{"role":"assistant"}}`, ch)
 
 	select {
@@ -274,6 +305,19 @@ func TestPiStreamParser_ToolcallDeltaAccumulates(t *testing.T) {
 		}
 	default:
 		t.Error("expected event on channel")
+	}
+}
+
+func TestPiStreamParser_UnparseableLine(t *testing.T) {
+	parser := &PiStreamParser{}
+	ch := make(chan StreamEvent, 10)
+	parser.ParseLine("not json at all", ch)
+	parser.ParseLine("", ch)
+
+	select {
+	case evt := <-ch:
+		t.Errorf("expected no events for unparseable lines, got %+v", evt)
+	default:
 	}
 }
 
