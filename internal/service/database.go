@@ -25,12 +25,7 @@ func InitDB(runFromServer ...bool) error {
 		return fmt.Errorf("failed to create db directory: %w", err)
 	}
 
-	// Dev mode uses a separate database to avoid data conflicts
-	dbName := "ClawBench.db"
-	if model.DevMode {
-		dbName = "ClawBench-dev.db"
-	}
-	dbPath := filepath.Join(dbDir, dbName)
+	dbPath := filepath.Join(dbDir, "ClawBench.db")
 	var err error
 	DB, err = sql.Open("sqlite", dbPath)
 	if err != nil {

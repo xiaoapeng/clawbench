@@ -3,54 +3,80 @@
 # ClawBench 开发调试启动脚本
 #
 # 用法:
-#   ./dev.sh              # 后台启动（Go dev 后端 + Vite 热更新）
-#   ./dev.sh --fg         # 前台启动
-#   ./dev.sh --stop       # 停止后台进程
-#   ./dev.sh --restart    # 重启
+#   ./dev-server.sh              # 后台启动（Go dev 后端 + Vite 热更新）
+#   ./dev-server.sh --fg         # 前台启动
+#   ./dev-server.sh --stop       # 停止后台进程
+#   ./dev-server.sh --restart    # 重启
+#
+# 原理:
+#   在 .dev-build/ 目录下创建独立的 ClawBench 实例（symlink 二进制 + agents 等），
+#   写入专属的 config.yaml。从该目录启动 clawbench，BinDir 自然不同，
+#   数据库/日志/RAG 等全部隔离到 .dev-build/.clawbench/ 下。
 #
 
 set -e
 
 NAME="clawbench-dev"
 BIN="./clawbench"
+DEV_BUILD=".dev-build"
 DEV_BACKEND_PID_FILE="/tmp/${NAME}-backend.pid"
 DEV_PID_FILE="/tmp/${NAME}-vite.pid"
-AUTO_PW_FILE=".clawbench/auto-password"
 
 # Load shared shell utilities
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/scripts/common.sh"
 
-get_watch_dir() {
-    grep "^watch_dir:" "config/config.yaml" 2>/dev/null | awk '{print $2}' | tr -d '"' || echo ""
+# Vite frontend port: hardcoded default, override via env var
+DEV_FRONTEND_PORT=${VITE_FRONTEND_PORT:-20001}
+
+# Ensure dev build directory exists with a standalone config
+ensure_dev_build() {
+    if [[ -d "$DEV_BUILD" ]]; then
+        return
+    fi
+
+    echo "Creating dev build directory: $DEV_BUILD/"
+    mkdir -p "$DEV_BUILD"
+
+    # Symlink the binary
+    ln -sf "$(pwd)/clawbench" "$DEV_BUILD/clawbench"
+
+    # Symlink shared resources
+    ln -sf "$(pwd)/.venv" "$DEV_BUILD/.venv" 2>/dev/null || true
+    ln -sf "$(pwd)/scripts" "$DEV_BUILD/scripts" 2>/dev/null || true
+
+    # Symlink config/agents (shared agent configs)
+    mkdir -p "$DEV_BUILD/config"
+    ln -sf "$(pwd)/config/agents" "$DEV_BUILD/config/agents" 2>/dev/null || true
+    ln -sf "$(pwd)/config/rules.md" "$DEV_BUILD/config/rules.md" 2>/dev/null || true
+
+    # Write dev-specific config
+    cat > "$DEV_BUILD/config/config.yaml" <<'EOF'
+# ClawBench dev instance configuration / 开发实例配置
+port: 20002
+host: "localhost"
+log_level: "debug"
+tls:
+  enabled: false
+EOF
+
+    echo "Dev build directory ready."
+}
+
+get_dev_port() {
+    grep "^port:" "$DEV_BUILD/config/config.yaml" 2>/dev/null | awk '{print $2}' | tr -d '"' || echo "20002"
 }
 
 show_auto_password() {
-    if [[ -f "$AUTO_PW_FILE" ]]; then
+    local auto_pw_file="$DEV_BUILD/.clawbench/auto-password"
+    if [[ -f "$auto_pw_file" ]]; then
         local pw
-        pw=$(cat "$AUTO_PW_FILE")
+        pw=$(cat "$auto_pw_file")
         echo "  Password: $pw (auto-generated)"
     fi
 }
 
-get_dev_port() {
-    local key="$1"
-    local default="$2"
-    local val
-    val=$(sed -n '/^dev:/,/^[a-z]/{/^  '"$key"':/p}' "config/config.yaml" 2>/dev/null | awk '{print $2}' | tr -d '"' || echo "")
-    echo "${val:-$default}"
-}
-
-get_dev_host() {
-    local host
-    host=$(sed -n '/^dev:/,/^[a-z]/{/^  host:/p}' "config/config.yaml" 2>/dev/null | awk '{print $2}' | tr -d '"' || echo "")
-    echo "${host:-localhost}"
-}
-
-# Dev 模式端口（从 config/config.yaml 读取，与正式版分离）
-DEV_BACKEND_PORT=$(get_dev_port "port" 20002)
-DEV_FRONTEND_PORT=$(get_dev_port "frontend_port" 20001)
-DEV_HOST=$(get_dev_host)
+DEV_BACKEND_PORT=$(get_dev_port)
 
 _stop_dev() {
     for pfile in "$DEV_BACKEND_PID_FILE" "$DEV_PID_FILE"; do
@@ -81,27 +107,28 @@ start_dev() {
     _stop_dev
     sleep 0.5
 
+    ensure_dev_build
     check_binary "$BIN"
 
-    local WATCH_DIR
-    WATCH_DIR=$(get_watch_dir)
+    # Re-read port in case config was updated
+    DEV_BACKEND_PORT=$(get_dev_port)
+
     echo "=== Starting $NAME (dev mode) ==="
-    echo "  Binary:   $BIN"
-    echo "  Backend:  http://$DEV_HOST:$DEV_BACKEND_PORT"
-    echo "  Frontend: http://$DEV_HOST:$DEV_FRONTEND_PORT"
-    echo "  DB:       ClawBench-dev.db (separate from release)"
-    echo "  Watch:    ${WATCH_DIR:-default}"
-    show_auto_password
+    echo "  Binary:   $DEV_BUILD/clawbench (symlink)"
+    echo "  Config:   $DEV_BUILD/config/config.yaml"
+    echo "  Backend:  http://localhost:$DEV_BACKEND_PORT"
+    echo "  Frontend: http://localhost:$DEV_FRONTEND_PORT"
+    echo "  DataDir:  $DEV_BUILD/.clawbench/"
     echo ""
 
-    # Start Go backend in dev mode
-    nohup $BIN --dev --port $DEV_BACKEND_PORT > /tmp/clawbench-dev-backend.log 2>&1 &
+    # Start Go backend from the dev build directory
+    nohup $DEV_BUILD/clawbench > /tmp/clawbench-dev-backend.log 2>&1 &
     echo $! > "$DEV_BACKEND_PID_FILE"
     disown $! 2>/dev/null
 
     sleep 0.3
     if ! kill -0 $(cat "$DEV_BACKEND_PID_FILE") 2>/dev/null; then
-        echo "Failed to start dev backend." >&2
+        echo "Failed to start dev backend. Check /tmp/clawbench-dev-backend.log" >&2
         rm -f "$DEV_BACKEND_PID_FILE"
         exit 1
     fi
@@ -112,7 +139,9 @@ start_dev() {
     echo $! > "$DEV_PID_FILE"
     echo "Vite dev server started (PID $(cat "$DEV_PID_FILE")) on port $DEV_FRONTEND_PORT"
     echo ""
-    echo "Open http://$DEV_HOST:$DEV_FRONTEND_PORT in your browser"
+
+    show_auto_password
+    echo "Open http://localhost:$DEV_FRONTEND_PORT in your browser"
     echo "Logs: /tmp/vite-dev.log  /tmp/clawbench-dev-backend.log"
 }
 

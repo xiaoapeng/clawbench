@@ -48,6 +48,11 @@ func ApplyDefaults(cfg *Config, presence map[string]bool) string {
 		cfg.Port = 20000
 	}
 
+	// --- LogLevel ---
+	if cfg.LogLevel == "" {
+		cfg.LogLevel = "info"
+	}
+
 	// --- WatchDir ---
 	if cfg.WatchDir == "" {
 		cfg.WatchDir = platform.UserHomeDir()

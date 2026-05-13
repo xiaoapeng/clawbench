@@ -29,7 +29,6 @@ type testEnv struct {
 	OrigToken  string
 	OrigWatch  string
 	OrigDB     *sql.DB
-	OrigDev    bool
 }
 
 // setupTestEnv creates a temporary project directory, initializes an in-memory DB,
@@ -45,14 +44,12 @@ func setupTestEnv(t *testing.T) (*testEnv, func()) {
 	origToken := model.SessionToken
 	origWatch := model.WatchDir
 	origDB := service.DB
-	origDev := model.DevMode
 	origAgents := model.Agents
 	origAgentList := model.AgentList
 
 	// Set test globals
 	model.SessionToken = ""
 	model.WatchDir = watchDir
-	model.DevMode = false
 
 	// Init in-memory SQLite
 	db, err := sql.Open("sqlite", ":memory:")
@@ -183,13 +180,11 @@ func setupTestEnv(t *testing.T) (*testEnv, func()) {
 		OrigToken:  origToken,
 		OrigWatch:  origWatch,
 		OrigDB:     origDB,
-		OrigDev:    origDev,
 	}
 
 	teardown := func() {
 		model.SessionToken = origToken
 		model.WatchDir = origWatch
-		model.DevMode = origDev
 		model.Agents = origAgents
 		model.AgentList = origAgentList
 		service.DB = origDB

@@ -48,7 +48,7 @@ npx vitest run web/src/components/__tests__/gitGraphUtils.test.ts  # Single test
 
 ### Backend (Go)
 
-**Entry point:** `cmd/server/main.go` — loads config, initializes SQLite, starts HTTP server, SSH tunnel server (if enabled), scheduler, and ProxyRegistry. Startup order: port → LoadAgents → auto-discovery (when no agents configured) → scheduler init (LoadTasksFromDB runs after LoadAgents to ensure agent_id resolution succeeds).
+**Entry point:** `cmd/server/main.go` — loads config (auto-detect or `--config` flag), initializes SQLite, starts HTTP server, SSH tunnel server (if enabled), scheduler, and ProxyRegistry. Startup order: config → port → LoadAgents → auto-discovery (when no agents configured) → scheduler init (LoadTasksFromDB runs after LoadAgents to ensure agent_id resolution succeeds).
 
 **Layered structure:**
 - `internal/handler/` — HTTP handlers (routes registered in `handler.go`). SSE streaming in `chat_stream.go`, scheduled task CRUD in `scheduler.go`, port forwarding API in `proxy_api.go`, SSH info in `ssh_info.go`, session CRUD in `chat_session.go`, RAG search API in `rag_api.go`, chat quick-send CRUD in `chat_quick_send.go`, terminal quick commands CRUD in `terminal.go`, batch file delete in `file_ops.go`. All `/api/` routes use `middleware.Auth` (with `isLocalhost()` bypass for CLI access).
@@ -91,7 +91,6 @@ npx vitest run web/src/components/__tests__/gitGraphUtils.test.ts  # Single test
 2. `chat_history.indexed` column tracks indexing state; indexer polls every 10s for unindexed messages
 3. Text blocks are extracted (excluding thinking/tool_use), chunked with 512-token sliding window, embedded via Ollama BGE-M3
 4. AI agents search history via `clawbench rag` CLI subcommands (search/message/session), which call the backend RAG API endpoints (`/api/rag/search`, `/api/rag/message`, `/api/rag/session`). RAG search rules and CLI reference are in `config/rules.md`
-5. Dev mode uses separate `rag-dev.duckdb` to avoid production DB conflict
 
 **Interactive terminal:**
 1. Frontend opens WebSocket to `GET /api/terminal/ws?cwd=<dir>`
@@ -215,8 +214,8 @@ npx vitest run web/src/components/__tests__/gitGraphUtils.test.ts  # Single test
 - **ProxyRegistry health checks:** Forwarded ports are probed every 5s; auto-detection scans `/proc/net/tcp` (Linux), `lsof` (macOS), `netstat` (Windows); TLS probing for HTTPS ports.
 - **Android native bridge:** `useAppMode()` detects Android WebView via JS bridge (`AndroidNative.*`). Supports auto-login, port forwarding registration, SSH password management, native dialogs, and volume key mode (setVolumeKeyMode: remap volume up/down to arrow keys when terminal is open).
 - **Touch device CSS:** Use `@media (hover: hover)` to scope `:hover` styles — touch devices get sticky hover that masks `.active` class changes.
-- **Green portable deployment:** All runtime data (SQLite DB, logs, uploads, SSH host keys, TTS models, auto-generated password) lives under `.clawbench/` next to the binary. Deleting that directory = clean uninstall.
-- **Zero-config startup:** `config/config.yaml` is optional. `model.ApplyDefaults()` (in `defaults.go`) fills all zero-value fields with sensible defaults. When `password` is empty, a random UUID is generated and persisted to `.clawbench/auto-password` for reuse across restarts. `ParsePresenceMap()` handles the bool-defaults problem (Go zero value is `false`, but `proxy.enabled` and `ssh.enabled` should default to `true`).
+- **Green portable deployment:** All runtime data (SQLite DB, logs, uploads, SSH host keys, TTS models, auto-generated password) lives under `.clawbench/` next to the binary. Deleting that directory = clean uninstall. To run multiple instances (e.g., dev + production), copy the entire binary directory — each copy gets its own `BinDir`, config, and `.clawbench/` data, ensuring complete isolation.
+- **Zero-config startup:** `config/config.yaml` is optional. `model.ApplyDefaults()` (in `defaults.go`) fills all zero-value fields with sensible defaults. When `password` is empty, a random UUID is generated and persisted to `.clawbench/auto-password` for reuse across restarts. `ParsePresenceMap()` handles the bool-defaults problem (Go zero value is `false`, but `proxy.enabled` and `ssh.enabled` should default to `true`). Config file path is auto-detected from `BinDir` — no `--config` flag needed.
 - **Structured errors:** Backend uses `model.NotFound()`, `model.Forbidden()`, `model.Internal()` constructors for consistent HTTP error responses.
 - **Terminal virtual key groups:** Toolbar keys are grouped by type (modifiers, shortcuts, navigation, arrows, actions) with color-coded visual dividers. Modifier keys use three-state toggle (inactive→once→locked); once auto-clears after next keypress, locked persists until tapped again. Arrow keys and Esc/Tab/PgUp/PgDn hide when gestures are enabled (handled by touch gestures instead). Gesture toggle and symbol toggle buttons sit outside the scroll area. Symbol bar is a separate row above the main toolbar with 19 terminal symbols, sorted by exponential-decay frequency (each click updates score with recency weighting; half-life ~4.6h; re-sorted on every bar open; persisted to localStorage).
 - **Terminal drawer lifecycle:** Closing the terminal drawer (❌ button, swipe-down, parent hides) disconnects WebSocket + disposes xterm instance. Next open creates a fresh Terminal + new PTY session. `cleanupTerminal()` consolidates disposal logic. Multiple concurrent sessions are supported — each client gets its own PTY session with independent state.
@@ -231,7 +230,7 @@ npx vitest run web/src/components/__tests__/gitGraphUtils.test.ts  # Single test
 
 | Section | Key options |
 |---------|------------|
-| Server | `port` (default: 20000), `watch_dir` (default: user home), `password` (default: auto-generated UUID saved to `.clawbench/auto-password`) |
+| Server | `port` (default: 20000), `host` (default: "" = 0.0.0.0), `log_level` (default: "info"), `watch_dir` (default: user home), `password` (default: auto-generated UUID saved to `.clawbench/auto-password`) |
 | Upload | `upload.max_size_mb`, `upload.max_files` |
 | Chat UI | `chat.initial_messages`, `chat.page_size`, `chat.collapsed_height` |
 | Session | `session.max_count` |
@@ -241,10 +240,9 @@ npx vitest run web/src/components/__tests__/gitGraphUtils.test.ts  # Single test
 | SSH | `ssh.enabled`, `ssh.port`, `ssh.host_key` |
 | RAG | `rag.enabled`, `rag.ollama_base_url`, `rag.ollama_model` (bge-m3), `rag.chunk_size` (512), `rag.chunk_overlap` (64), `rag.poll_interval` (10s), `rag.batch_size` (10), `rag.search_limit` (5), `rag.retention_days` (90) |
 | Terminal | `terminal.enabled` (default: true), `terminal.idle_timeout` (default: 10m), `terminal.buffer_lines` (default: 2000), `terminal.max_line_bytes` (default: 65536), `terminal.max_buffer_mb` (default: 4), `terminal.max_sessions` (default: 10) |
-| Dev | `dev.port`, `dev.frontend_port`, `dev.host` |
 | Logging | `log_dir`, `log_max_days`, `default_agent` |
 
-Dev mode uses separate port (20002), database (`ClawBench-dev.db`), and RAG database (`rag-dev.duckdb`).
+Multi-instance deployment: copy the entire binary directory to a new location and customize `config/config.yaml` in the copy. Each instance gets its own `BinDir`, config, and `.clawbench/` data directory — complete isolation with no extra flags needed.
 
 ## Testing
 

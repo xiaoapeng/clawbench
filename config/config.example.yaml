@@ -34,6 +34,14 @@
 # Server port (default: 20000) / 服务端口（默认: 20000）
 # port: 20000
 
+# Bind address (default: "" = 0.0.0.0, all interfaces; "localhost" = 127.0.0.1 only)
+# 绑定地址（默认: 空 = 0.0.0.0 所有接口; "localhost" = 仅 127.0.0.1）
+# host: ""
+
+# Log level: "debug", "info", "warn", "error" (default: "info")
+# 日志级别：debug / info / warn / error（默认: info）
+# log_level: "info"
+
 # Project root directory — the base path that AI agents can access for file operations.
 # 项目监控目录（AI 可访问的文件根路径）
 # Default: user home directory (Linux: /home/username, macOS: /Users/username, Windows: C:\Users\username)
@@ -63,14 +71,6 @@
 #   # Windows example / Windows 示例：
 #   # cert_file: "C:\certs\fullchain.pem"
 #   # key_file: "C:\certs\privkey.pem"
-
-# Dev mode ports (separate from production to avoid conflicts)
-# 开发模式端口（与生产环境隔离，避免冲突）
-# dev:
-#   port: 20002           # Dev backend port / 开发版后端端口
-#   frontend_port: 20001  # Vite frontend port (HMR hot reload) / Vite 前端端口（HMR 热更新）
-#   host: "localhost"     # Bind address: "0.0.0.0" allows public access, "localhost" restricts to local only
-#                         # 绑定地址："0.0.0.0" 允许公网访问，"localhost" 仅限本地
 
 # Chat UI settings / 聊天界面设置
 # chat:

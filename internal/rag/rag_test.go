@@ -103,18 +103,15 @@ func TestChunkText_ParagraphBreak(t *testing.T) {
 
 func TestInit_CreatesStoreAndEmbedder(t *testing.T) {
 	origBinDir := model.BinDir
-	origDevMode := model.DevMode
 	origStore := GlobalStore
 	origEmbedder := GlobalEmbedder
 	t.Cleanup(func() {
 		model.BinDir = origBinDir
-		model.DevMode = origDevMode
 		GlobalStore = origStore
 		GlobalEmbedder = origEmbedder
 	})
 
 	model.BinDir = t.TempDir()
-	model.DevMode = false
 
 	cfg := model.RAGConfig{
 		OllamaBaseURL: "http://localhost:11434",
@@ -136,18 +133,15 @@ func TestInit_CreatesStoreAndEmbedder(t *testing.T) {
 
 func TestInit_DimensionMismatchResetsTable(t *testing.T) {
 	origBinDir := model.BinDir
-	origDevMode := model.DevMode
 	origStore := GlobalStore
 	origEmbedder := GlobalEmbedder
 	t.Cleanup(func() {
 		model.BinDir = origBinDir
-		model.DevMode = origDevMode
 		GlobalStore = origStore
 		GlobalEmbedder = origEmbedder
 	})
 
 	model.BinDir = t.TempDir()
-	model.DevMode = false
 
 	// First init creates store with 1024-dim chunks
 	cfg := model.RAGConfig{
@@ -218,13 +212,10 @@ func TestShutdown_Idempotent(t *testing.T) {
 
 	// Now with a real store
 	origBinDir := model.BinDir
-	origDevMode := model.DevMode
 	t.Cleanup(func() {
 		model.BinDir = origBinDir
-		model.DevMode = origDevMode
 	})
 	model.BinDir = t.TempDir()
-	model.DevMode = false
 
 	err := Init(model.RAGConfig{
 		OllamaBaseURL: "http://localhost:11434",

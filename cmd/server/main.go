@@ -83,8 +83,7 @@ func main() {
 		fmt.Println("Run \"clawbench <command> --help\" for more information.")
 		fmt.Println()
 		fmt.Println("Server options:")
-		fmt.Println("  --dev       Run in development mode")
-		fmt.Println("  --port PORT Server port (default: 20000)")
+		fmt.Println("  --port PORT    Server port (overrides config file, default: 20000)")
 		os.Exit(0)
 	}
 
@@ -104,19 +103,13 @@ func main() {
 	}
 
 	// Parse CLI flags
-	devMode := false
 	cliPort := 0
 	for i, arg := range os.Args[1:] {
-		if arg == "--dev" {
-			devMode = true
-		} else if arg == "--port" && i+1 < len(os.Args[1:]) {
+		if arg == "--port" && i+1 < len(os.Args[1:]) {
 			if p, err := strconv.Atoi(os.Args[i+2]); err == nil && p > 0 && p <= 65535 {
 				cliPort = p
 			}
 		}
-	}
-	if devMode {
-		model.DevMode = true
 	}
 
 	// Determine binary directory for data storage (green portable layout)
@@ -360,10 +353,6 @@ func main() {
 	}
 	handler.SetSpeechProvider(ttsProvider)
 
-	// In dev mode, use a separate log directory
-	if devMode {
-		cfg.LogDir = cfg.LogDir + "-dev"
-	}
 	fileHandler, err := service.NewFileHandler(cfg.LogDir, "clawbench", cfg.LogMaxDays)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to initialize file logger: %v\n", err)
@@ -371,10 +360,15 @@ func main() {
 	}
 	defer fileHandler.Close()
 
-	// Dev mode uses DEBUG log level, release uses INFO
+	// Log level from config (default: "info")
 	logLevel := slog.LevelInfo
-	if devMode {
+	switch cfg.LogLevel {
+	case "debug":
 		logLevel = slog.LevelDebug
+	case "warn":
+		logLevel = slog.LevelWarn
+	case "error":
+		logLevel = slog.LevelError
 	}
 
 	// Create a multi-writer for both stderr and file
@@ -383,9 +377,7 @@ func main() {
 		handlers: []slog.Handler{textHandler, fileHandler},
 	}
 	slog.SetDefault(slog.New(multiHandler))
-	slog.Info("server starting",
-		slog.Bool("dev_mode", devMode),
-	)
+	slog.Info("server starting")
 
 	// Load .env file into process environment (before loading agents,
 	// so agent env ${VAR} references can be resolved at request time)
@@ -448,10 +440,6 @@ func main() {
 
 	// Determine port before loading skills/agents (skills and agents need {{PORT}})
 	port := cfg.Port
-	// Dev mode: use dev-specific port from config
-	if devMode && cfg.Dev.Port > 0 {
-		port = cfg.Dev.Port
-	}
 	// Allow PORT environment variable to override config
 	if portStr := os.Getenv("PORT"); portStr != "" {
 		if p, err := strconv.Atoi(portStr); err == nil && p > 0 && p <= 65535 {
@@ -538,10 +526,7 @@ func main() {
 	defer scheduler.Stop()
 	service.GlobalScheduler = scheduler
 
-	host := ""
-	if devMode && cfg.Dev.Host != "" {
-		host = cfg.Dev.Host
-	}
+	host := cfg.Host
 	addr := fmt.Sprintf("%s:%d", host, port)
 	slog.Info("server ready",
 		slog.String("addr", addr),
@@ -614,19 +599,15 @@ func main() {
 		}
 	}()
 
-	if devMode || !cfg.TLS.Enabled {
-		// Dev mode or TLS disabled: plain HTTP
-		if !cfg.TLS.Enabled && !devMode {
-			slog.Info("TLS disabled, starting with HTTP")
-		} else {
-			slog.Info("starting in dev mode (HTTP)")
-		}
+	if !cfg.TLS.Enabled {
+		// TLS disabled: plain HTTP
+		slog.Info("starting with HTTP")
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("server failed", slog.String("err", err.Error()))
 			os.Exit(1)
 		}
 	} else {
-		// Release mode: HTTPS with TLS
+		// HTTPS with TLS
 		certFile := cfg.TLS.CertFile
 		keyFile := cfg.TLS.KeyFile
 		if certFile == "" {
