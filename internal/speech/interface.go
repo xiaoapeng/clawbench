@@ -2,6 +2,8 @@ package speech
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"regexp"
 	"strings"
 )
@@ -20,6 +22,11 @@ type SpeechProvider interface {
 // Pre-compiled regexes for StripMarkdown.
 var (
 	reCodeBlock      = regexp.MustCompile("(?s)```.*?```")
+	// reAskQuestion matches <ask-question>...</ask-question> blocks (including
+	// those wrapped inside markdown code fences like ```json...```).
+	// The inner content is a JSON object with a "questions" array that must be
+	// preserved for TTS summarization.
+	reAskQuestion    = regexp.MustCompile("(?s)<ask-question>\\s*(```[a-z]*\\n)?(.*?)(```\\s*)?</ask-question>")
 	reInlineCode     = regexp.MustCompile("`[^`]+`")
 	reBoldAsterisk   = regexp.MustCompile(`\*\*([^*]+)\*\*`)
 	reBoldUnderscore = regexp.MustCompile(`__([^_]+)__`)
@@ -61,6 +68,13 @@ func StripMarkdown(text string) string {
 	// Phase 0: Resolve backslash escapes FIRST so that \* becomes *
 	// and subsequent patterns can match the unescaped characters.
 	text = reBackslashEscape.ReplaceAllString(text, "$1")
+
+	// Phase 0.5: Preserve <ask-question> structured question content.
+	// These contain JSON with questions/options that should be spoken aloud.
+	// Extract the content before code-block stripping removes it.
+	// Convert <ask-question>{"questions":[...]}</ask-question> into
+	// a plain-text summary of the questions and options.
+	text = reAskQuestion.ReplaceAllStringFunc(text, preserveAskQuestion)
 
 	// Phase 1: Remove block-level elements
 	text = reCodeBlock.ReplaceAllString(text, "")
@@ -126,4 +140,64 @@ func stripInlineCode(text string) string {
 		}
 		return ""
 	})
+}
+
+// askQuestionJSON is the JSON structure inside <ask-question> tags.
+type askQuestionJSON struct {
+	Questions []askQuestionItem `json:"questions"`
+}
+
+type askQuestionItem struct {
+	Header     string           `json:"header"`
+	Question   string           `json:"question"`
+	Options    []askQuestionOpt `json:"options"`
+	MultiSelect bool            `json:"multiSelect"`
+}
+
+type askQuestionOpt struct {
+	Label       string `json:"label"`
+	Description string `json:"description"`
+}
+
+// preserveAskQuestion converts a <ask-question>...</ask-question> block
+// (whose JSON content may be wrapped in markdown code fences) into a
+// plain-text summary suitable for TTS.  If the JSON cannot be parsed,
+// the raw content is returned as-is so that the summarizer can still see it.
+func preserveAskQuestion(match string) string {
+	// Extract group(2) = the JSON content (between optional ```lang and optional ```)
+	sub := reAskQuestion.FindStringSubmatch(match)
+	if len(sub) < 3 {
+		return match // no useful capture, return as-is
+	}
+	jsonText := strings.TrimSpace(sub[2])
+
+	var data askQuestionJSON
+	if err := json.Unmarshal([]byte(jsonText), &data); err != nil {
+		// Not valid JSON — return the raw text so the summarizer can still read it
+		return jsonText
+	}
+
+	var b strings.Builder
+	for i, q := range data.Questions {
+		if i > 0 {
+			b.WriteString(" ")
+		}
+		b.WriteString(q.Question)
+		if q.Header != "" {
+			b.WriteString(fmt.Sprintf(" (%s)", q.Header))
+		}
+		if len(q.Options) > 0 {
+			b.WriteString(": ")
+			for j, o := range q.Options {
+				if j > 0 {
+					b.WriteString(", ")
+				}
+				b.WriteString(o.Label)
+				if o.Description != "" && o.Description != o.Label {
+					b.WriteString(fmt.Sprintf(" — %s", o.Description))
+				}
+			}
+		}
+	}
+	return b.String()
 }

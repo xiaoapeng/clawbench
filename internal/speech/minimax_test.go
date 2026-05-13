@@ -388,3 +388,87 @@ func TestConstants(t *testing.T) {
 	assert.Equal(t, 0, MaxTextRunes)
 	assert.Equal(t, 16, CacheKeyHexLen)
 }
+
+// --- Ask-question preservation tests ---
+
+func TestStripMarkdown_AskQuestion_PlainJSON(t *testing.T) {
+	input := `Some text before.
+
+<ask-question>
+{"questions":[{"header":"Approach","multiSelect":false,"options":[{"label":"Option A","description":"Fast but less safe"},{"label":"Option B","description":"Safe but slower"}],"question":"Which approach do you prefer?"}]}
+</ask-question>
+
+Some text after.`
+	result := StripMarkdown(input)
+	assert.Contains(t, result, "Which approach do you prefer")
+	assert.Contains(t, result, "Option A")
+	assert.Contains(t, result, "Option B")
+	assert.Contains(t, result, "Fast but less safe")
+	assert.Contains(t, result, "Safe but slower")
+	assert.NotContains(t, result, "<ask-question>")
+	assert.NotContains(t, result, "</ask-question>")
+	assert.Contains(t, result, "Some text before")
+	assert.Contains(t, result, "Some text after")
+}
+
+func TestStripMarkdown_AskQuestion_InCodeFence(t *testing.T) {
+	input := `Here is a question:
+
+<ask-question>
+` + "```json" + `
+{"questions":[{"header":"Method","multiSelect":false,"options":[{"label":"Redis","description":"In-memory cache"},{"label":"SQLite","description":"File-based storage"}],"question":"Which caching method?"}]}
+` + "```" + `
+</ask-question>
+
+Continue here.`
+	result := StripMarkdown(input)
+	assert.Contains(t, result, "Which caching method")
+	assert.Contains(t, result, "Redis")
+	assert.Contains(t, result, "SQLite")
+	assert.Contains(t, result, "In-memory cache")
+	assert.Contains(t, result, "File-based storage")
+	assert.NotContains(t, result, "```")
+	assert.NotContains(t, result, "<ask-question>")
+}
+
+func TestStripMarkdown_AskQuestion_MultipleQuestions(t *testing.T) {
+	input := `<ask-question>
+{"questions":[{"header":"DB","question":"Which database?","options":[{"label":"PostgreSQL","description":"Relational"},{"label":"MongoDB","description":"Document"}],"multiSelect":false},{"header":"Deploy","question":"Deploy where?","options":[{"label":"AWS","description":"Cloud"},{"label":"On-prem","description":"Self-hosted"}],"multiSelect":true}]}
+</ask-question>`
+	result := StripMarkdown(input)
+	assert.Contains(t, result, "Which database")
+	assert.Contains(t, result, "PostgreSQL")
+	assert.Contains(t, result, "MongoDB")
+	assert.Contains(t, result, "Deploy where")
+	assert.Contains(t, result, "AWS")
+	assert.Contains(t, result, "On-prem")
+}
+
+func TestStripMarkdown_AskQuestion_OptionsNoDescription(t *testing.T) {
+	input := `<ask-question>
+{"questions":[{"header":"Confirm","multiSelect":false,"options":[{"label":"Yes"},{"label":"No"}],"question":"Proceed?"}]}
+</ask-question>`
+	result := StripMarkdown(input)
+	assert.Contains(t, result, "Proceed")
+	assert.Contains(t, result, "Yes")
+	assert.Contains(t, result, "No")
+}
+
+func TestStripMarkdown_AskQuestion_InvalidJSON(t *testing.T) {
+	input := `<ask-question>
+not valid json
+</ask-question>`
+	result := StripMarkdown(input)
+	// Invalid JSON should fall back to raw text
+	assert.Contains(t, result, "not valid json")
+}
+
+func TestStripMarkdown_AskQuestion_RegularCodeBlockUnaffected(t *testing.T) {
+	input := "Normal code:\n```go\nfmt.Println(\"hello\")\n```\n<ask-question>\n{\"questions\":[{\"header\":\"Go\",\"question\":\"Use Go?\",\"options\":[{\"label\":\"Yes\",\"description\":\"Go ahead\"}],\"multiSelect\":false}]}\n</ask-question>"
+	result := StripMarkdown(input)
+	// Regular code block should still be removed
+	assert.NotContains(t, result, "fmt.Println")
+	// Ask-question should be preserved
+	assert.Contains(t, result, "Use Go")
+	assert.Contains(t, result, "Yes")
+}
