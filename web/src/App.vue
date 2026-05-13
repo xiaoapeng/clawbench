@@ -186,6 +186,7 @@
             </button>
             <div class="dock-overflow-wrapper">
               <button
+                ref="overflowBtnRef"
                 class="dock-btn dock-overflow-btn"
                 :class="{ active: isOverflowTabActive }"
                 @click.stop="toggleOverflowMenu"
@@ -195,28 +196,31 @@
               >
                 <component :is="overflowButtonIcon" />
               </button>
-              <Transition name="dock-popup">
-                <div v-if="overflowMenuOpen" class="dock-overflow-popup" @keydown.escape="overflowMenuOpen = false">
-                  <button class="dock-overflow-item" :class="{ active: activeTab === 'history' }" @click.stop="handleOverflowSelect('history')">
-                    <GitBranch :size="16" />
-                    <span>{{ t('git.history.projectHistory') }}</span>
-                  </button>
-                  <button class="dock-overflow-item" :class="{ active: activeTab === 'proxy' }" @click.stop="handleOverflowSelect('proxy')">
-                    <EthernetPort :size="16" />
-                    <span>{{ t('nav.portForward') }}</span>
-                  </button>
-                  <button class="dock-overflow-item" :class="{ active: activeTab === 'terminal' }" @click.stop="handleOverflowSelect('terminal')">
-                    <TerminalIcon :size="16" />
-                    <span>{{ t('terminal.title') }}</span>
-                  </button>
-                </div>
-              </Transition>
             </div>
           </div>
         </div>
         <div class="dock-safe-area"></div>
       </div>
     </div>
+
+    <Teleport to="body">
+      <Transition name="dock-popup">
+        <div v-if="overflowMenuOpen" class="dock-overflow-popup" :style="overflowPopupStyle" @keydown.escape="overflowMenuOpen = false">
+          <button class="dock-overflow-item" :class="{ active: activeTab === 'history' }" @click.stop="handleOverflowSelect('history')">
+            <GitBranch :size="16" />
+            <span>{{ t('git.history.projectHistory') }}</span>
+          </button>
+          <button class="dock-overflow-item" :class="{ active: activeTab === 'proxy' }" @click.stop="handleOverflowSelect('proxy')">
+            <EthernetPort :size="16" />
+            <span>{{ t('nav.portForward') }}</span>
+          </button>
+          <button class="dock-overflow-item" :class="{ active: activeTab === 'terminal' }" @click.stop="handleOverflowSelect('terminal')">
+            <TerminalIcon :size="16" />
+            <span>{{ t('terminal.title') }}</span>
+          </button>
+        </div>
+      </Transition>
+    </Teleport>
 
     <ToastNotification :toast="toast" />
     <DialogOverlay />
@@ -456,6 +460,7 @@ function handleDockTerminal() {
 
 // Overflow menu state
 const overflowMenuOpen = ref(false)
+const overflowBtnRef = ref(null)
 const overflowTabs = ['history', 'proxy', 'terminal']
 const overflowTabMeta = {
   history: { icon: GitBranch, titleKey: 'git.history.projectHistory' },
@@ -464,6 +469,17 @@ const overflowTabMeta = {
 }
 
 const isOverflowTabActive = computed(() => overflowTabs.includes(activeTab.value))
+
+const overflowPopupStyle = computed(() => {
+  const btn = overflowBtnRef.value
+  if (!btn) return {}
+  const rect = btn.getBoundingClientRect()
+  return {
+    position: 'fixed',
+    bottom: `${window.innerHeight - rect.top + 8}px`,
+    right: `${window.innerWidth - rect.right}px`,
+  }
+})
 
 const overflowButtonIcon = computed(() =>
   overflowTabMeta[activeTab.value]?.icon ?? MoreHorizontal
@@ -500,7 +516,7 @@ function handleOverflowSelect(tab) {
 
 // Close overflow menu on outside click
 function handleOverflowOutsideClick(e) {
-  if (overflowMenuOpen.value && !e.target.closest('.dock-overflow-wrapper')) {
+  if (overflowMenuOpen.value && !e.target.closest('.dock-overflow-popup') && !e.target.closest('.dock-overflow-btn')) {
     overflowMenuOpen.value = false
   }
 }
@@ -791,20 +807,13 @@ onUnmounted(() => {
 }
 
 /* Overflow menu */
-.dock-overflow-wrapper {
-    position: relative;
-}
-
 .dock-overflow-popup {
-    position: absolute;
-    bottom: calc(100% + 8px);
-    right: 0;
     background: var(--bg-elevated, var(--bg-primary));
     border: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
     border-radius: 12px;
     padding: 4px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-    z-index: 1100;
+    z-index: 9999;
     min-width: 140px;
 }
 
