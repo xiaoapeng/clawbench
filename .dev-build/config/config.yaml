@@ -1,5 +1,0 @@
-port: 20002
-host: "localhost"
-log_level: "debug"
-tls:
-  enabled: false

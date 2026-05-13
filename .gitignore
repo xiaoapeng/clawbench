@@ -61,3 +61,4 @@ android/local.properties
 clawbench-release
 .playwright-cli/
 config/config.yaml
+.dev-build/
