@@ -9,8 +9,8 @@
     <div class="exec-detail-content" ref="contentRef" @click="handleContentClick">
       <!-- Summary / Original tab bar -->
       <div v-if="hasSummary" class="exec-tab-bar">
-        <button class="exec-tab-btn" :class="{ active: activeTab === 'summary' }" @click="activeTab = 'summary'">📌 总结</button>
-        <button class="exec-tab-btn" :class="{ active: activeTab === 'original' }" @click="activeTab = 'original'">📄 原文</button>
+        <button class="exec-tab-btn" :class="{ active: activeTab === 'summary' }" @click="setTab('summary')">📌 总结</button>
+        <button class="exec-tab-btn" :class="{ active: activeTab === 'original' }" @click="setTab('original')">📄 原文</button>
       </div>
       <ChatMessageItem
         v-if="activeMsgData"
@@ -108,7 +108,11 @@ provide('layoutRefreshKey', ref(0))
 
 // ── Summary / Original toggle ──
 const hasSummary = computed(() => props.execDetail?.summary != null && props.execDetail.summary !== '')
-const activeTab = ref<'summary' | 'original'>(hasSummary.value ? 'summary' : 'original')
+const activeTab = ref(hasSummary.value ? 'summary' : 'original')
+
+function setTab(tab) {
+  activeTab.value = tab
+}
 
 // ── Build a synthetic message object for ChatMessageItem (original content) ──
 const msgData = computed(() => {

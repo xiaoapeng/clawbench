@@ -72,8 +72,8 @@ export function useTaskHistory(options: UseTaskHistoryOptions) {
       const rawExecutions = data.executions || []
       executions.value = rawExecutions.map(exec => {
         const { blocks, metadata } = chatRender.parseAssistantContent(exec.content)
-        const summary = extractSummary(exec)
-        return { ...exec, blocks, metadata, summary }
+        const preview = extractPreview(exec)
+        return { ...exec, blocks, metadata, preview }
       })
     } catch (err: any) {
       // Don't report AbortError (expected when switching tasks)
@@ -173,8 +173,10 @@ export function useTaskHistory(options: UseTaskHistoryOptions) {
     openExecDetail(exec.id, exec)
   }
 
-  function extractSummary(exec: any): string {
-    // Prefer backend-provided summary
+  /** Extract a short preview string for the execution list.
+   *  Keeps the original `summary` field intact for the detail view. */
+  function extractPreview(exec: any): string {
+    // Prefer backend-provided summary (truncated for list preview)
     if (exec.summary != null && exec.summary !== '') {
       return stripMarkdownPreview(exec.summary, 120)
     }

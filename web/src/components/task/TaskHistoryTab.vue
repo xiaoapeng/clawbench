@@ -41,7 +41,7 @@
             </div>
             <template v-if="!isRunning(exec)">
               <div class="exec-summary-row">
-                <div v-if="exec.summary" class="exec-summary">{{ exec.summary }}</div>
+                <div v-if="exec.preview" class="exec-summary">{{ exec.preview }}</div>
                 <div v-else class="exec-summary empty">{{ t('task.exec.noTextOutput') }}</div>
               </div>
               <div v-if="exec.metadata" class="exec-meta-row">

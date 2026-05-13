@@ -34,14 +34,13 @@ describe('toolCallSummary', () => {
     })).toBe('Which approach to use?')
   })
 
-  it('truncates long question text', () => {
+  it('shows full question text without truncation', () => {
     const longQuestion = 'A'.repeat(70)
     const result = toolCallSummary({
       name: 'AskUserQuestion',
       input: { questions: [{ question: longQuestion }] },
     })
-    expect(result.length).toBeLessThanOrEqual(60)
-    expect(result).toContain('...')
+    expect(result).toBe(longQuestion)
   })
 
   it('AskUserQuestion with empty questions array returns empty', () => {
@@ -97,11 +96,10 @@ describe('toolCallSummary', () => {
     })).toBe('npm test')
   })
 
-  it('truncates long command', () => {
+  it('shows full command without truncation', () => {
     const longCmd = 'npx '.repeat(20)
     const result = toolCallSummary({ input: { command: longCmd } })
-    expect(result.length).toBeLessThanOrEqual(60)
-    expect(result).toContain('...')
+    expect(result).toBe(longCmd)
   })
 
   // ── pattern (Grep/Glob) ──
@@ -119,11 +117,10 @@ describe('toolCallSummary', () => {
     })).toBe('**/*.go')
   })
 
-  it('truncates long pattern', () => {
+  it('shows full pattern without truncation', () => {
     const longPattern = '['.repeat(70) + 'test' + ']'.repeat(70)
     const result = toolCallSummary({ input: { pattern: longPattern } })
-    expect(result.length).toBeLessThanOrEqual(60)
-    expect(result).toContain('...')
+    expect(result).toBe(longPattern)
   })
 
   it('pattern has lower priority than file_path', () => {
@@ -140,11 +137,10 @@ describe('toolCallSummary', () => {
     })).toBe('golang testing best practices')
   })
 
-  it('truncates long query', () => {
+  it('shows full query without truncation', () => {
     const longQuery = 'how to '.repeat(15)
     const result = toolCallSummary({ input: { query: longQuery } })
-    expect(result.length).toBeLessThanOrEqual(60)
-    expect(result).toContain('...')
+    expect(result).toBe(longQuery)
   })
 
   it('query has lower priority than pattern', () => {
@@ -161,11 +157,10 @@ describe('toolCallSummary', () => {
     })).toBe('https://example.com')
   })
 
-  it('truncates long url', () => {
+  it('shows full url without truncation', () => {
     const longUrl = 'https://' + 'a'.repeat(100) + '.com'
     const result = toolCallSummary({ input: { url: longUrl } })
-    expect(result.length).toBeLessThanOrEqual(60)
-    expect(result).toContain('...')
+    expect(result).toBe(longUrl)
   })
 
   it('url has lower priority than query', () => {
@@ -203,14 +198,13 @@ describe('toolCallSummary', () => {
     })).toBe('Fix the bug')
   })
 
-  it('truncates long prompt for Agent', () => {
+  it('shows full prompt for Agent without truncation', () => {
     const longPrompt = 'P'.repeat(70)
     const result = toolCallSummary({
       name: 'Agent',
       input: { prompt: longPrompt },
     })
-    expect(result.length).toBeLessThanOrEqual(60)
-    expect(result).toContain('...')
+    expect(result).toBe(longPrompt)
   })
 
   it('prompt fallback for non-Agent tools goes to firstVal', () => {
@@ -248,11 +242,11 @@ describe('toolCallSummary', () => {
     })).toBe('hello world')
   })
 
-  it('ignores first value if too long (>= 80 chars)', () => {
+  it('shows first value regardless of length', () => {
     const longVal = 'X'.repeat(80)
     expect(toolCallSummary({
       input: { custom_field: longVal },
-    })).toBe('')
+    })).toBe(longVal)
   })
 
   it('ignores first value if not a string', () => {

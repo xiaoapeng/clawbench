@@ -201,14 +201,13 @@ describe('toolCallSummary', () => {
     })).toBe('Which one?')
   })
 
-  it('truncates long AskUserQuestion text', () => {
+  it('shows full AskUserQuestion text without truncation', () => {
     const long = 'A'.repeat(70)
     const result = toolCallSummary({
       name: 'AskUserQuestion',
       input: { questions: [{ question: long }] },
     })
-    expect(result.length).toBeLessThanOrEqual(60)
-    expect(result.endsWith('...')).toBe(true)
+    expect(result).toBe(long)
   })
 
   it('prefers description over file_path', () => {
@@ -223,9 +222,9 @@ describe('toolCallSummary', () => {
     })).toBe('main.go')
   })
 
-  it('truncates long command', () => {
+  it('shows full command without truncation', () => {
     const result = toolCallSummary({ input: { command: 'npx '.repeat(20) } })
-    expect(result.length).toBeLessThanOrEqual(60)
+    expect(result).toBe('npx '.repeat(20))
   })
 
   it('shows pattern for Grep', () => {
@@ -262,8 +261,8 @@ describe('toolCallSummary', () => {
     expect(toolCallSummary({ input: { custom: 'hello' } })).toBe('hello')
   })
 
-  it('ignores first value if too long (>=80)', () => {
-    expect(toolCallSummary({ input: { data: 'X'.repeat(80) } })).toBe('')
+  it('shows first value regardless of length', () => {
+    expect(toolCallSummary({ input: { data: 'X'.repeat(80) } })).toBe('X'.repeat(80))
   })
 
   it('ignores non-string first value', () => {

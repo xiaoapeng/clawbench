@@ -1,5 +1,5 @@
 <template>
-  <ModalDialog :open="show" :zIndex="2400" @close="$emit('close')">
+  <BottomSheet :open="show" auto @close="$emit('close')">
     <template #header>
       <div class="tool-detail-header" :data-category="category">
         <component :is="headerIcon" :size="14" class="tool-detail-header-icon" />
@@ -22,13 +22,13 @@
         <div class="tool-output-body" v-html="toolOutputHtml"></div>
       </div>
     </div>
-  </ModalDialog>
+  </BottomSheet>
 </template>
 
 <script setup>
 import { computed } from 'vue'
 import { CheckCircle2, XCircle } from 'lucide-vue-next'
-import ModalDialog from '@/components/common/ModalDialog.vue'
+import BottomSheet from '@/components/common/BottomSheet.vue'
 import { getToolIcon } from '@/utils/icons'
 import { handleToolAction } from '@/utils/renderToolDetail.ts'
 
@@ -49,7 +49,7 @@ const headerIcon = computed(() => getToolIcon(props.toolName).icon)
 
 function handleBodyClick(event) {
   if (props.toolName && handleToolAction(props.toolName, event, emit)) return
-  // Handle file-open buttons — modal is teleported to <body>,
+  // Handle file-open buttons — bottom sheet is teleported to <body>,
   // ChatMessageList's handleChatClick won't see these clicks.
   const fileBtn = event.target.closest('.chat-file-open-btn')
   if (fileBtn) {
@@ -142,8 +142,8 @@ function handleBodyClick(event) {
   cursor: default;
 }
 
-/* Tint the modal header with tool accent color */
-:deep(.modal-header) {
+/* Tint the bottom sheet header with tool accent color */
+:deep(.bs-header) {
   --tool-accent: var(--text-muted);
   background: color-mix(in srgb, var(--tool-accent) 5%, transparent);
   border-bottom-color: color-mix(in srgb, var(--tool-accent) 15%, var(--border-color));
@@ -151,7 +151,7 @@ function handleBodyClick(event) {
 </style>
 
 <style>
-/* Non-scoped styles for v-html penetration — tool detail rendering in modal */
+/* Non-scoped styles for v-html penetration — tool detail rendering in bottom sheet */
 .tool-detail-body .tool-output-section {
   margin-top: 8px;
   border-top: 1px solid var(--border-color);
