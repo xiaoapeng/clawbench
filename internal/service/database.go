@@ -180,6 +180,15 @@ func InitDB(runFromServer ...bool) error {
 		}
 	}
 
+	// Migrate: add summary column for task execution summarization
+	var hasSummary int
+	DB.QueryRow("SELECT COUNT(*) FROM pragma_table_info('task_executions') WHERE name='summary'").Scan(&hasSummary)
+	if hasSummary == 0 {
+		if _, err := DB.Exec("ALTER TABLE task_executions ADD COLUMN summary TEXT"); err != nil {
+			return fmt.Errorf("failed to add summary column: %w", err)
+		}
+	}
+
 	// Clean up orphaned streaming messages from previous crashes/restarts.
 	// Any message with streaming=1 at startup can never be finalized since
 	// its stream no longer exists. Mark them as cancelled so the UI shows

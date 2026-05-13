@@ -15,6 +15,7 @@ import (
 
 	"clawbench/internal/service"
 	"clawbench/internal/speech"
+	"clawbench/internal/summarize"
 )
 
 const (
@@ -38,11 +39,11 @@ func SetSpeechProvider(p speech.SpeechProvider) {
 }
 
 // summarizer is the global text summarizer instance.
-var summarizer speech.Summarizer = speech.NewSimpleSummarizer()
+var summarizer summarize.Summarizer = summarize.NewSimple()
 
 // SetSummarizer replaces the global text summarizer.
 // Must be called before the HTTP server starts; not goroutine-safe.
-func SetSummarizer(s speech.Summarizer) {
+func SetSummarizer(s summarize.Summarizer) {
 	summarizer = s
 }
 
@@ -83,14 +84,14 @@ func TTSGenerate(w http.ResponseWriter, r *http.Request) {
 		req.Language = "zh"
 	}
 
-	if speech.MaxTextRunes > 0 && len([]rune(req.Text)) > speech.MaxTextRunes {
-		writeLocalizedErrorf(w, r, http.StatusBadRequest, "TextTooLong", map[string]any{"MaxChars": speech.MaxTextRunes})
+	if summarize.MaxTextRunes > 0 && len([]rune(req.Text)) > summarize.MaxTextRunes {
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "TextTooLong", map[string]any{"MaxChars": summarize.MaxTextRunes})
 		return
 	}
 
 	// Compute cache key from text content
 	hash := sha256.Sum256([]byte(req.Text))
-	cacheKey := hex.EncodeToString(hash[:])[:speech.CacheKeyHexLen]
+	cacheKey := hex.EncodeToString(hash[:])[:summarize.CacheKeyHexLen]
 
 	// Determine audio file extension based on TTS engine
 	audioExt := ".mp3"

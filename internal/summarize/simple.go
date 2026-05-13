@@ -1,4 +1,4 @@
-package speech
+package summarize
 
 import "context"
 
@@ -8,8 +8,8 @@ import "context"
 // cases where raw cleaned text is acceptable for TTS.
 type SimpleSummarizer struct{}
 
-// NewSimpleSummarizer creates a SimpleSummarizer.
-func NewSimpleSummarizer() *SimpleSummarizer {
+// NewSimple creates a SimpleSummarizer.
+func NewSimple() *SimpleSummarizer {
 	return &SimpleSummarizer{}
 }
 

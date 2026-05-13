@@ -15,11 +15,12 @@ import (
 
 	"clawbench/internal/service"
 	"clawbench/internal/speech"
+	"clawbench/internal/summarize"
 
 	"github.com/stretchr/testify/assert"
 )
 
-// mockSummarizer is a test double for speech.Summarizer.
+// mockSummarizer is a test double for summarize.Summarizer.
 type mockSummarizer struct {
 	result       string
 	err          error
@@ -124,9 +125,9 @@ func TestTTSGenerate_EmptyText(t *testing.T) {
 
 func TestTTSGenerate_TextTooLong(t *testing.T) {
 	// Temporarily set MaxTextRunes to enforce a limit
-	origMaxTextRunes := speech.MaxTextRunes
-	speech.MaxTextRunes = 100
-	defer func() { speech.MaxTextRunes = origMaxTextRunes }()
+	origMaxTextRunes := summarize.MaxTextRunes
+	summarize.MaxTextRunes = 100
+	defer func() { summarize.MaxTextRunes = origMaxTextRunes }()
 
 	mockProvider := &mockSpeechProvider{}
 	mockSum := &mockSummarizer{}
@@ -168,7 +169,7 @@ func TestTTSGenerate_Success(t *testing.T) {
 
 	// Wait for the background goroutine to complete
 	hash := sha256.Sum256([]byte(text))
-	cacheKey := hex.EncodeToString(hash[:])[:speech.CacheKeyHexLen]
+	cacheKey := hex.EncodeToString(hash[:])[:summarize.CacheKeyHexLen]
 	job, ok := service.GetTTSJob(cacheKey)
 	if ok {
 		select {
@@ -201,7 +202,7 @@ func TestTTSGenerate_SummarizeFailure(t *testing.T) {
 
 	// Wait for the background goroutine to complete
 	hash := sha256.Sum256([]byte(text))
-	cacheKey := hex.EncodeToString(hash[:])[:speech.CacheKeyHexLen]
+	cacheKey := hex.EncodeToString(hash[:])[:summarize.CacheKeyHexLen]
 	job, ok := service.GetTTSJob(cacheKey)
 	if ok {
 		select {
@@ -239,7 +240,7 @@ func TestTTSGenerate_SynthesizeFailure(t *testing.T) {
 
 	// Wait for job to complete
 	hash := sha256.Sum256([]byte(text))
-	cacheKey := hex.EncodeToString(hash[:])[:speech.CacheKeyHexLen]
+	cacheKey := hex.EncodeToString(hash[:])[:summarize.CacheKeyHexLen]
 	job, ok := service.GetTTSJob(cacheKey)
 	if ok {
 		select {
@@ -263,7 +264,7 @@ func TestTTSGenerate_CacheHit(t *testing.T) {
 
 	text := "这段文本会被缓存。"
 	hash := sha256.Sum256([]byte(text))
-	cacheKey := hex.EncodeToString(hash[:])[:speech.CacheKeyHexLen]
+	cacheKey := hex.EncodeToString(hash[:])[:summarize.CacheKeyHexLen]
 	relAudioPath := filepath.Join(".clawbench", "generated", "tts", cacheKey+".mp3")
 	absAudioPath := filepath.Join(env.ProjectDir, relAudioPath)
 
@@ -317,13 +318,13 @@ func TestTTSGenerate_InvalidJSON(t *testing.T) {
 func TestTTSGenerate_CacheKeyDeterministic(t *testing.T) {
 	text := "同样的文本应该产生同样的缓存键"
 	hash1 := sha256.Sum256([]byte(text))
-	key1 := hex.EncodeToString(hash1[:])[:speech.CacheKeyHexLen]
+	key1 := hex.EncodeToString(hash1[:])[:summarize.CacheKeyHexLen]
 
 	hash2 := sha256.Sum256([]byte(text))
-	key2 := hex.EncodeToString(hash2[:])[:speech.CacheKeyHexLen]
+	key2 := hex.EncodeToString(hash2[:])[:summarize.CacheKeyHexLen]
 
 	assert.Equal(t, key1, key2)
-	assert.Len(t, key1, speech.CacheKeyHexLen)
+	assert.Len(t, key1, summarize.CacheKeyHexLen)
 }
 
 // --- SetSpeechProvider and SetSummarizer ---
@@ -351,7 +352,7 @@ func TestSetSummarizer(t *testing.T) {
 }
 
 // --- ensure mockSummarizer satisfies Summarizer interface ---
-var _ speech.Summarizer = (*mockSummarizer)(nil)
+var _ summarize.Summarizer = (*mockSummarizer)(nil)
 
 // --- ensure mockSpeechProvider satisfies SpeechProvider interface ---
 var _ speech.SpeechProvider = (*mockSpeechProvider)(nil)
@@ -375,7 +376,7 @@ func TestTTSGenerate_LanguageDefaultToZh(t *testing.T) {
 
 	// Wait for job to complete
 	hash := sha256.Sum256([]byte(text))
-	cacheKey := hex.EncodeToString(hash[:])[:speech.CacheKeyHexLen]
+	cacheKey := hex.EncodeToString(hash[:])[:summarize.CacheKeyHexLen]
 	if job, ok := service.GetTTSJob(cacheKey); ok {
 		select {
 		case <-job.Done:
@@ -406,7 +407,7 @@ func TestTTSGenerate_LanguageEn(t *testing.T) {
 
 	// Wait for job to complete
 	hash := sha256.Sum256([]byte(text))
-	cacheKey := hex.EncodeToString(hash[:])[:speech.CacheKeyHexLen]
+	cacheKey := hex.EncodeToString(hash[:])[:summarize.CacheKeyHexLen]
 	if job, ok := service.GetTTSJob(cacheKey); ok {
 		select {
 		case <-job.Done:
@@ -435,7 +436,7 @@ func TestTTSGenerate_LanguageJa(t *testing.T) {
 
 	// Wait for job to complete
 	hash := sha256.Sum256([]byte(text))
-	cacheKey := hex.EncodeToString(hash[:])[:speech.CacheKeyHexLen]
+	cacheKey := hex.EncodeToString(hash[:])[:summarize.CacheKeyHexLen]
 	if job, ok := service.GetTTSJob(cacheKey); ok {
 		select {
 		case <-job.Done:

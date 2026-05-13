@@ -1,4 +1,4 @@
-package speech
+package summarize
 
 import (
 	"context"
@@ -11,11 +11,13 @@ import (
 
 // AIBackendSummarizer implements Summarizer using an existing AI backend
 // (claude, codebuddy, gemini, opencode, codex, qoder, vecli) via AIBackend.ExecuteStream().
+// The full name is retained to avoid confusion with ai.AIBackend when both packages
+// are imported in the same file.
 type AIBackendSummarizer struct {
 	backend ai.AIBackend
 	// Model is the model ID override for the AI backend (empty = use backend default).
 	Model string
-	gs    genericSummarizer
+	gs    ttsPipeline
 }
 
 // NewAIBackendSummarizer creates an AIBackendSummarizer for the given backend type.
@@ -27,7 +29,7 @@ func NewAIBackendSummarizer(backendType string) (*AIBackendSummarizer, error) {
 	s := &AIBackendSummarizer{
 		backend: backend,
 	}
-	s.gs = NewGenericSummarizer(s.doSummarizePass)
+	s.gs = NewTTSPipeline(s.doSummarizePass)
 	return s, nil
 }
 

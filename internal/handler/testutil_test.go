@@ -124,6 +124,7 @@ func setupTestEnv(t *testing.T) (*testEnv, func()) {
 			trigger_type TEXT NOT NULL DEFAULT 'auto',
 			status TEXT NOT NULL DEFAULT 'completed',
 			read_at DATETIME,
+			summary TEXT,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		);
 		CREATE INDEX IF NOT EXISTS idx_executions_task ON task_executions(task_id, created_at DESC);

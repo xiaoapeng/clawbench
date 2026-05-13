@@ -1,4 +1,4 @@
-package speech
+package summarize
 
 import (
 	"context"
@@ -11,15 +11,15 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// --- NewMMXSummarizer ---
+// --- NewMMX ---
 
-func TestNewMMXSummarizer_DefaultModel(t *testing.T) {
-	s := NewMMXSummarizer()
+func TestNewMMX_DefaultModel(t *testing.T) {
+	s := NewMMX()
 	assert.Equal(t, "MiniMax-M2.7", s.Model)
 }
 
-func TestNewMMXSummarizer_CustomModel(t *testing.T) {
-	s := NewMMXSummarizer()
+func TestNewMMX_CustomModel(t *testing.T) {
+	s := NewMMX()
 	s.Model = "custom-model"
 	assert.Equal(t, "custom-model", s.Model)
 }
@@ -27,14 +27,14 @@ func TestNewMMXSummarizer_CustomModel(t *testing.T) {
 // --- MMXSummarizer.Summarize short text (no CLI needed) ---
 
 func TestMMXSummarize_ShortText_NoCLI(t *testing.T) {
-	s := NewMMXSummarizer()
+	s := NewMMX()
 	result, err := s.Summarize(context.Background(), "短文本无需总结", "zh")
 	assert.NoError(t, err)
 	assert.Equal(t, "短文本无需总结", result)
 }
 
 func TestMMXSummarize_ShortTextWithMarkdown_NoCLI(t *testing.T) {
-	s := NewMMXSummarizer()
+	s := NewMMX()
 	result, err := s.Summarize(context.Background(), "Hello **world** and *test*.", "en")
 	assert.NoError(t, err)
 	assert.NotContains(t, result, "**")
@@ -48,14 +48,14 @@ func TestMMXSummarize_doSummarizePass_CLIUnavailable(t *testing.T) {
 		t.Skip("mmx CLI available, skipping CLI-unavailable test")
 	}
 
-	s := NewMMXSummarizer()
+	s := NewMMX()
 	_, err := s.doSummarizePass(context.Background(), "some text", "system prompt", 1)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "mmx text chat")
 }
 
 func TestMMXSummarize_doSummarizePass_CancelledContext(t *testing.T) {
-	s := NewMMXSummarizer()
+	s := NewMMX()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -70,7 +70,7 @@ func TestMMXSummarize_LongText_WithCLI(t *testing.T) {
 		t.Skip("mmx CLI not available, skipping integration test")
 	}
 
-	s := NewMMXSummarizer()
+	s := NewMMX()
 	longText := strings.Repeat("这是一段较长的AI回复内容，包含了详细的技术分析和代码示例。", 10)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -89,7 +89,7 @@ func TestMMXSummarize_doSummarizePass_CustomModel_WithCLI(t *testing.T) {
 		t.Skip("mmx CLI not available, skipping integration test")
 	}
 
-	s := NewMMXSummarizer()
+	s := NewMMX()
 	s.Model = "MiniMax-M2.7"
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -108,8 +108,8 @@ func TestMMXSummarize_doSummarizePass_CustomModel_WithCLI(t *testing.T) {
 
 func TestMMXSummarize_Pipeline_ReSummarization(t *testing.T) {
 	callCount := 0
-	// Use genericSummarizer with mock pass function
-	s := genericSummarizer{
+	// Use ttsPipeline with mock pass function
+	s := ttsPipeline{
 		passFn: func(ctx context.Context, text, systemPrompt string, pass int) (string, error) {
 			callCount++
 			if pass == 1 {
@@ -129,7 +129,7 @@ func TestMMXSummarize_Pipeline_ReSummarization(t *testing.T) {
 }
 
 func TestMMXSummarize_Pipeline_PassError(t *testing.T) {
-	s := genericSummarizer{
+	s := ttsPipeline{
 		passFn: func(ctx context.Context, text, systemPrompt string, pass int) (string, error) {
 			return "", fmt.Errorf("summarization service unavailable")
 		},

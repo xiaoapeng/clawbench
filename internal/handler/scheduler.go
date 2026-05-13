@@ -328,13 +328,14 @@ func serveTaskExecutions(w http.ResponseWriter, r *http.Request, taskID int64, p
 		TriggerType string  `json:"triggerType"`
 		Status      string  `json:"status"`
 		Content     *string `json:"content"`
+		Summary     *string `json:"summary"`
 		CreatedAt   string  `json:"createdAt"`
 		IsUnread    bool    `json:"isUnread"`
 	}
 
 	rows, err := service.DB.Query(`
 		SELECT te.id, te.session_id, te.trigger_type, te.status, te.created_at,
-		       te.read_at,
+		       te.read_at, te.summary,
 		       ch.content AS assistant_content
 		FROM task_executions te
 		LEFT JOIN chat_history ch ON ch.session_id = te.session_id
@@ -354,13 +355,17 @@ func serveTaskExecutions(w http.ResponseWriter, r *http.Request, taskID int64, p
 	for rows.Next() {
 		var exec Execution
 		var content sql.NullString
+		var summary sql.NullString
 		var readAt sql.NullTime
-		if err := rows.Scan(&exec.ID, &exec.SessionID, &exec.TriggerType, &exec.Status, &exec.CreatedAt, &readAt, &content); err != nil {
+		if err := rows.Scan(&exec.ID, &exec.SessionID, &exec.TriggerType, &exec.Status, &exec.CreatedAt, &readAt, &summary, &content); err != nil {
 			model.WriteError(w, model.Internal(fmt.Errorf("failed to scan execution record")))
 			return
 		}
 		if content.Valid {
 			exec.Content = &content.String
+		}
+		if summary.Valid {
+			exec.Summary = &summary.String
 		}
 		// An execution is unread if it has no read_at AND (task has never been read OR execution is newer than last_read_at)
 		if readAt.Valid {

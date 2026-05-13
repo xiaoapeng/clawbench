@@ -1,4 +1,4 @@
-package speech
+package summarize
 
 import (
 	"context"
@@ -13,23 +13,23 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestNewAnthropicSummarizer_Defaults(t *testing.T) {
-	s := NewAnthropicSummarizer("https://api.anthropic.com/v1/messages", "sk-ant-test", "")
+func TestNewAnthropic_Defaults(t *testing.T) {
+	s := NewAnthropic("https://api.anthropic.com/v1/messages", "sk-ant-test", "")
 	assert.Equal(t, "https://api.anthropic.com/v1/messages", s.BaseURL)
 	assert.Equal(t, "claude-3-5-haiku-latest", s.Model)
 	assert.Equal(t, "sk-ant-test", s.Key)
 	assert.NotNil(t, s.HTTPClient)
 }
 
-func TestNewAnthropicSummarizer_CustomConfig(t *testing.T) {
-	s := NewAnthropicSummarizer("https://custom.api.com/v1/messages/", "key-abc", "claude-3-opus-latest")
+func TestNewAnthropic_CustomConfig(t *testing.T) {
+	s := NewAnthropic("https://custom.api.com/v1/messages/", "key-abc", "claude-3-opus-latest")
 	assert.Equal(t, "https://custom.api.com/v1/messages", s.BaseURL) // trailing slash trimmed
 	assert.Equal(t, "claude-3-opus-latest", s.Model)
 	assert.Equal(t, "key-abc", s.Key)
 }
 
 func TestAnthropicSummarizer_ShortText(t *testing.T) {
-	s := NewAnthropicSummarizer("https://example.com/v1/messages", "key", "")
+	s := NewAnthropic("https://example.com/v1/messages", "key", "")
 	result, err := s.Summarize(context.Background(), "这是一段短文本", "zh")
 	assert.NoError(t, err)
 	assert.Equal(t, "这是一段短文本", result)
@@ -55,7 +55,7 @@ func TestAnthropicSummarizer_APICall(t *testing.T) {
 	}))
 	defer server.Close()
 
-	s := NewAnthropicSummarizer(server.URL, "sk-ant-test", "claude-3-5-haiku-latest")
+	s := NewAnthropic(server.URL, "sk-ant-test", "claude-3-5-haiku-latest")
 	longText := strings.Repeat("这是一段很长的AI回复内容，用于测试总结功能。", 20)
 	result, err := s.Summarize(context.Background(), longText, "zh")
 
@@ -86,7 +86,7 @@ func TestAnthropicSummarizer_MultiPass(t *testing.T) {
 	}))
 	defer server.Close()
 
-	s := NewAnthropicSummarizer(server.URL, "key", "claude-3-5-haiku-latest")
+	s := NewAnthropic(server.URL, "key", "claude-3-5-haiku-latest")
 	longText := strings.Repeat("这是一段很长的AI回复内容，用于测试总结功能。", 20)
 	result, err := s.Summarize(context.Background(), longText, "zh")
 
@@ -102,7 +102,7 @@ func TestAnthropicSummarizer_ErrorStatus(t *testing.T) {
 	}))
 	defer server.Close()
 
-	s := NewAnthropicSummarizer(server.URL, "bad-key", "claude-3-5-haiku-latest")
+	s := NewAnthropic(server.URL, "bad-key", "claude-3-5-haiku-latest")
 	longText := strings.Repeat("这是一段很长的AI回复内容，用于测试总结功能。", 20)
 	_, err := s.Summarize(context.Background(), longText, "zh")
 
@@ -112,7 +112,7 @@ func TestAnthropicSummarizer_ErrorStatus(t *testing.T) {
 }
 
 func TestAnthropicSummarizer_ConnectionRefused(t *testing.T) {
-	s := NewAnthropicSummarizer("http://127.0.0.1:1", "key", "claude-3-5-haiku-latest")
+	s := NewAnthropic("http://127.0.0.1:1", "key", "claude-3-5-haiku-latest")
 	s.HTTPClient.Timeout = 2 * time.Second
 
 	longText := strings.Repeat("这是一段很长的AI回复内容，用于测试总结功能。", 20)
@@ -133,7 +133,7 @@ func TestAnthropicSummarizer_EmptyResponse(t *testing.T) {
 	}))
 	defer server.Close()
 
-	s := NewAnthropicSummarizer(server.URL, "key", "claude-3-5-haiku-latest")
+	s := NewAnthropic(server.URL, "key", "claude-3-5-haiku-latest")
 	longText := strings.Repeat("这是一段很长的AI回复内容，用于测试总结功能。", 20)
 	_, err := s.Summarize(context.Background(), longText, "zh")
 
@@ -153,7 +153,7 @@ func TestAnthropicSummarizer_ContextCancellation(t *testing.T) {
 	}))
 	defer server.Close()
 
-	s := NewAnthropicSummarizer(server.URL, "key", "claude-3-5-haiku-latest")
+	s := NewAnthropic(server.URL, "key", "claude-3-5-haiku-latest")
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
@@ -177,7 +177,7 @@ func TestAnthropicSummarizer_NoKey(t *testing.T) {
 	}))
 	defer server.Close()
 
-	s := NewAnthropicSummarizer(server.URL, "", "claude-3-5-haiku-latest")
+	s := NewAnthropic(server.URL, "", "claude-3-5-haiku-latest")
 	longText := strings.Repeat("这是一段很长的AI回复内容，用于测试总结功能。", 20)
 	_, err := s.Summarize(context.Background(), longText, "zh")
 
@@ -197,7 +197,7 @@ func TestAnthropicSummarizer_MultipleContentBlocks(t *testing.T) {
 	}))
 	defer server.Close()
 
-	s := NewAnthropicSummarizer(server.URL, "key", "claude-3-5-haiku-latest")
+	s := NewAnthropic(server.URL, "key", "claude-3-5-haiku-latest")
 	longText := strings.Repeat("这是一段很长的AI回复内容，用于测试总结功能。", 20)
 	result, err := s.Summarize(context.Background(), longText, "zh")
 

@@ -1,4 +1,4 @@
-package speech
+package summarize
 
 import (
 	"bytes"
@@ -18,12 +18,12 @@ type AnthropicSummarizer struct {
 	Key        string       // API key (sent as x-api-key header)
 	Model      string       // Model name (default: "claude-3-5-haiku-latest")
 	HTTPClient *http.Client // Shared HTTP client with timeout
-	gs         genericSummarizer
+	gs         ttsPipeline
 }
 
-// NewAnthropicSummarizer creates an AnthropicSummarizer with the given configuration.
+// NewAnthropic creates an AnthropicSummarizer with the given configuration.
 // Empty model defaults to "claude-3-5-haiku-latest".
-func NewAnthropicSummarizer(baseURL, key, model string) *AnthropicSummarizer {
+func NewAnthropic(baseURL, key, model string) *AnthropicSummarizer {
 	if model == "" {
 		model = "claude-3-5-haiku-latest"
 	}
@@ -35,17 +35,17 @@ func NewAnthropicSummarizer(baseURL, key, model string) *AnthropicSummarizer {
 			Timeout: 120 * time.Second,
 		},
 	}
-	s.gs = NewGenericSummarizer(s.doSummarizePass)
+	s.gs = NewTTSPipeline(s.DoSummarizePass)
 	return s
 }
 
 // anthropicRequest is the request body for the Anthropic Messages API.
 type anthropicRequest struct {
-	Model       string              `json:"model"`
-	System      string              `json:"system"`
-	Messages    []anthropicMessage  `json:"messages"`
-	MaxTokens   int                 `json:"max_tokens"`
-	Temperature float64             `json:"temperature"`
+	Model       string             `json:"model"`
+	System      string             `json:"system"`
+	Messages    []anthropicMessage `json:"messages"`
+	MaxTokens   int                `json:"max_tokens"`
+	Temperature float64            `json:"temperature"`
 }
 
 type anthropicMessage struct {
@@ -68,8 +68,9 @@ func (s *AnthropicSummarizer) Summarize(ctx context.Context, text string, langua
 	return s.gs.Summarize(ctx, text, language)
 }
 
-// doSummarizePass performs a single summarization pass using the Anthropic Messages API.
-func (s *AnthropicSummarizer) doSummarizePass(ctx context.Context, text, systemPrompt string, pass int) (string, error) {
+// DoSummarizePass performs a single summarization pass using the Anthropic Messages API.
+// Exported so that initTaskSummarizer can reuse it with a custom pipeline.
+func (s *AnthropicSummarizer) DoSummarizePass(ctx context.Context, text, systemPrompt string, pass int) (string, error) {
 	reqBody := anthropicRequest{
 		Model:  s.Model,
 		System: systemPrompt,

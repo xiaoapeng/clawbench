@@ -9,9 +9,11 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"clawbench/internal/ai"
 	"clawbench/internal/model"
+	"clawbench/internal/summarize"
 
 	"github.com/robfig/cron/v3"
 )
@@ -34,6 +36,7 @@ type Scheduler struct {
 	entries           map[int64]cron.EntryID // task ID -> cron entry ID
 	mu                sync.Mutex
 	runningExecutions sync.Map // key: executionID, value: *RunningExecution
+	taskSummarizer    *summarize.TaskSummarizer
 }
 
 // NewScheduler creates a new Scheduler instance.
@@ -48,6 +51,12 @@ func NewScheduler() *Scheduler {
 func (s *Scheduler) Start() {
 	s.cron.Start()
 	slog.Info("scheduler started")
+}
+
+// SetTaskSummarizer sets the task summarizer for generating execution summaries.
+// Must be called before Start() to ensure all task executions use the summarizer.
+func (s *Scheduler) SetTaskSummarizer(ts *summarize.TaskSummarizer) {
+	s.taskSummarizer = ts
 }
 
 // Stop halts the cron scheduler.
@@ -419,7 +428,8 @@ func (s *Scheduler) executeTask(task *model.ScheduledTask, projectPath string, t
 	)
 
 	// Record execution linked to the session
-	if err := AddTaskExecution(task.ID, sessionID, triggerType); err != nil {
+	executionID, err := AddTaskExecution(task.ID, sessionID, triggerType)
+	if err != nil {
 		slog.Error("failed to record task execution", slog.String("err", err.Error()))
 	}
 
@@ -589,6 +599,50 @@ func (s *Scheduler) executeTask(task *model.ScheduledTask, projectPath string, t
 		slog.String("session_id", sessionID),
 		slog.String("status", newStatus),
 	)
+
+	// Generate summary asynchronously if task summarizer is configured
+	if s.taskSummarizer != nil {
+		capturedExecID := executionID // capture for goroutine
+		capturedBlocks := blocks      // capture for goroutine
+		go func() {
+			// Use independent context with timeout — do NOT inherit executeTask's
+			// ctx which is cancelled when this function returns.
+			sumCtx, sumCancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			defer sumCancel()
+
+			text := extractTextFromBlocks(capturedBlocks)
+			if utf8.RuneCountInString(text) < summarize.ShortTextThreshold {
+				// Text too short, mark as empty (frontend shows original)
+				if err := UpdateExecutionSummary(capturedExecID, ""); err != nil {
+					slog.Warn("failed to update execution summary (short text)",
+						slog.Int64("exec_id", capturedExecID),
+						slog.String("err", err.Error()),
+					)
+				}
+				return
+			}
+			summary, err := s.taskSummarizer.Summarize(sumCtx, text, "")
+			if err != nil {
+				slog.Warn("task execution summary failed",
+					slog.Int64("task_id", task.ID),
+					slog.Int64("exec_id", capturedExecID),
+					slog.String("err", err.Error()),
+				)
+				return // summary stays NULL, frontend shows original
+			}
+			if err := UpdateExecutionSummary(capturedExecID, summary); err != nil {
+				slog.Warn("failed to update execution summary",
+					slog.Int64("exec_id", capturedExecID),
+					slog.String("err", err.Error()),
+				)
+			}
+			slog.Info("task execution summary completed",
+				slog.Int64("task_id", task.ID),
+				slog.Int64("exec_id", capturedExecID),
+				slog.Int("summary_len", utf8.RuneCountInString(summary)),
+			)
+		}()
+	}
 }
 
 // GetTasks retrieves all tasks for a project path. If projectPath is empty, retrieves all tasks.
@@ -699,12 +753,16 @@ func updateTask(task *model.ScheduledTask) error {
 }
 
 // AddTaskExecution records a task execution linked to a chat session.
-func AddTaskExecution(taskID int64, sessionID string, triggerType string) error {
-	_, err := DB.Exec(
+// Returns the auto-generated execution ID.
+func AddTaskExecution(taskID int64, sessionID string, triggerType string) (int64, error) {
+	result, err := DB.Exec(
 		"INSERT INTO task_executions (task_id, session_id, trigger_type) VALUES (?, ?, ?)",
 		taskID, sessionID, triggerType,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.LastInsertId()
 }
 
 // UpdateExecutionStatus updates the status of a task execution by session_id.
@@ -732,6 +790,32 @@ func MarkExecutionRead(executionID string) error {
 		executionID,
 	)
 	return err
+}
+
+// UpdateExecutionSummary updates the summary column for a task execution.
+// summary is NULL when not yet generated, "" when text was too short,
+// and non-empty when summarization succeeded.
+func UpdateExecutionSummary(executionID int64, summary string) error {
+	_, err := DB.Exec(
+		"UPDATE task_executions SET summary = ? WHERE id = ?",
+		summary, executionID,
+	)
+	return err
+}
+
+// extractTextFromBlocks extracts plain text from ContentBlock array.
+// Only text-type blocks are included; tool_use, thinking, etc. are skipped.
+func extractTextFromBlocks(blocks []model.ContentBlock) string {
+	var buf strings.Builder
+	for _, b := range blocks {
+		if b.Type == "text" && b.Text != "" {
+			if buf.Len() > 0 {
+				buf.WriteString("\n\n")
+			}
+			buf.WriteString(b.Text)
+		}
+	}
+	return buf.String()
 }
 
 // DeleteTaskExecution deletes a single task execution and soft-deletes the

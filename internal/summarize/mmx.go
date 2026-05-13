@@ -1,4 +1,4 @@
-package speech
+package summarize
 
 import (
 	"bytes"
@@ -14,15 +14,15 @@ import (
 type MMXSummarizer struct {
 	// Model is the model ID for text chat (default: "MiniMax-M2.7").
 	Model string
-	gs    genericSummarizer
+	gs    ttsPipeline
 }
 
-// NewMMXSummarizer creates an MMXSummarizer with sensible defaults.
-func NewMMXSummarizer() *MMXSummarizer {
+// NewMMX creates an MMXSummarizer with sensible defaults.
+func NewMMX() *MMXSummarizer {
 	s := &MMXSummarizer{
 		Model: "MiniMax-M2.7",
 	}
-	s.gs = NewGenericSummarizer(s.doSummarizePass)
+	s.gs = NewTTSPipeline(s.doSummarizePass)
 	return s
 }
 

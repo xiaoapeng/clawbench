@@ -1,4 +1,4 @@
-package speech
+package summarize
 
 import (
 	"context"
@@ -13,23 +13,23 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestNewOpenAISummarizer_Defaults(t *testing.T) {
-	s := NewOpenAISummarizer("https://api.openai.com/v1/chat/completions", "sk-test", "")
+func TestNewOpenAI_Defaults(t *testing.T) {
+	s := NewOpenAI("https://api.openai.com/v1/chat/completions", "sk-test", "")
 	assert.Equal(t, "https://api.openai.com/v1/chat/completions", s.BaseURL)
 	assert.Equal(t, "gpt-4o-mini", s.Model)
 	assert.Equal(t, "sk-test", s.Key)
 	assert.NotNil(t, s.HTTPClient)
 }
 
-func TestNewOpenAISummarizer_CustomConfig(t *testing.T) {
-	s := NewOpenAISummarizer("https://api.deepseek.com/v1/chat/completions/", "sk-abc", "deepseek-chat")
+func TestNewOpenAI_CustomConfig(t *testing.T) {
+	s := NewOpenAI("https://api.deepseek.com/v1/chat/completions/", "sk-abc", "deepseek-chat")
 	assert.Equal(t, "https://api.deepseek.com/v1/chat/completions", s.BaseURL) // trailing slash trimmed
 	assert.Equal(t, "deepseek-chat", s.Model)
 	assert.Equal(t, "sk-abc", s.Key)
 }
 
 func TestOpenAISummarizer_ShortText(t *testing.T) {
-	s := NewOpenAISummarizer("https://example.com/v1/chat/completions", "key", "")
+	s := NewOpenAI("https://example.com/v1/chat/completions", "key", "")
 	result, err := s.Summarize(context.Background(), "这是一段短文本", "zh")
 	assert.NoError(t, err)
 	assert.Equal(t, "这是一段短文本", result)
@@ -54,7 +54,7 @@ func TestOpenAISummarizer_APICall(t *testing.T) {
 	}))
 	defer server.Close()
 
-	s := NewOpenAISummarizer(server.URL, "sk-test", "gpt-4o-mini")
+	s := NewOpenAI(server.URL, "sk-test", "gpt-4o-mini")
 	longText := strings.Repeat("这是一段很长的AI回复内容，用于测试总结功能。", 20)
 	result, err := s.Summarize(context.Background(), longText, "zh")
 
@@ -85,7 +85,7 @@ func TestOpenAISummarizer_MultiPass(t *testing.T) {
 	}))
 	defer server.Close()
 
-	s := NewOpenAISummarizer(server.URL, "sk-test", "gpt-4o-mini")
+	s := NewOpenAI(server.URL, "sk-test", "gpt-4o-mini")
 	longText := strings.Repeat("这是一段很长的AI回复内容，用于测试总结功能。", 20)
 	result, err := s.Summarize(context.Background(), longText, "zh")
 
@@ -101,7 +101,7 @@ func TestOpenAISummarizer_ErrorStatus(t *testing.T) {
 	}))
 	defer server.Close()
 
-	s := NewOpenAISummarizer(server.URL, "sk-test", "bad-model")
+	s := NewOpenAI(server.URL, "sk-test", "bad-model")
 	longText := strings.Repeat("这是一段很长的AI回复内容，用于测试总结功能。", 20)
 	_, err := s.Summarize(context.Background(), longText, "zh")
 
@@ -111,7 +111,7 @@ func TestOpenAISummarizer_ErrorStatus(t *testing.T) {
 }
 
 func TestOpenAISummarizer_ConnectionRefused(t *testing.T) {
-	s := NewOpenAISummarizer("http://127.0.0.1:1", "key", "gpt-4o-mini")
+	s := NewOpenAI("http://127.0.0.1:1", "key", "gpt-4o-mini")
 	s.HTTPClient.Timeout = 2 * time.Second
 
 	longText := strings.Repeat("这是一段很长的AI回复内容，用于测试总结功能。", 20)
@@ -132,7 +132,7 @@ func TestOpenAISummarizer_EmptyResponse(t *testing.T) {
 	}))
 	defer server.Close()
 
-	s := NewOpenAISummarizer(server.URL, "key", "gpt-4o-mini")
+	s := NewOpenAI(server.URL, "key", "gpt-4o-mini")
 	longText := strings.Repeat("这是一段很长的AI回复内容，用于测试总结功能。", 20)
 	_, err := s.Summarize(context.Background(), longText, "zh")
 
@@ -149,7 +149,7 @@ func TestOpenAISummarizer_NoChoices(t *testing.T) {
 	}))
 	defer server.Close()
 
-	s := NewOpenAISummarizer(server.URL, "key", "gpt-4o-mini")
+	s := NewOpenAI(server.URL, "key", "gpt-4o-mini")
 	longText := strings.Repeat("这是一段很长的AI回复内容，用于测试总结功能。", 20)
 	_, err := s.Summarize(context.Background(), longText, "zh")
 
@@ -169,7 +169,7 @@ func TestOpenAISummarizer_ContextCancellation(t *testing.T) {
 	}))
 	defer server.Close()
 
-	s := NewOpenAISummarizer(server.URL, "key", "gpt-4o-mini")
+	s := NewOpenAI(server.URL, "key", "gpt-4o-mini")
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
@@ -193,7 +193,7 @@ func TestOpenAISummarizer_NoKey(t *testing.T) {
 	}))
 	defer server.Close()
 
-	s := NewOpenAISummarizer(server.URL, "", "gpt-4o-mini")
+	s := NewOpenAI(server.URL, "", "gpt-4o-mini")
 	longText := strings.Repeat("这是一段很长的AI回复内容，用于测试总结功能。", 20)
 	_, err := s.Summarize(context.Background(), longText, "zh")
 

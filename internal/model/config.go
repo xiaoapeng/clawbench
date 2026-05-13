@@ -50,6 +50,7 @@ type Config struct {
 	SSH      SSHConfig      `yaml:"ssh"`       // SSH tunnel server configuration
 	RAG      RAGConfig      `yaml:"rag"`       // RAG history memory configuration
 	Terminal TerminalConfig `yaml:"terminal"`  // Interactive web terminal configuration
+	Tasks    TasksConfig    `yaml:"tasks"`     // Scheduled task configuration
 }
 
 // TerminalConfig holds configuration for the interactive web terminal.
@@ -60,6 +61,12 @@ type TerminalConfig struct {
 	MaxLineBytes int    `yaml:"max_line_bytes"`   // Per-line byte cap to prevent memory bloat (default: 65536 = 64KB)
 	MaxBufferMB  int    `yaml:"max_buffer_mb"`    // Total buffer memory cap in MB (default: 4)
 	MaxSessions  int    `yaml:"max_sessions"`     // Max concurrent terminal sessions (default: 10)
+}
+
+// TasksConfig holds configuration for scheduled task execution.
+type TasksConfig struct {
+	SummarizeBackend string `yaml:"summarize_backend"` // Summarization backend for task executions (empty = disabled)
+	SummarizeModel   string `yaml:"summarize_model"`   // Model for task summarization (empty = backend default)
 }
 
 // RAGConfig holds configuration for the RAG history memory system.

@@ -1,4 +1,4 @@
-package speech
+package summarize
 
 import (
 	"bytes"
@@ -20,12 +20,12 @@ type OpenAISummarizer struct {
 	Key        string       // API key (sent as Authorization: Bearer <key>)
 	Model      string       // Model name (default: "gpt-4o-mini")
 	HTTPClient *http.Client // Shared HTTP client with timeout
-	gs         genericSummarizer
+	gs         ttsPipeline
 }
 
-// NewOpenAISummarizer creates an OpenAISummarizer with the given configuration.
+// NewOpenAI creates an OpenAISummarizer with the given configuration.
 // Empty model defaults to "gpt-4o-mini".
-func NewOpenAISummarizer(baseURL, key, model string) *OpenAISummarizer {
+func NewOpenAI(baseURL, key, model string) *OpenAISummarizer {
 	if model == "" {
 		model = "gpt-4o-mini"
 	}
@@ -37,7 +37,7 @@ func NewOpenAISummarizer(baseURL, key, model string) *OpenAISummarizer {
 			Timeout: 120 * time.Second,
 		},
 	}
-	s.gs = NewGenericSummarizer(s.doSummarizePass)
+	s.gs = NewTTSPipeline(s.DoSummarizePass)
 	return s
 }
 
@@ -68,8 +68,9 @@ func (s *OpenAISummarizer) Summarize(ctx context.Context, text string, language 
 	return s.gs.Summarize(ctx, text, language)
 }
 
-// doSummarizePass performs a single summarization pass using the OpenAI Chat Completions API.
-func (s *OpenAISummarizer) doSummarizePass(ctx context.Context, text, systemPrompt string, pass int) (string, error) {
+// DoSummarizePass performs a single summarization pass using the OpenAI Chat Completions API.
+// Exported so that initTaskSummarizer can reuse it with a custom pipeline.
+func (s *OpenAISummarizer) DoSummarizePass(ctx context.Context, text, systemPrompt string, pass int) (string, error) {
 	reqBody := openaiChatRequest{
 		Model: s.Model,
 		Messages: []openaiChatMessage{
