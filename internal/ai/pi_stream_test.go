@@ -321,6 +321,96 @@ func TestPiStreamParser_UnparseableLine(t *testing.T) {
 	}
 }
 
+func TestPiStreamParser_FullStreamWithToolUse(t *testing.T) {
+	parser := &PiStreamParser{}
+	ch := make(chan StreamEvent, 100)
+
+	lines := []string{
+		`{"type":"session","version":3,"id":"019e211b-95a0-747e-9805-b9ba8c401d08","timestamp":"2026-05-13T11:31:56.449Z","cwd":"/home/user/project"}`,
+		`{"type":"agent_start"}`,
+		`{"type":"turn_start"}`,
+		`{"type":"message_start","message":{"role":"user","content":[{"type":"text","text":"read /etc/hostname"}],"timestamp":1}}`,
+		`{"type":"message_end","message":{"role":"user","content":[{"type":"text","text":"read /etc/hostname"}],"timestamp":1}}`,
+		`{"type":"message_start","message":{"role":"assistant","content":[],"stopReason":"stop"}}`,
+		`{"type":"message_update","assistantMessageEvent":{"type":"thinking_delta","contentIndex":0,"delta":"I'll read the file."},"message":{"role":"assistant"}}`,
+		`{"type":"message_update","assistantMessageEvent":{"type":"toolcall_end","contentIndex":1,"toolCall":{"id":"call_1","name":"read","arguments":{"path":"/etc/hostname"}}},"message":{"role":"assistant"}}`,
+		`{"type":"message_end","message":{"role":"assistant","stopReason":"toolUse"}}`,
+		`{"type":"tool_execution_start","toolCallId":"call_1","toolName":"read","args":{"path":"/etc/hostname"}}`,
+		`{"type":"tool_execution_end","toolCallId":"call_1","toolName":"read","result":{"content":[{"type":"text","text":"myhost"}]},"isError":false}`,
+		`{"type":"turn_end"}`,
+		`{"type":"turn_start"}`,
+		`{"type":"message_start","message":{"role":"assistant","content":[]}}`,
+		`{"type":"message_update","assistantMessageEvent":{"type":"text_delta","contentIndex":1,"delta":"The hostname is myhost"},"message":{"role":"assistant"}}`,
+		`{"type":"message_end","message":{"role":"assistant","usage":{"input":100,"output":20,"totalTokens":120,"cost":{"input":0.001,"output":0.0003,"total":0.0013}},"stopReason":"stop"}}`,
+		`{"type":"agent_end","messages":[]}`,
+	}
+
+	for _, line := range lines {
+		parser.ParseLine(line, ch)
+	}
+
+	// Drain all events
+	var events []StreamEvent
+	for {
+		select {
+		case evt := <-ch:
+			events = append(events, evt)
+		default:
+			goto verify
+		}
+	}
+verify:
+
+	// Expected event types in order
+	expected := []string{"session_capture", "thinking", "tool_use", "tool_result", "content", "metadata", "done"}
+	if len(events) < len(expected) {
+		t.Fatalf("expected at least %d events, got %d", len(expected), len(events))
+	}
+
+	eventTypes := make([]string, 0, len(events))
+	for _, e := range events {
+		eventTypes = append(eventTypes, e.Type)
+	}
+
+	for _, exp := range expected {
+		found := false
+		for _, actual := range eventTypes {
+			if actual == exp {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("missing expected event type %q in %v", exp, eventTypes)
+		}
+	}
+
+	// Verify session ID captured
+	if parser.GetCapturedSessionID() != "019e211b-95a0-747e-9805-b9ba8c401d08" {
+		t.Errorf("session ID not captured correctly, got %q", parser.GetCapturedSessionID())
+	}
+
+	// Verify tool_use normalization
+	for _, e := range events {
+		if e.Type == "tool_use" && e.Tool != nil {
+			if e.Tool.Name != "Read" {
+				t.Errorf("expected tool name 'Read', got %q", e.Tool.Name)
+			}
+			if e.Tool.ID != "call_1" {
+				t.Errorf("expected tool ID 'call_1', got %q", e.Tool.ID)
+			}
+		}
+		if e.Type == "tool_result" && e.Tool != nil {
+			if e.Tool.Output != "myhost" {
+				t.Errorf("expected tool output 'myhost', got %q", e.Tool.Output)
+			}
+			if e.Tool.Status != "success" {
+				t.Errorf("expected tool status 'success', got %q", e.Tool.Status)
+			}
+		}
+	}
+}
+
 // drainEvents reads up to n events from the channel
 func drainEvents(ch chan StreamEvent, n int) []StreamEvent {
 	var events []StreamEvent
