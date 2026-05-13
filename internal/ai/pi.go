@@ -1,10 +1,5 @@
 package ai
 
-import (
-	"os"
-	"os/exec"
-)
-
 // piBackend is the CLIBackend instance for Pi CLI.
 var piBackend = &CLIBackend{
 	name:           "pi",
@@ -12,39 +7,7 @@ var piBackend = &CLIBackend{
 	buildArgs:      buildPiStreamArgs,
 	newParser:      func() LineParser { return &PiStreamParser{} },
 	filterLine:     nil,
-	preStart:       piPreStart,
-}
-
-// piPreStart injects environment variables needed by Pi CLI.
-// Pi's Anthropic provider requires ANTHROPIC_API_KEY, but in this environment
-// the MiniMax proxy key (MINIMAX_API_KEY) is used as the Anthropic key.
-// If ANTHROPIC_API_KEY is not already set, we copy MINIMAX_API_KEY to it.
-func piPreStart(cmd *exec.Cmd, _ ChatRequest) {
-	// cmd.Env is nil unless ScheduledExecution set it; in that case
-	// it already contains os.Environ(). We need a mutable copy.
-	env := cmd.Env
-	if env == nil {
-		env = os.Environ()
-	}
-
-	// Check if ANTHROPIC_API_KEY is already set
-	hasAnthropicKey := false
-	for _, e := range env {
-		if len(e) >= len("ANTHROPIC_API_KEY=") && e[:len("ANTHROPIC_API_KEY=")] == "ANTHROPIC_API_KEY=" {
-			hasAnthropicKey = true
-			break
-		}
-	}
-
-	// If ANTHROPIC_API_KEY is missing but MINIMAX_API_KEY is available,
-	// inject it — MiniMax's Anthropic-compatible proxy uses the same key.
-	if !hasAnthropicKey {
-		minimaxKey := os.Getenv("MINIMAX_API_KEY")
-		if minimaxKey != "" {
-			env = append(env, "ANTHROPIC_API_KEY="+minimaxKey)
-			cmd.Env = env
-		}
-	}
+	preStart:       nil,
 }
 
 // buildPiStreamArgs constructs the CLI arguments for Pi streaming.
@@ -61,6 +24,14 @@ func piPreStart(cmd *exec.Cmd, _ ChatRequest) {
 //
 // Working directory is set via cmd.Dir (CLIBackend sets cmd.Dir = req.WorkDir),
 // not via a CLI flag — Pi does not have a --add-dir option.
+//
+// API key configuration is handled by Pi's models.json (~/.pi/agent/models.json).
+// The models.json supports:
+//   - "apiKey": "ENV_VAR_NAME" — reads the API key from an environment variable
+//   - "apiKey": "!command"     — executes a shell command to get the key
+//   - "apiKey": "literal-key"  — uses the literal string as the key
+//   - "baseUrl"                — custom API endpoint (e.g., MiniMax proxy)
+//   - "headers"                — custom HTTP headers
 func buildPiStreamArgs(req ChatRequest) []string {
 	args := []string{"-p", "--mode", "json"}
 
