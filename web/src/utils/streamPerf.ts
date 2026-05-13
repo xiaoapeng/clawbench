@@ -112,7 +112,10 @@ export function detectAskQuestion(text: string): AskQuestionResult {
       return { found: true, content: closedMatch[1], startIdx, endIdx: startIdx + closedMatch[0].length }
     }
 
-    const wrongCloseMatch = afterTag.match(/<ask-question\b[^>]*>([\s\S]*?)<\/\w+>/)
+    // Match wrong/obfuscated close tags — some models emit non-standard closing tags
+    // (e.g. </｜｜DSML｜｜question> with fullwidth pipe chars). Use [^>]+ instead of
+    // \w+ to catch any character sequence that looks like a closing tag.
+    const wrongCloseMatch = afterTag.match(/<ask-question\b[^>]*>([\s\S]*?)<\/[^>]+>/)
     if (wrongCloseMatch && isValidAskContent(wrongCloseMatch[1])) {
       return { found: true, content: wrongCloseMatch[1], startIdx, endIdx: startIdx + wrongCloseMatch[0].length }
     }

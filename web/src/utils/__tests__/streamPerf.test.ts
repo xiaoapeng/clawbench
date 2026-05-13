@@ -63,4 +63,15 @@ describe('detectAskQuestion', () => {
     const result = detectAskQuestion(text)
     expect(result.found).toBe(false)
   })
+
+  it('detects <ask-question> with obfuscated closing tag (fullwidth pipe)', () => {
+    // Real case from message 510: model emits </｜｜DSML｜｜question> instead of </ask-question>
+    const text = '`gh` 已给出设备认证码。需要在浏览器中完成登录：\n\n<ask-question>\n{"questions":[{"header":"GitHub 认证","multiSelect":false,"options":[{"label":"已打开链接","description":"我已在浏览器中完成认证，继续推送"},{"label":"我手动来","description":"我自己执行 gh auth login -w 完成登录后手动推送"}],"question":"请打开 https://github.com/login/device 并输入代码完成登录。完成后告诉我。"}]}\n</｜｜DSML｜｜question>'
+    const result = detectAskQuestion(text)
+    expect(result.found).toBe(true)
+    expect(result.startIdx).toBeGreaterThanOrEqual(0)
+    expect(result.content).toBeDefined()
+    // The content should be parseable as JSON with questions
+    expect(isValidAskContent(result.content!)).toBe(true)
+  })
 })

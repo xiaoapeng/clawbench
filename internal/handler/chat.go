@@ -905,6 +905,17 @@ func extractJSONCandidate(raw string) string {
 	for reTrailingXML.MatchString(trimmed) {
 		trimmed = strings.TrimSpace(reTrailingXML.ReplaceAllString(trimmed, ""))
 	}
+	// Fallback: strip trailing closing tags with non-ASCII/obfuscated characters
+	// (e.g. </｜｜DSML｜｜question> with fullwidth pipe U+FF5C). The strict regex
+	// above won't match these, so use a permissive pattern as a second pass.
+	reTrailingXMLLoose := regexp.MustCompile(`\s*</[^>]+>\s*$`)
+	for reTrailingXMLLoose.MatchString(trimmed) {
+		prev := trimmed
+		trimmed = strings.TrimSpace(reTrailingXMLLoose.ReplaceAllString(trimmed, ""))
+		if trimmed == prev {
+			break
+		}
+	}
 	// Strip leading XML tags that some models use to wrap the JSON payload
 	// (e.g. <parameter name="questions">). These are parameter-style wrappers
 	// that enclose the JSON array/dict instead of placing it directly.
@@ -965,6 +976,21 @@ func convertAskQuestionBlocks(blocks []model.ContentBlock) []model.ContentBlock 
 			if candidate != "" {
 				jsonContent = candidate
 				break
+			}
+		}
+
+		// Fallback: AI models sometimes emit non-standard closing tags (e.g.
+		// </｜｜DSML｜｜question> with fullwidth pipe chars). Try matching with a
+		// permissive closing tag pattern before falling back to unclosed.
+		if jsonContent == "" {
+			reWrongClose := regexp.MustCompile(`<ask-question\b[^>]*>([\s\S]*?)</[^>]+>`)
+			allWrongMatches := reWrongClose.FindAllStringSubmatch(block.Text, -1)
+			for j := len(allWrongMatches) - 1; j >= 0; j-- {
+				candidate := extractJSONCandidate(allWrongMatches[j][1])
+				if candidate != "" {
+					jsonContent = candidate
+					break
+				}
 			}
 		}
 

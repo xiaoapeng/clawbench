@@ -1415,3 +1415,33 @@ func TestConvertAskQuestionBlocks_ParameterWrapper(t *testing.T) {
 		t.Error("expected to find a text block with surrounding text preserved")
 	}
 }
+
+func TestConvertAskQuestionBlocks_ObfuscatedCloseTag(t *testing.T) {
+	// When AI models emit non-standard closing tags with fullwidth or obfuscated
+	// characters (e.g. </｜｜DSML｜｜question> instead of </ask-question>),
+	// the converter should still detect and convert the ask-question block.
+	blocks := []model.ContentBlock{
+		{Type: "text", Text: "`gh` 已给出设备认证码。需要在浏览器中完成登录：\n\n<ask-question>\n{\"questions\":[{\"header\":\"GitHub 认证\",\"multiSelect\":false,\"options\":[{\"label\":\"已打开链接\",\"description\":\"我已在浏览器中完成认证，继续推送\"},{\"label\":\"我手动来\",\"description\":\"我自己执行 gh auth login -w 完成登录后手动推送\"}],\"question\":\"请打开 https://github.com/login/device 并输入代码完成登录。完成后告诉我。\"}]}\n</｜｜DSML｜｜question>"},
+	}
+
+	result := convertAskQuestionBlocks(blocks)
+
+	foundAskQ := false
+	for _, b := range result {
+		if b.Type == "tool_use" && b.Name == "AskUserQuestion" {
+			foundAskQ = true
+			questions, ok := b.Input["questions"]
+			if !ok {
+				t.Error("AskUserQuestion block missing 'questions' field in input")
+			}
+			questionsArr, ok := questions.([]any)
+			if !ok || len(questionsArr) == 0 {
+				t.Errorf("AskUserQuestion 'questions' should be non-empty array, got %v", questions)
+			}
+		}
+	}
+
+	if !foundAskQ {
+		t.Error("expected to find an AskUserQuestion tool_use block from obfuscated close tag")
+	}
+}
