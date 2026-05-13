@@ -21,7 +21,9 @@ func NewBackend(backendType string) (AIBackend, error) {
 		return &AutoResumeBackend{inner: qoderBackend}, nil
 	case "vecli":
 		return NewVeCLIBackend(), nil
+	case "deepseek":
+		return &AutoResumeBackend{inner: deepseekBackend}, nil
 	default:
-		return nil, fmt.Errorf("unsupported backend type: %s (supported: claude, codebuddy, opencode, gemini, codex, qoder, vecli)", backendType)
+		return nil, fmt.Errorf("unsupported backend type: %s (supported: claude, codebuddy, opencode, gemini, codex, qoder, vecli, deepseek)", backendType)
 	}
 }
