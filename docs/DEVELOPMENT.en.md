@@ -244,7 +244,11 @@ ClawBench interacts with AI programming tools by calling local CLIs, no extra AP
 
 **VeCLI backend**: Install VeCLI (Volcengine Doubao) and complete authentication, ensure the `vecli` command is available in PATH. VeCLI outputs plain text (not JSON Lines), does not support session resume, and metadata is extracted from a `--session-summary` file after the process exits.
 
-All seven backends can be switched in real time on the ClawBench Web UI, with isolated session data.
+**DeepSeek TUI backend**: Install DeepSeek TUI (requires v0.8.33+) and complete authentication, ensure the `deepseek` command is available in PATH. Uses `deepseek exec --auto --output-format stream-json` mode with native `--system-prompt`, `--model`, and `--resume` flags.
+
+**Pi backend**: Install Pi CLI and complete authentication, ensure the `pi` command is available in PATH. Pi is a minimalist coding agent that outputs NDJSON event stream via `--mode json`, supports session resume (`--session`/`--continue`) and model selection (`--model`).
+
+All nine backends can be switched in real time on the ClawBench Web UI, with isolated session data.
 
 ### TTS Speech Synthesis Configuration
 
@@ -327,14 +331,14 @@ config/agents/
 ```
 
 - **Configurable Agents**: Each agent is defined via YAML with dedicated system prompt, model, and backend — no code changes needed
-- **Auto-Discovery**: On first startup, if `config/agents/` is empty, the system auto-scans for installed AI CLIs (claude, codebuddy, opencode, gemini, codex, qodercli, vecli) and generates minimal YAML configs for each detected backend. One-time only; existing files are never overwritten
+- **Auto-Discovery**: On first startup, if `config/agents/` is empty, the system auto-scans for installed AI CLIs (claude, codebuddy, opencode, gemini, codex, qodercli, vecli, deepseek, pi) and generates minimal YAML configs for each detected backend. One-time only; existing files are never overwritten
 - **Shared Rules**: `config/rules.md` defines common behaviors and mandatory rules for all agents (scheduled task CLI, RAG search, media handling), avoiding duplicate configuration
 - **Template Placeholder**: `{{AVAILABLE_AGENTS}}` is auto-replaced with the available agent list, facilitating inter-agent dispatching
 - **Multi-Agent Dispatching**: Different tasks match different agents; the all-round assistant handles conversations while specialized agents execute scheduled tasks
 - **Transparent Tool Calls**: AI tool calls (file read/write, Bash commands, code editing) are visualized in real time
 - **Cron Scheduled Execution**: AI creates scheduled tasks via `clawbench task` CLI subcommands; after confirmation, Cron scheduler executes them automatically. Task cards are embedded in chat messages. `list` and `get` subcommands allow inspecting existing tasks; `--prompt` supports `@path` syntax to read prompt text from a file
 - **Cron Governance**: During scheduled execution, the Scheduled Tasks section in rules.md is automatically stripped (`<!-- SCHEDULED_BEGIN/END -->` markers), preventing AI from recursively creating tasks; CLI layer provides dual-layer protection via `CLAWBENCH_SCHEDULED=1` env var
-- **Multi-Backend Switching**: The same platform simultaneously supports CodeBuddy, Claude Code, OpenCode, Gemini CLI, Codex, Qoder CLI, and VeCLI backends with isolated session data
+- **Multi-Backend Switching**: The same platform simultaneously supports CodeBuddy, Claude Code, OpenCode, Gemini CLI, Codex, Qoder CLI, VeCLI, DeepSeek TUI, and Pi backends with isolated session data
 
 ### Project Structure
 
@@ -390,7 +394,9 @@ clawbench/
 │       ├── gemini.go / gemini_stream.go
 │       ├── codex.go / codex_stream.go
 │       ├── qoder.go / qoder_stream.go
-│       └── vecli.go / vecli_stream.go
+│       ├── vecli.go / vecli_stream.go
+│       ├── deepseek.go / deepseek_stream.go
+│       └── pi.go / pi_stream.go
 │   └── speech/                  # TTS speech synthesis & summarization
 │       ├── common_tts.go        # CLISpeechProvider shared base
 │       ├── summarizer.go        # Summarizer interface + genericSummarizer shared pipeline
@@ -409,6 +415,8 @@ clawbench/
 │   │   ├── gpt54.yaml           # GPT (via CodeBuddy)
 │   │   ├── qoder.yaml           # Qoder CLI
 │   │   ├── vecli.yaml           # VeCLI
+│   │   ├── deepseek.yaml        # DeepSeek TUI
+│   │   ├── pi.yaml              # Pi
 │   │   └── handyman.yaml        # Handyman
 ├── web/                         # Vue 3 frontend source
 │   └── src/

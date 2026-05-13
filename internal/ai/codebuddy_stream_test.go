@@ -319,3 +319,34 @@ func TestCodebuddyStream_ExecuteStreamReturnsChannel(t *testing.T) {
 		}
 	}
 }
+
+// TestCodebuddyStream_ResumeSessionArgs verifies that when Resume=true,
+// buildCodebuddyStreamArgs produces --resume <session-id> instead of
+// --session-id <session-id>.
+func TestCodebuddyStream_ResumeSessionArgs(t *testing.T) {
+	req := ChatRequest{
+		Prompt:    "continue this",
+		SessionID: "test-session-uuid",
+		WorkDir:   "/tmp/test",
+		Resume:    true,
+	}
+	args := buildCodebuddyStreamArgs(req)
+
+	// Should have --resume <session-id>
+	hasResume := false
+	for i, a := range args {
+		if a == "--resume" && i+1 < len(args) && args[i+1] == req.SessionID {
+			hasResume = true
+		}
+	}
+	if !hasResume {
+		t.Error("expected --resume <session-id> in args when Resume=true")
+	}
+
+	// Should NOT have --session-id (replaced by --resume on resume)
+	for _, a := range args {
+		if a == "--session-id" {
+			t.Error("--session-id should NOT appear when Resume=true; should use --resume instead")
+		}
+	}
+}

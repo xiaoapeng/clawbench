@@ -1694,3 +1694,200 @@ func TestPiEndToEndResumeChain(t *testing.T) {
 	assert.Equal(t, piSessID, resumeReq.SessionID,
 		"resume should use the Pi-assigned external session ID, not the ClawBench UUID")
 }
+
+// ============================================================================
+// Codex external session ID tests
+// ============================================================================
+
+// TestBuildChatRequest_CodexResumeWithExternalSessionID verifies that when
+// Codex backend resumes a session that has an external_session_id stored
+// (a thread_id), that ID is used instead of the ClawBench UUID.
+func TestBuildChatRequest_CodexResumeWithExternalSessionID(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	sessionID, err := service.CreateSession(env.ProjectDir, "codex", "test-codex", "", "", "default", "chat")
+	assert.NoError(t, err)
+
+	threadID := "thread_abc123def456"
+	err = service.UpdateExternalSessionID(sessionID, threadID)
+	assert.NoError(t, err)
+
+	_, err = service.AddChatMessage(env.ProjectDir, "codex", sessionID, "assistant",
+		`{"blocks":[{"type":"text","text":"done"}]}`, nil, false, "")
+	assert.NoError(t, err)
+
+	req := buildChatRequest("continue", sessionID, env.ProjectDir, "codex", "codebuddy", "", env.ProjectDir)
+	assert.True(t, req.Resume)
+	assert.Equal(t, threadID, req.SessionID, "Codex should use thread_id as external session ID")
+}
+
+// TestBuildChatRequest_CodexResumeWithoutExternalSessionID verifies that when
+// Codex backend resumes a session that has NO external_session_id, the
+// SessionID is cleared to avoid passing the invalid ClawBench UUID.
+func TestBuildChatRequest_CodexResumeWithoutExternalSessionID(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	sessionID, err := service.CreateSession(env.ProjectDir, "codex", "test-codex-noext", "", "", "default", "chat")
+	assert.NoError(t, err)
+
+	_, err = service.AddChatMessage(env.ProjectDir, "codex", sessionID, "assistant",
+		`{"blocks":[{"type":"text","text":"hello"}]}`, nil, false, "")
+	assert.NoError(t, err)
+
+	req := buildChatRequest("continue", sessionID, env.ProjectDir, "codex", "codebuddy", "", env.ProjectDir)
+	assert.True(t, req.Resume)
+	assert.Equal(t, "", req.SessionID,
+		"Codex should clear SessionID when no external ID available")
+}
+
+// TestCodexSessionCapture_PersistedToDB verifies that session_capture events
+// for Codex backend persist the external session ID (thread_id) to the database.
+func TestCodexSessionCapture_PersistedToDB(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	sessionID, err := service.CreateSession(env.ProjectDir, "codex", "test-codex-capture", "", "", "default", "chat")
+	assert.NoError(t, err)
+
+	assert.Equal(t, "", service.GetExternalSessionID(sessionID))
+
+	threadID := "thread_xyz789"
+	err = service.UpdateExternalSessionID(sessionID, threadID)
+	assert.NoError(t, err)
+
+	assert.Equal(t, threadID, service.GetExternalSessionID(sessionID))
+}
+
+// ============================================================================
+// DeepSeek external session ID tests
+// ============================================================================
+
+// TestBuildChatRequest_DeepSeekResumeWithExternalSessionID verifies that when
+// DeepSeek backend resumes a session that has an external_session_id stored,
+// that ID is used instead of the ClawBench UUID.
+func TestBuildChatRequest_DeepSeekResumeWithExternalSessionID(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	sessionID, err := service.CreateSession(env.ProjectDir, "deepseek", "test-deepseek", "", "", "default", "chat")
+	assert.NoError(t, err)
+
+	dsSessionID := "ds-sess-xyz789"
+	err = service.UpdateExternalSessionID(sessionID, dsSessionID)
+	assert.NoError(t, err)
+
+	_, err = service.AddChatMessage(env.ProjectDir, "deepseek", sessionID, "assistant",
+		`{"blocks":[{"type":"text","text":"done"}]}`, nil, false, "")
+	assert.NoError(t, err)
+
+	req := buildChatRequest("continue", sessionID, env.ProjectDir, "deepseek", "codebuddy", "", env.ProjectDir)
+	assert.True(t, req.Resume)
+	assert.Equal(t, dsSessionID, req.SessionID, "DeepSeek should use external session ID")
+}
+
+// TestBuildChatRequest_DeepSeekResumeWithoutExternalSessionID verifies that
+// when DeepSeek backend resumes a session with NO external_session_id, the
+// SessionID is cleared.
+func TestBuildChatRequest_DeepSeekResumeWithoutExternalSessionID(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	sessionID, err := service.CreateSession(env.ProjectDir, "deepseek", "test-deepseek-noext", "", "", "default", "chat")
+	assert.NoError(t, err)
+
+	_, err = service.AddChatMessage(env.ProjectDir, "deepseek", sessionID, "assistant",
+		`{"blocks":[{"type":"text","text":"hello"}]}`, nil, false, "")
+	assert.NoError(t, err)
+
+	req := buildChatRequest("continue", sessionID, env.ProjectDir, "deepseek", "codebuddy", "", env.ProjectDir)
+	assert.True(t, req.Resume)
+	assert.Equal(t, "", req.SessionID,
+		"DeepSeek should clear SessionID when no external ID available")
+}
+
+// TestDeepSeekSessionCapture_PersistedToDB verifies that session_capture events
+// for DeepSeek backend persist the external session ID to the database.
+func TestDeepSeekSessionCapture_PersistedToDB(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	sessionID, err := service.CreateSession(env.ProjectDir, "deepseek", "test-deepseek-capture", "", "", "default", "chat")
+	assert.NoError(t, err)
+
+	assert.Equal(t, "", service.GetExternalSessionID(sessionID))
+
+	dsSessionID := "ds-captured-abc"
+	err = service.UpdateExternalSessionID(sessionID, dsSessionID)
+	assert.NoError(t, err)
+
+	assert.Equal(t, dsSessionID, service.GetExternalSessionID(sessionID))
+}
+
+// ============================================================================
+// OpenCode external session ID tests (supplement existing)
+// ============================================================================
+
+// TestBuildChatRequest_OpenCodeResumeWithoutExternalSessionID verifies that
+// when OpenCode backend resumes a session with NO external_session_id,
+// the SessionID is cleared.
+func TestBuildChatRequest_OpenCodeResumeWithoutExternalSessionID(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	sessionID, err := service.CreateSession(env.ProjectDir, "opencode", "test-oc-noext", "", "", "default", "chat")
+	assert.NoError(t, err)
+
+	// No external session ID set
+	_, err = service.AddChatMessage(env.ProjectDir, "opencode", sessionID, "assistant",
+		`{"blocks":[{"type":"text","text":"hello"}]}`, nil, false, "")
+	assert.NoError(t, err)
+
+	req := buildChatRequest("continue", sessionID, env.ProjectDir, "opencode", "codebuddy", "", env.ProjectDir)
+	assert.True(t, req.Resume)
+	assert.Equal(t, "", req.SessionID,
+		"OpenCode should clear SessionID when no external ID available")
+}
+
+// TestOpenCodeSessionCapture_PersistedToDB verifies that session_capture events
+// for OpenCode backend persist the external session ID to the database.
+func TestOpenCodeSessionCapture_PersistedToDB(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	sessionID, err := service.CreateSession(env.ProjectDir, "opencode", "test-oc-capture", "", "", "default", "chat")
+	assert.NoError(t, err)
+
+	assert.Equal(t, "", service.GetExternalSessionID(sessionID))
+
+	sesID := "ses_oc_abc123"
+	err = service.UpdateExternalSessionID(sessionID, sesID)
+	assert.NoError(t, err)
+
+	assert.Equal(t, sesID, service.GetExternalSessionID(sessionID))
+}
+
+// ============================================================================
+// Codebuddy resume test (UUID-native backend)
+// ============================================================================
+
+// TestBuildChatRequest_CodebuddyResumeNoExternalID verifies that Codebuddy
+// backend (which natively uses ClawBench UUID) is NOT affected by the
+// external session ID resolution logic — it should always get the UUID.
+func TestBuildChatRequest_CodebuddyResumeNoExternalID(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	sessionID, err := service.CreateSession(env.ProjectDir, "codebuddy", "test-cb", "", "", "codebuddy", "chat")
+	assert.NoError(t, err)
+
+	_, err = service.AddChatMessage(env.ProjectDir, "codebuddy", sessionID, "assistant",
+		`{"blocks":[{"type":"text","text":"hi"}]}`, nil, false, "")
+	assert.NoError(t, err)
+
+	req := buildChatRequest("continue", sessionID, env.ProjectDir, "codebuddy", "codebuddy", "", env.ProjectDir)
+	assert.True(t, req.Resume)
+	assert.Equal(t, sessionID, req.SessionID,
+		"Codebuddy should get the ClawBench UUID directly, no external ID resolution")
+}

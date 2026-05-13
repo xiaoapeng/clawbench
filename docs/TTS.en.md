@@ -29,6 +29,8 @@ Long texts are automatically summarized before reading aloud, controlled by `sum
 | `codex` | Codex CLI | Requires codex CLI |
 | `qoder` | Qoder CLI (Alibaba coding agent) | Requires qoder CLI |
 | `vecli` | VeCLI (Volcengine Doubao) | Requires vecli CLI |
+| `deepseek` | DeepSeek TUI (requires v0.8.33+) | Requires deepseek CLI |
+| `pi` | Pi (minimalist coding agent) | Requires pi CLI |
 | `ollama` | Ollama HTTP API (local inference) | Only requires local Ollama service |
 
 ## Text Processing Parameters
