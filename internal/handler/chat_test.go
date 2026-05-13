@@ -1296,3 +1296,122 @@ func TestConvertAskQuestionBlocks_Deduplication(t *testing.T) {
 		t.Errorf("expected 0 warning blocks, got %d", warningCount)
 	}
 }
+
+func TestExtractJSONCandidate_ParameterWrapper(t *testing.T) {
+	tests := []struct {
+		name    string
+		raw     string
+		wantOK  bool
+		wantHas string // substring that should appear in the result
+	}{
+		{
+			name:    "standard JSON object",
+			raw:     `{"questions":[{"question":"Which approach?","header":"Approach","options":[{"label":"A","description":"Fast"}],"multiSelect":false}]}`,
+			wantOK:  true,
+			wantHas: `"questions"`,
+		},
+		{
+			name:    "parameter wrapper with bare array",
+			raw:     `<parameter name="questions">[{"question":"Which approach?","header":"Approach","options":[{"label":"A","description":"Fast"}],"multiSelect":false}]</parameter>`,
+			wantOK:  true,
+			wantHas: `[{"question"`,
+		},
+		{
+			name:    "parameter wrapper with object",
+			raw:     `<parameter name="questions">{"questions":[{"question":"Pick one","header":"Choice","options":[{"label":"X","description":"Option X"}],"multiSelect":false}]}</parameter>`,
+			wantOK:  true,
+			wantHas: `"questions"`,
+		},
+		{
+			name:    "bare array without wrapper",
+			raw:     `[{"question":"Pick one","header":"Choice","options":[{"label":"X","description":"Option X"}],"multiSelect":false}]`,
+			wantOK:  true,
+			wantHas: `[{"question"`,
+		},
+		{
+			name:    "markdown code fence with parameter wrapper",
+			raw:     "```json\n<parameter name=\"questions\">[{\"question\":\"Pick one\",\"header\":\"Choice\",\"options\":[{\"label\":\"X\",\"description\":\"Option X\"}],\"multiSelect\":false}]</parameter>\n```",
+			wantOK:  true,
+			wantHas: `[{"question"`,
+		},
+		{
+			name:    "plain text (not JSON)",
+			raw:     `This is just text, not JSON at all`,
+			wantOK:  false,
+			wantHas: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractJSONCandidate(tt.raw)
+			if tt.wantOK {
+				if got == "" {
+					t.Errorf("extractJSONCandidate() returned empty, expected valid JSON")
+				} else if tt.wantHas != "" && !strings.Contains(got, tt.wantHas) {
+					t.Errorf("extractJSONCandidate() = %q, want substring %q", got, tt.wantHas)
+				}
+			} else {
+				if got != "" {
+					t.Errorf("extractJSONCandidate() = %q, expected empty string", got)
+				}
+			}
+		})
+	}
+}
+
+func TestConvertAskQuestionBlocks_ParameterWrapper(t *testing.T) {
+	// When AI models wrap <ask-question> content with <parameter name="questions">
+	// <ask-question><parameter name="questions">[...]</parameter></ask-question>
+	// The converter should still produce a valid AskUserQuestion tool_use block.
+	blocks := []model.ContentBlock{
+		{Type: "text", Text: `工作区是干净的，没有未提交的修改。
+
+<ask-question>
+<parameter name="questions">[{"header": "下一步", "multiSelect": false, "options": [{"label": "推送到远程", "description": "将本地领先的 12 个提交推送到 origin/main"}, {"label": "创建新提交", "description": "先添加文件再提交"}, {"label": "取消", "description": "不做任何操作"}], "question": "工作区没有未提交的修改，你想做什么？"}]</parameter>
+</ask-question>`},
+	}
+
+	result := convertAskQuestionBlocks(blocks)
+
+	// Should have: text block (with tag stripped) + AskUserQuestion tool_use block
+	foundAskQ := false
+	foundText := false
+	for _, b := range result {
+		if b.Type == "tool_use" && b.Name == "AskUserQuestion" {
+			foundAskQ = true
+			// Verify the questions array was correctly extracted
+			questions, ok := b.Input["questions"]
+			if !ok {
+				t.Error("AskUserQuestion block missing 'questions' field in input")
+			}
+			questionsArr, ok := questions.([]any)
+			if !ok || len(questionsArr) == 0 {
+				t.Errorf("AskUserQuestion 'questions' should be non-empty array, got %v", questions)
+			}
+			firstQ, ok := questionsArr[0].(map[string]any)
+			if !ok {
+				t.Fatalf("First question should be a map, got %T", questionsArr[0])
+			}
+			if firstQ["header"] != "下一步" {
+				t.Errorf("First question header = %q, want %q", firstQ["header"], "下一步")
+			}
+			if firstQ["question"] != "工作区没有未提交的修改，你想做什么？" {
+				t.Errorf("First question text mismatch: got %q", firstQ["question"])
+			}
+		}
+		if b.Type == "text" {
+			foundText = true
+			if strings.Contains(b.Text, "<ask-question") {
+				t.Error("text block should have <ask-question> tag stripped")
+			}
+		}
+	}
+
+	if !foundAskQ {
+		t.Error("expected to find an AskUserQuestion tool_use block")
+	}
+	if !foundText {
+		t.Error("expected to find a text block with surrounding text preserved")
+	}
+}

@@ -223,7 +223,16 @@ export function useChatRender(options) {
             const lastFence = askContent.lastIndexOf('```')
             if (lastFence !== -1) askContent = askContent.slice(0, lastFence).trim()
           }
-          const questions = JSON.parse(askContent)
+          // Strip leading XML parameter tags that some models use to wrap the JSON
+          // (e.g. <parameter name="questions">[...]</parameter>)
+          askContent = askContent.replace(/^\s*<[a-zA-Z_][\w.-]*(?:\s[^>]*)?>\s*/, '').trim()
+          // Strip trailing XML closing tags (e.g. </parameter>)
+          askContent = askContent.replace(/\s*<\/[a-zA-Z_][\w.-]*>\s*$/g, '').trim()
+          let questions = JSON.parse(askContent)
+          // Handle bare array format: wrap into {questions: [...]}
+          if (Array.isArray(questions) && questions.length > 0 && questions[0].question) {
+            questions = { questions }
+          }
           if (questions.questions && Array.isArray(questions.questions)) {
             blockAskQuestions[askKey] = questions
           }

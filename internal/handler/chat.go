@@ -905,6 +905,13 @@ func extractJSONCandidate(raw string) string {
 	for reTrailingXML.MatchString(trimmed) {
 		trimmed = strings.TrimSpace(reTrailingXML.ReplaceAllString(trimmed, ""))
 	}
+	// Strip leading XML tags that some models use to wrap the JSON payload
+	// (e.g. <parameter name="questions">). These are parameter-style wrappers
+	// that enclose the JSON array/dict instead of placing it directly.
+	reLeadingXML := regexp.MustCompile(`^\s*<[a-zA-Z_][\w.-]*(?:\s[^>]*)?>\s*`)
+	if reLeadingXML.MatchString(trimmed) {
+		trimmed = strings.TrimSpace(reLeadingXML.ReplaceAllString(trimmed, ""))
+	}
 	// Validate that the content looks like JSON — must start with '{' or '['.
 	if !strings.HasPrefix(trimmed, "{") && !strings.HasPrefix(trimmed, "[") {
 		return ""
@@ -995,9 +1002,17 @@ func convertAskQuestionBlocks(blocks []model.ContentBlock) []model.ContentBlock 
 		}
 
 		var input map[string]any
+		// Try parsing as object first ({questions: [...]})
 		if err := json.Unmarshal([]byte(jsonContent), &input); err != nil {
-			slog.Error("failed to parse ask-question JSON", slog.String("error", err.Error()))
-			continue
+			// Fallback: the JSON might be a bare array of questions (e.g. from
+			// <parameter name="questions">[...]</parameter> wrappers) — wrap it.
+			var questionsArr []any
+			if err2 := json.Unmarshal([]byte(jsonContent), &questionsArr); err2 == nil && len(questionsArr) > 0 {
+				input = map[string]any{"questions": questionsArr}
+			} else {
+				slog.Error("failed to parse ask-question JSON", slog.String("error", err.Error()))
+				continue
+			}
 		}
 
 		questions, ok := input["questions"]

@@ -64,9 +64,20 @@ export function isValidAskContent(raw: string): boolean {
     const lastFence = probe.lastIndexOf('```')
     if (lastFence !== -1) probe = probe.slice(0, lastFence).trim()
   }
+  // Strip leading XML tags that some models use to wrap the JSON payload
+  // (e.g. <parameter name="questions">). Must strip these before JSON.parse.
+  probe = probe.replace(/^\s*<[a-zA-Z_][\w.-]*(?:\s[^>]*)?>\s*/, '').trim()
+  // Strip trailing XML closing tags that some models append after the JSON payload
+  // (e.g. </parameter>). Loop because multiple closing tags may be present.
+  probe = probe.replace(/\s*<\/[a-zA-Z_][\w.-]*>\s*$/g, '').trim()
   try {
     const parsed = JSON.parse(probe)
-    return !!(parsed && parsed.questions && Array.isArray(parsed.questions))
+    if (!parsed) return false
+    // Accept {questions: [...]} object format
+    if (parsed.questions && Array.isArray(parsed.questions)) return true
+    // Accept bare array of questions (e.g. from <parameter name="questions"> wrappers)
+    if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].question) return true
+    return false
   } catch {
     return false
   }
