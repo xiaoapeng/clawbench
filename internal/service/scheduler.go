@@ -140,6 +140,11 @@ func (s *Scheduler) CancelAllExecutions(taskID int64) {
 // LoadTasksFromDB loads active tasks from the database and registers them.
 // If projectPath is empty, loads tasks from all projects.
 func (s *Scheduler) LoadTasksFromDB(projectPath string) error {
+	// Clean up zombie executions: on restart, any execution still marked as
+	// "running" in the DB is a zombie (the in-memory runningExecutions map is
+	// empty, so no CLI process is actually alive for it). Mark them as "failed".
+	s.cleanZombieExecutions()
+
 	tasks, err := GetTasks(projectPath)
 	if err != nil {
 		return err
@@ -179,6 +184,23 @@ func (s *Scheduler) LoadTasksFromDB(projectPath string) error {
 		}
 	}
 	return nil
+}
+
+// cleanZombieExecutions marks all "running" executions as "failed".
+// Called on startup when no in-memory state exists — any DB row still
+// marked "running" belongs to a CLI process that died with the previous
+// server instance.
+func (s *Scheduler) cleanZombieExecutions() {
+	result, err := DB.Exec("UPDATE task_executions SET status = 'failed' WHERE status = 'running'")
+	if err != nil {
+		slog.Error("failed to clean zombie executions", slog.String("err", err.Error()))
+		return
+	}
+	if n, _ := result.RowsAffected(); n > 0 {
+		slog.Info("cleaned up zombie task executions",
+			slog.Int64("count", n),
+		)
+	}
 }
 
 // AddTask creates a new scheduled task, persists it, and registers it with cron.
@@ -509,6 +531,7 @@ func (s *Scheduler) executeTask(task *model.ScheduledTask, projectPath string, t
 	// Consume streaming events and build content blocks
 	var blocks []model.ContentBlock
 	var responseMetadata *ai.Metadata
+	var receivedTerminal bool // tracks whether "done" or "error" was received
 	wallStart := time.Now()
 
 	for event := range eventCh {
@@ -518,7 +541,7 @@ func (s *Scheduler) executeTask(task *model.ScheduledTask, projectPath string, t
 				responseMetadata = event.Meta
 			}
 		case "done", "error":
-			// Terminal events
+			receivedTerminal = true
 		default:
 			ai.AccumulateBlock(&blocks, event)
 		}
@@ -531,6 +554,20 @@ func (s *Scheduler) executeTask(task *model.ScheduledTask, projectPath string, t
 			slog.String("session_id", sessionID),
 		)
 		UpdateExecutionStatus(sessionID, "cancelled")
+		newStatus := task.Status
+		UpdateTaskStats(task, newStatus)
+		return
+	}
+
+	// If the event channel closed without a terminal event (done/error),
+	// the CLI process likely crashed or was killed (e.g. SIGKILL, OOM).
+	// Mark as failed to prevent zombie "running" state in DB.
+	if !receivedTerminal {
+		slog.Warn("task execution ended without terminal event (CLI process crashed?)",
+			slog.Int64("task_id", task.ID),
+			slog.String("session_id", sessionID),
+		)
+		UpdateExecutionStatus(sessionID, "failed")
 		newStatus := task.Status
 		UpdateTaskStats(task, newStatus)
 		return
