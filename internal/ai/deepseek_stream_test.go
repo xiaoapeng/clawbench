@@ -44,7 +44,7 @@ func TestDeepSeekStreamParserThinking(t *testing.T) {
 func TestDeepSeekStreamParserToolUse(t *testing.T) {
 	parser := &DeepSeekStreamParser{}
 	ch := make(chan StreamEvent, 10)
-	parser.ParseLine(`{"type":"tool_use","name":"read_file","id":"call_001","input":{"file_path":"/tmp/test.go"},"done":true}`, ch)
+	parser.ParseLine(`{"type":"tool_use","name":"read_file","id":"call_001","input":{"path":"/tmp/test.go"},"done":true}`, ch)
 
 	select {
 	case evt := <-ch:
@@ -62,6 +62,13 @@ func TestDeepSeekStreamParserToolUse(t *testing.T) {
 		}
 		if !evt.Tool.Done {
 			t.Error("expected Done=true")
+		}
+		// DeepSeek read_file uses "path" → should be normalized to "file_path"
+		if !strings.Contains(evt.Tool.Input, `"file_path"`) {
+			t.Errorf("expected input field 'file_path', got '%s'", evt.Tool.Input)
+		}
+		if !strings.Contains(evt.Tool.Input, "/tmp/test.go") {
+			t.Errorf("expected path value '/tmp/test.go' in input, got '%s'", evt.Tool.Input)
 		}
 	default:
 		t.Error("expected event on channel")
@@ -313,11 +320,22 @@ func TestDeepSeekToolNameNormalization(t *testing.T) {
 		"read_file":   "Read",
 		"write_file":  "Write",
 		"edit_file":   "Edit",
+		"exec_shell":  "Bash",
 		"shell":       "Bash",
 		"bash":        "Bash",
+		"list_dir":    "LS",
 		"list_files":  "LS",
-		"grep":        "Grep",
+		"grep_files":  "Grep",
+		"file_search": "Glob",
 		"glob":        "Glob",
+		"fetch_url":   "WebFetch",
+		"web_search":  "WebSearch",
+		"agent_spawn": "Agent",
+		"load_skill":  "Skill",
+		"todo_write":   "TodoWrite",
+		"apply_patch": "Edit",
+		"git_status":  "Git",
+		"git_diff":    "Git",
 	}
 
 	for input, expected := range tests {
@@ -326,5 +344,56 @@ func TestDeepSeekToolNameNormalization(t *testing.T) {
 		if evt.Tool.Name != expected {
 			t.Errorf("normalizeToolName(%q) = %q, want %q", input, evt.Tool.Name, expected)
 		}
+	}
+}
+
+func TestDeepSeekInputFieldNormalization(t *testing.T) {
+	parser := &DeepSeekStreamParser{}
+	ch := make(chan StreamEvent, 10)
+
+	// edit_file: {path, search, replace} → {file_path, old_string, new_string}
+	parser.ParseLine(`{"type":"tool_use","name":"edit_file","id":"e1","input":{"path":"/tmp/a.txt","search":"hello","replace":"world"},"done":true}`, ch)
+	evt := <-ch
+	if !strings.Contains(evt.Tool.Input, `"file_path"`) {
+		t.Errorf("edit_file: expected 'file_path' in input, got '%s'", evt.Tool.Input)
+	}
+	if !strings.Contains(evt.Tool.Input, `"old_string"`) {
+		t.Errorf("edit_file: expected 'old_string' in input, got '%s'", evt.Tool.Input)
+	}
+	if !strings.Contains(evt.Tool.Input, `"new_string"`) {
+		t.Errorf("edit_file: expected 'new_string' in input, got '%s'", evt.Tool.Input)
+	}
+	if strings.Contains(evt.Tool.Input, `"path"`) {
+		t.Errorf("edit_file: 'path' should be remapped to 'file_path', got '%s'", evt.Tool.Input)
+	}
+	if strings.Contains(evt.Tool.Input, `"search"`) {
+		t.Errorf("edit_file: 'search' should be remapped to 'old_string', got '%s'", evt.Tool.Input)
+	}
+	if strings.Contains(evt.Tool.Input, `"replace"`) {
+		t.Errorf("edit_file: 'replace' should be remapped to 'new_string', got '%s'", evt.Tool.Input)
+	}
+
+	// read_file: {path} → {file_path}
+	parser.ParseLine(`{"type":"tool_use","name":"read_file","id":"r1","input":{"path":"/tmp/b.txt"},"done":true}`, ch)
+	evt = <-ch
+	if !strings.Contains(evt.Tool.Input, `"file_path"`) {
+		t.Errorf("read_file: expected 'file_path' in input, got '%s'", evt.Tool.Input)
+	}
+	if strings.Contains(evt.Tool.Input, `"path"`) {
+		t.Errorf("read_file: 'path' should be remapped to 'file_path', got '%s'", evt.Tool.Input)
+	}
+
+	// exec_shell: {command} stays as {command}
+	parser.ParseLine(`{"type":"tool_use","name":"exec_shell","id":"s1","input":{"command":"ls -la"},"done":true}`, ch)
+	evt = <-ch
+	if !strings.Contains(evt.Tool.Input, `"command"`) {
+		t.Errorf("exec_shell: expected 'command' in input, got '%s'", evt.Tool.Input)
+	}
+
+	// list_dir: {path} → {file_path}
+	parser.ParseLine(`{"type":"tool_use","name":"list_dir","id":"d1","input":{"path":"/tmp"},"done":true}`, ch)
+	evt = <-ch
+	if !strings.Contains(evt.Tool.Input, `"file_path"`) {
+		t.Errorf("list_dir: expected 'file_path' in input, got '%s'", evt.Tool.Input)
 	}
 }

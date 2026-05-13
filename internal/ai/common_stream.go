@@ -63,34 +63,36 @@ func injectSystemPrompt(req ChatRequest) string {
 // The same mapping is used by gemini_stream.go and opencode_stream.go.
 func normalizeToolName(toolName string) string {
 	switch toolName {
-	case "read_file", "read":
+	case "read_file", "read", "look_at":
 		return "Read"
 	case "write_file", "write":
 		return "Write"
 	case "edit_file", "replace", "edit":
 		return "Edit"
-	case "shell", "run_command", "bash":
+	case "shell", "run_command", "bash", "exec_shell":
 		return "Bash"
-	case "list_files", "list_directory", "ls":
+	case "list_files", "list_directory", "ls", "list_dir":
 		return "LS"
-	case "search_files", "grep":
+	case "search_files", "grep", "grep_files":
 		return "Grep"
-	case "glob":
+	case "file_search", "glob":
 		return "Glob"
-	case "web_fetch", "webfetch":
+	case "web_fetch", "webfetch", "fetch_url":
 		return "WebFetch"
-	case "google_web_search", "websearch":
+	case "google_web_search", "websearch", "web_search":
 		return "WebSearch"
-	case "invoke_agent", "task":
+	case "invoke_agent", "task", "agent_spawn", "spawn_agent", "delegate_to_agent":
 		return "Agent"
 	case "enter_plan_mode":
 		return "EnterPlanMode"
-	case "activate_skill", "skill":
+	case "activate_skill", "skill", "load_skill":
 		return "Skill"
-	case "todowrite":
+	case "todowrite", "todo_write", "checklist_write":
 		return "TodoWrite"
-	case "look_at":
-		return "Read" // media inspection -> Read
+	case "apply_patch":
+		return "Edit" // patch-based editing -> Edit
+	case "git_status", "git_diff", "git_log", "git_show", "git_blame":
+		return "Git" // git operations -> Git
 	case "save_memory":
 		return "save_memory" // no canonical PascalCase equivalent
 	default:

@@ -119,14 +119,35 @@ func (p *DeepSeekStreamParser) ParseLine(line string, ch chan<- StreamEvent) {
 }
 
 // normalizeDeepSeekInput normalizes tool input field names from DeepSeek TUI's
-// camelCase to canonical snake_case.
+// native names to the canonical names expected by the frontend renderers.
+//
+// DeepSeek TUI uses concise snake_case names that differ from the canonical
+// Claude-style names: path→file_path, search→old_string, replace→new_string,
+// command→command (no change), content→content (no change).
 func normalizeDeepSeekInput(toolName string, rawInput json.RawMessage) string {
-	normalized, err := normalizeToolInput(rawInput, map[string]string{
-		"dirPath":    "path",
-		"oldString":  "old_string",
-		"newString":  "new_string",
-		"filePaths": "file_paths",
-	})
+	// Per-tool field renames: DeepSeek native → canonical frontend names
+	remaps := map[string]string{
+		"filePaths": "file_paths", // camelCase fallback
+		"oldString": "old_string", // camelCase fallback
+		"newString": "new_string", // camelCase fallback
+		"dirPath":   "path",       // camelCase fallback
+	}
+
+	switch toolName {
+	case "edit_file":
+		// DeepSeek: {path, search, replace} → canonical: {file_path, old_string, new_string}
+		remaps["path"] = "file_path"
+		remaps["search"] = "old_string"
+		remaps["replace"] = "new_string"
+	case "read_file", "write_file", "list_dir":
+		// DeepSeek: {path, ...} → canonical: {file_path, ...}
+		remaps["path"] = "file_path"
+	case "grep_files", "file_search":
+		// DeepSeek: {path, ...} → canonical: {path, ...} (grep uses 'path', not 'file_path')
+		// No remap needed — 'path' is already canonical for Grep/Glob
+	}
+
+	normalized, err := normalizeToolInput(rawInput, remaps)
 	if err != nil {
 		return string(rawInput)
 	}

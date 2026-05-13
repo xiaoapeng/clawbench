@@ -34,6 +34,9 @@ web/package-lock.json
 .smartworkbench/
 *.db
 
+# DeepSeek TUI runtime config
+.deepseek/
+
 # Git worktrees
 .worktrees/
 dist/
