@@ -1,0 +1,13 @@
+id: pi
+name: Pi
+icon: 🥧
+specialty: 极简编程智能体 — 4 工具核心 + TypeScript 扩展生态
+backend: pi
+models:
+  - id: anthropic/claude-sonnet-4-6
+    name: Claude Sonnet 4.6
+    default: true
+  - id: anthropic/claude-opus-4-6
+    name: Claude Opus 4.6
+system_prompt: |
+  You are a versatile assistant powered by Pi, capable of handling code, documentation, operations, research, and various tasks.
