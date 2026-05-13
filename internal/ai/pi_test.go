@@ -1,6 +1,8 @@
 package ai
 
 import (
+	"os"
+	"os/exec"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -137,7 +139,58 @@ func TestPiBackendDefinition(t *testing.T) {
 	_, ok := parser.(*PiStreamParser)
 	assert.True(t, ok, "expected *PiStreamParser, got %T", parser)
 
-	// filterLine and preStart should be nil
+	// filterLine should be nil; preStart should be set (injects ANTHROPIC_API_KEY)
 	assert.Nil(t, piBackend.filterLine)
-	assert.Nil(t, piBackend.preStart)
+	assert.NotNil(t, piBackend.preStart)
+}
+
+func TestPiPreStart_InjectsAnthropicKey(t *testing.T) {
+	// Save and restore env
+	origMinimax := os.Getenv("MINIMAX_API_KEY")
+	origAnthropic := os.Getenv("ANTHROPIC_API_KEY")
+	t.Cleanup(func() {
+		os.Setenv("MINIMAX_API_KEY", origMinimax)
+		os.Setenv("ANTHROPIC_API_KEY", origAnthropic)
+	})
+
+	// Set MINIMAX_API_KEY, clear ANTHROPIC_API_KEY
+	os.Setenv("MINIMAX_API_KEY", "sk-test-minimax-key")
+	os.Unsetenv("ANTHROPIC_API_KEY")
+
+	cmd := exec.Command("echo", "test")
+	piPreStart(cmd, ChatRequest{})
+
+	// Should have ANTHROPIC_API_KEY in env
+	found := false
+	for _, e := range cmd.Env {
+		if e == "ANTHROPIC_API_KEY=sk-test-minimax-key" {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "expected ANTHROPIC_API_KEY to be injected from MINIMAX_API_KEY")
+}
+
+func TestPiPreStart_DoesNotOverwriteExisting(t *testing.T) {
+	origMinimax := os.Getenv("MINIMAX_API_KEY")
+	origAnthropic := os.Getenv("ANTHROPIC_API_KEY")
+	t.Cleanup(func() {
+		os.Setenv("MINIMAX_API_KEY", origMinimax)
+		os.Setenv("ANTHROPIC_API_KEY", origAnthropic)
+	})
+
+	// Both keys set — should NOT inject a new one
+	os.Setenv("MINIMAX_API_KEY", "sk-minimax")
+	os.Setenv("ANTHROPIC_API_KEY", "sk-original-anthropic")
+
+	cmd := exec.Command("echo", "test")
+	piPreStart(cmd, ChatRequest{})
+
+	// cmd.Env should be nil (inherits from parent), or if set, should not
+	// contain a duplicate/different ANTHROPIC_API_KEY
+	for _, e := range cmd.Env {
+		if e == "ANTHROPIC_API_KEY=sk-minimax" {
+			t.Error("should not overwrite ANTHROPIC_API_KEY with MINIMAX_API_KEY")
+		}
+	}
 }

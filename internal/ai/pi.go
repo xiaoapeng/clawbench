@@ -1,5 +1,10 @@
 package ai
 
+import (
+	"os"
+	"os/exec"
+)
+
 // piBackend is the CLIBackend instance for Pi CLI.
 var piBackend = &CLIBackend{
 	name:           "pi",
@@ -7,7 +12,39 @@ var piBackend = &CLIBackend{
 	buildArgs:      buildPiStreamArgs,
 	newParser:      func() LineParser { return &PiStreamParser{} },
 	filterLine:     nil,
-	preStart:       nil,
+	preStart:       piPreStart,
+}
+
+// piPreStart injects environment variables needed by Pi CLI.
+// Pi's Anthropic provider requires ANTHROPIC_API_KEY, but in this environment
+// the MiniMax proxy key (MINIMAX_API_KEY) is used as the Anthropic key.
+// If ANTHROPIC_API_KEY is not already set, we copy MINIMAX_API_KEY to it.
+func piPreStart(cmd *exec.Cmd, _ ChatRequest) {
+	// cmd.Env is nil unless ScheduledExecution set it; in that case
+	// it already contains os.Environ(). We need a mutable copy.
+	env := cmd.Env
+	if env == nil {
+		env = os.Environ()
+	}
+
+	// Check if ANTHROPIC_API_KEY is already set
+	hasAnthropicKey := false
+	for _, e := range env {
+		if len(e) >= len("ANTHROPIC_API_KEY=") && e[:len("ANTHROPIC_API_KEY=")] == "ANTHROPIC_API_KEY=" {
+			hasAnthropicKey = true
+			break
+		}
+	}
+
+	// If ANTHROPIC_API_KEY is missing but MINIMAX_API_KEY is available,
+	// inject it — MiniMax's Anthropic-compatible proxy uses the same key.
+	if !hasAnthropicKey {
+		minimaxKey := os.Getenv("MINIMAX_API_KEY")
+		if minimaxKey != "" {
+			env = append(env, "ANTHROPIC_API_KEY="+minimaxKey)
+			cmd.Env = env
+		}
+	}
 }
 
 // buildPiStreamArgs constructs the CLI arguments for Pi streaming.
