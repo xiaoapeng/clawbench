@@ -33,8 +33,8 @@ type Config struct {
 	} `yaml:"session"`
 	TTS struct {
 		Engine            string         `yaml:"engine"`             // TTS engine: "edge" (default), "minimax", "piper", "kokoro", "moss-nano"
-		SummarizeBackend  string         `yaml:"summarize_backend"`  // Summarization backend: "mmx-cli" (default), "claude", "codebuddy", "gemini", "opencode", "codex", "qoder", "vecli", "ollama", "simple"
-		SummarizeModel    string         `yaml:"summarize_model"`    // Model for summarization (default: "MiniMax-M2.7" for mmx-cli, "gemma3:270m" for ollama; empty = backend default for others)
+		SummarizeBackend  string         `yaml:"summarize_backend"`  // Summarization backend: "simple" (default), "mmx-cli", "api", "claude", "codebuddy", "gemini", "opencode", "codex", "qoder", "vecli"
+		SummarizeModel    string         `yaml:"summarize_model"`    // Model for summarization (default: "MiniMax-M2.7" for mmx-cli; empty = backend default for others)
 		TTSModel          string         `yaml:"tts_model"`          // TTS model for speech synthesis (default: "Speech-2.8-Turbo")
 		Voice             string         `yaml:"voice"`              // Voice ID for TTS (default: "female-chengshu")
 		Speed             float64        `yaml:"speed"`              // Speech speed multiplier (default: 1.0)
@@ -44,7 +44,7 @@ type Config struct {
 		Piper             PiperConfig    `yaml:"piper"`              // Piper-specific configuration (only used when engine: "piper")
 		Kokoro            KokoroConfig   `yaml:"kokoro"`             // Kokoro-specific configuration (only used when engine: "kokoro")
 		MossNano          MossNanoConfig `yaml:"moss_nano"`          // MOSS-TTS-Nano-specific configuration (only used when engine: "moss-nano")
-		Ollama            OllamaConfig   `yaml:"ollama"`             // Ollama-specific configuration (only used when summarize_backend: "ollama")
+		API               APIConfig      `yaml:"api"`               // API-based summarization (only used when summarize_backend: "api")
 	} `yaml:"tts"`
 	Proxy    ProxyConfig    `yaml:"proxy"`     // Port forwarding configuration
 	SSH      SSHConfig      `yaml:"ssh"`       // SSH tunnel server configuration
@@ -98,9 +98,12 @@ type MossNanoConfig struct {
 	Backend      string `yaml:"backend"`         // Inference backend: "onnx" (default, CPU) or "pytorch" (requires GPU)
 }
 
-// OllamaConfig holds configuration for the Ollama summarization backend.
-type OllamaConfig struct {
-	BaseURL string `yaml:"base_url"` // Ollama API base URL (default: "http://localhost:11434")
+// APIConfig holds configuration for the API-based summarization backend.
+type APIConfig struct {
+	BaseURL string `yaml:"base_url"` // Full endpoint URL (e.g., "https://api.openai.com/v1/chat/completions")
+	Key     string `yaml:"key"`      // API key (sent as Bearer token for OpenAI, x-api-key for Anthropic)
+	Format  string `yaml:"format"`   // API format: "openai" (default) or "anthropic"
+	Model   string `yaml:"model"`    // Model name (default: "gpt-4o-mini" for openai, "claude-3-5-haiku-latest" for anthropic)
 }
 
 // ConfigInstance holds the resolved configuration after ApplyDefaults.

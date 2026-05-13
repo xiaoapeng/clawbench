@@ -63,14 +63,14 @@ func TestParsePresenceMapEmpty(t *testing.T) {
 func TestParsePresenceMapDeeplyNested(t *testing.T) {
 	raw := map[string]any{
 		"tts": map[string]any{
-			"ollama": map[string]any{
-				"base_url": "http://localhost:11434",
+			"api": map[string]any{
+				"base_url": "https://api.openai.com/v1/chat/completions",
 			},
 		},
 	}
 	presence := ParsePresenceMap(raw)
 
-	expectedKeys := []string{"tts", "tts.ollama", "tts.ollama.base_url"}
+	expectedKeys := []string{"tts", "tts.api", "tts.api.base_url"}
 	for _, key := range expectedKeys {
 		if !presence[key] {
 			t.Errorf("expected key %q to be present", key)

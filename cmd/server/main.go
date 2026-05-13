@@ -193,14 +193,34 @@ func main() {
 			slog.String("backend", "mmx-cli"),
 			slog.String("model", s.Model),
 		)
-	} else if summarizeBackend == "ollama" {
-		s := speech.NewOllamaSummarizer(cfg.TTS.Ollama.BaseURL, cfg.TTS.SummarizeModel)
-		ttsSummarizer = s
-		slog.Info("tts summarizer configured",
-			slog.String("backend", "ollama"),
-			slog.String("model", s.Model),
-			slog.String("base_url", s.BaseURL),
-		)
+	} else if summarizeBackend == "api" {
+		if cfg.TTS.API.BaseURL == "" {
+			slog.Error("tts summarize_backend is \"api\" but tts.api.base_url is not configured")
+			os.Exit(1)
+		}
+		if cfg.TTS.API.Format == "anthropic" {
+			s := speech.NewAnthropicSummarizer(cfg.TTS.API.BaseURL, cfg.TTS.API.Key, cfg.TTS.API.Model)
+			if cfg.TTS.SummarizeModel != "" {
+				s.Model = cfg.TTS.SummarizeModel
+			}
+			ttsSummarizer = s
+			slog.Info("tts summarizer configured",
+				slog.String("backend", "api"),
+				slog.String("format", "anthropic"),
+				slog.String("model", s.Model),
+			)
+		} else {
+			s := speech.NewOpenAISummarizer(cfg.TTS.API.BaseURL, cfg.TTS.API.Key, cfg.TTS.API.Model)
+			if cfg.TTS.SummarizeModel != "" {
+				s.Model = cfg.TTS.SummarizeModel
+			}
+			ttsSummarizer = s
+			slog.Info("tts summarizer configured",
+				slog.String("backend", "api"),
+				slog.String("format", "openai"),
+				slog.String("model", s.Model),
+			)
+		}
 	} else {
 		s, err := speech.NewAIBackendSummarizer(summarizeBackend)
 		if err != nil {

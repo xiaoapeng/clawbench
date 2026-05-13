@@ -1,0 +1,134 @@
+package speech
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log/slog"
+	"net/http"
+	"strings"
+	"time"
+)
+
+// AnthropicSummarizer implements Summarizer using the Anthropic Messages API format.
+type AnthropicSummarizer struct {
+	BaseURL    string       // Full endpoint URL (e.g., "https://api.anthropic.com/v1/messages")
+	Key        string       // API key (sent as x-api-key header)
+	Model      string       // Model name (default: "claude-3-5-haiku-latest")
+	HTTPClient *http.Client // Shared HTTP client with timeout
+	gs         genericSummarizer
+}
+
+// NewAnthropicSummarizer creates an AnthropicSummarizer with the given configuration.
+// Empty model defaults to "claude-3-5-haiku-latest".
+func NewAnthropicSummarizer(baseURL, key, model string) *AnthropicSummarizer {
+	if model == "" {
+		model = "claude-3-5-haiku-latest"
+	}
+	s := &AnthropicSummarizer{
+		BaseURL: strings.TrimRight(baseURL, "/"),
+		Key:     key,
+		Model:   model,
+		HTTPClient: &http.Client{
+			Timeout: 120 * time.Second,
+		},
+	}
+	s.gs = NewGenericSummarizer(s.doSummarizePass)
+	return s
+}
+
+// anthropicRequest is the request body for the Anthropic Messages API.
+type anthropicRequest struct {
+	Model       string              `json:"model"`
+	System      string              `json:"system"`
+	Messages    []anthropicMessage  `json:"messages"`
+	MaxTokens   int                 `json:"max_tokens"`
+	Temperature float64             `json:"temperature"`
+}
+
+type anthropicMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+// anthropicResponse is the response body for the Anthropic Messages API.
+type anthropicResponse struct {
+	Content []anthropicContentBlock `json:"content"`
+}
+
+type anthropicContentBlock struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
+}
+
+// Summarize condenses text for voice output using the Anthropic Messages API.
+func (s *AnthropicSummarizer) Summarize(ctx context.Context, text string, language string) (string, error) {
+	return s.gs.Summarize(ctx, text, language)
+}
+
+// doSummarizePass performs a single summarization pass using the Anthropic Messages API.
+func (s *AnthropicSummarizer) doSummarizePass(ctx context.Context, text, systemPrompt string, pass int) (string, error) {
+	reqBody := anthropicRequest{
+		Model:  s.Model,
+		System: systemPrompt,
+		Messages: []anthropicMessage{
+			{Role: "user", Content: text},
+		},
+		MaxTokens:   1024,
+		Temperature: 0.3,
+	}
+
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("anthropic request marshal (pass %d): %w", pass, err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.BaseURL, bytes.NewReader(jsonBody))
+	if err != nil {
+		return "", fmt.Errorf("anthropic request create (pass %d): %w", pass, err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("anthropic-version", "2023-06-01")
+	if s.Key != "" {
+		req.Header.Set("x-api-key", s.Key)
+	}
+
+	resp, err := s.HTTPClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("anthropic request (pass %d): %w", pass, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("anthropic API returned status %d (pass %d): %s", resp.StatusCode, pass, string(body))
+	}
+
+	var chatResp anthropicResponse
+	if err := json.NewDecoder(resp.Body).Decode(&chatResp); err != nil {
+		return "", fmt.Errorf("anthropic response decode (pass %d): %w", pass, err)
+	}
+
+	// Extract text from content blocks
+	var resultBuilder strings.Builder
+	for _, block := range chatResp.Content {
+		if block.Type == "text" {
+			resultBuilder.WriteString(block.Text)
+		}
+	}
+	result := strings.TrimSpace(resultBuilder.String())
+	if result == "" {
+		return "", fmt.Errorf("anthropic (pass %d) returned empty output", pass)
+	}
+
+	slog.Info("tts summarize pass completed",
+		slog.Int("pass", pass),
+		slog.String("backend", "anthropic"),
+		slog.String("model", s.Model),
+		slog.Int("result_len", len([]rune(result))),
+	)
+
+	return result, nil
+}

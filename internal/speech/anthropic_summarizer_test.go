@@ -1,0 +1,206 @@
+package speech
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+)
+
+func TestNewAnthropicSummarizer_Defaults(t *testing.T) {
+	s := NewAnthropicSummarizer("https://api.anthropic.com/v1/messages", "sk-ant-test", "")
+	assert.Equal(t, "https://api.anthropic.com/v1/messages", s.BaseURL)
+	assert.Equal(t, "claude-3-5-haiku-latest", s.Model)
+	assert.Equal(t, "sk-ant-test", s.Key)
+	assert.NotNil(t, s.HTTPClient)
+}
+
+func TestNewAnthropicSummarizer_CustomConfig(t *testing.T) {
+	s := NewAnthropicSummarizer("https://custom.api.com/v1/messages/", "key-abc", "claude-3-opus-latest")
+	assert.Equal(t, "https://custom.api.com/v1/messages", s.BaseURL) // trailing slash trimmed
+	assert.Equal(t, "claude-3-opus-latest", s.Model)
+	assert.Equal(t, "key-abc", s.Key)
+}
+
+func TestAnthropicSummarizer_ShortText(t *testing.T) {
+	s := NewAnthropicSummarizer("https://example.com/v1/messages", "key", "")
+	result, err := s.Summarize(context.Background(), "这是一段短文本", "zh")
+	assert.NoError(t, err)
+	assert.Equal(t, "这是一段短文本", result)
+}
+
+func TestAnthropicSummarizer_APICall(t *testing.T) {
+	var receivedReq anthropicRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "POST", r.Method)
+		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+		assert.Equal(t, "sk-ant-test", r.Header.Get("x-api-key"))
+		assert.Equal(t, "2023-06-01", r.Header.Get("anthropic-version"))
+
+		err := json.NewDecoder(r.Body).Decode(&receivedReq)
+		assert.NoError(t, err)
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(anthropicResponse{
+			Content: []anthropicContentBlock{
+				{Type: "text", Text: "这是总结后的内容。"},
+			},
+		})
+	}))
+	defer server.Close()
+
+	s := NewAnthropicSummarizer(server.URL, "sk-ant-test", "claude-3-5-haiku-latest")
+	longText := strings.Repeat("这是一段很长的AI回复内容，用于测试总结功能。", 20)
+	result, err := s.Summarize(context.Background(), longText, "zh")
+
+	assert.NoError(t, err)
+	assert.Equal(t, "这是总结后的内容。", result)
+	assert.Equal(t, "claude-3-5-haiku-latest", receivedReq.Model)
+	assert.Equal(t, "user", receivedReq.Messages[0].Role)
+	assert.NotEmpty(t, receivedReq.System) // system prompt at top level
+	assert.Equal(t, 1024, receivedReq.MaxTokens)
+}
+
+func TestAnthropicSummarizer_MultiPass(t *testing.T) {
+	callCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		var text string
+		if callCount == 1 {
+			text = strings.Repeat("这是一段很长的总结结果，", 300) // >4000 bytes
+		} else {
+			text = "精简后的总结。"
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(anthropicResponse{
+			Content: []anthropicContentBlock{
+				{Type: "text", Text: text},
+			},
+		})
+	}))
+	defer server.Close()
+
+	s := NewAnthropicSummarizer(server.URL, "key", "claude-3-5-haiku-latest")
+	longText := strings.Repeat("这是一段很长的AI回复内容，用于测试总结功能。", 20)
+	result, err := s.Summarize(context.Background(), longText, "zh")
+
+	assert.NoError(t, err)
+	assert.Equal(t, "精简后的总结。", result)
+	assert.Equal(t, 2, callCount)
+}
+
+func TestAnthropicSummarizer_ErrorStatus(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprint(w, "invalid api key")
+	}))
+	defer server.Close()
+
+	s := NewAnthropicSummarizer(server.URL, "bad-key", "claude-3-5-haiku-latest")
+	longText := strings.Repeat("这是一段很长的AI回复内容，用于测试总结功能。", 20)
+	_, err := s.Summarize(context.Background(), longText, "zh")
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "status 401")
+	assert.Contains(t, err.Error(), "invalid api key")
+}
+
+func TestAnthropicSummarizer_ConnectionRefused(t *testing.T) {
+	s := NewAnthropicSummarizer("http://127.0.0.1:1", "key", "claude-3-5-haiku-latest")
+	s.HTTPClient.Timeout = 2 * time.Second
+
+	longText := strings.Repeat("这是一段很长的AI回复内容，用于测试总结功能。", 20)
+	_, err := s.Summarize(context.Background(), longText, "zh")
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "anthropic request")
+}
+
+func TestAnthropicSummarizer_EmptyResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(anthropicResponse{
+			Content: []anthropicContentBlock{
+				{Type: "text", Text: "  "},
+			},
+		})
+	}))
+	defer server.Close()
+
+	s := NewAnthropicSummarizer(server.URL, "key", "claude-3-5-haiku-latest")
+	longText := strings.Repeat("这是一段很长的AI回复内容，用于测试总结功能。", 20)
+	_, err := s.Summarize(context.Background(), longText, "zh")
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "empty output")
+}
+
+func TestAnthropicSummarizer_ContextCancellation(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(5 * time.Second)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(anthropicResponse{
+			Content: []anthropicContentBlock{
+				{Type: "text", Text: "too late"},
+			},
+		})
+	}))
+	defer server.Close()
+
+	s := NewAnthropicSummarizer(server.URL, "key", "claude-3-5-haiku-latest")
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	longText := strings.Repeat("这是一段很长的AI回复内容，用于测试总结功能。", 20)
+	_, err := s.Summarize(ctx, longText, "zh")
+
+	assert.Error(t, err)
+}
+
+func TestAnthropicSummarizer_NoKey(t *testing.T) {
+	// When key is empty, x-api-key header should not be set
+	var apiKeyHeader string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		apiKeyHeader = r.Header.Get("x-api-key")
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(anthropicResponse{
+			Content: []anthropicContentBlock{
+				{Type: "text", Text: "ok"},
+			},
+		})
+	}))
+	defer server.Close()
+
+	s := NewAnthropicSummarizer(server.URL, "", "claude-3-5-haiku-latest")
+	longText := strings.Repeat("这是一段很长的AI回复内容，用于测试总结功能。", 20)
+	_, err := s.Summarize(context.Background(), longText, "zh")
+
+	assert.NoError(t, err)
+	assert.Empty(t, apiKeyHeader)
+}
+
+func TestAnthropicSummarizer_MultipleContentBlocks(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(anthropicResponse{
+			Content: []anthropicContentBlock{
+				{Type: "text", Text: "第一部分。"},
+				{Type: "text", Text: "第二部分。"},
+			},
+		})
+	}))
+	defer server.Close()
+
+	s := NewAnthropicSummarizer(server.URL, "key", "claude-3-5-haiku-latest")
+	longText := strings.Repeat("这是一段很长的AI回复内容，用于测试总结功能。", 20)
+	result, err := s.Summarize(context.Background(), longText, "zh")
+
+	assert.NoError(t, err)
+	assert.Equal(t, "第一部分。第二部分。", result)
+}

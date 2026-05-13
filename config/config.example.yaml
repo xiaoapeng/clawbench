@@ -97,6 +97,7 @@ tts:
   # --- Summarization backend (compresses AI replies into TTS-friendly summaries) ---
   # --- 总结后端（将AI回复压缩为适合朗读的摘要） ---
   #   "simple"    — Pure text cleaning only (default) / 纯文本清洗（默认），零延迟
+  #   "api"       — Remote AI API (OpenAI/Anthropic format, configurable URL & key) / 远程AI API（OpenAI/Anthropic格式，可配置URL和密钥）
   #   "mmx-cli"   — mmx text chat / 使用 mmx text chat
   #   "claude"    — Claude CLI / 使用 Claude CLI
   #   "codebuddy" — CodeBuddy CLI / 使用 CodeBuddy CLI
@@ -105,7 +106,6 @@ tts:
   #   "codex"     — Codex CLI / 使用 Codex CLI
   #   "qoder"     — Qoder CLI (Alibaba) / 使用 Qoder CLI（阿里编码智能体）
   #   "vecli"     — VeCLI (Volcengine Doubao) / 使用 VeCLI（火山引擎 Doubao）
-  #   "ollama"    — Ollama HTTP API (local inference) / 使用 Ollama HTTP API（本地推理）
   summarize_backend: "simple"
   summarize_model: "MiniMax-M2.7"                        # Summarization model (leave empty for backend default)
                                                           # 总结模型（留空则使用后端默认）
@@ -184,13 +184,27 @@ tts:
   #   voice: "Junhao"
   #   backend: "onnx"
 
-  # --- Combo 7: Ollama summarization (local inference, no cloud) ---
-  # --- 组合7: Ollama总结（本地推理，无需云服务） ---
+  # --- Combo 7: API summarization (OpenAI-compatible, e.g., DeepSeek, Groq, Ollama) ---
+  # --- 组合7: API总结（OpenAI兼容格式，如 DeepSeek、Groq、Ollama） ---
   # engine: "edge"
-  # summarize_backend: "ollama"
-  # summarize_model: "gemma3:270m"
-  # ollama:
-  #   base_url: "http://localhost:11434"
+  # summarize_backend: "api"
+  # api:
+  #   base_url: "https://api.openai.com/v1/chat/completions"  # Full endpoint URL / 完整端点URL
+  #   key: "sk-xxx"                                         # API key / API密钥
+  #   format: "openai"                                      # "openai" (default) or "anthropic" / "openai"（默认）或 "anthropic"
+  #   model: "gpt-4o-mini"                                  # Model name / 模型名称
+  # voice: "zh-CN-XiaoxiaoNeural"
+  # speed: 1
+
+  # --- Combo 8: API summarization (Anthropic format) ---
+  # --- 组合8: API总结（Anthropic格式） ---
+  # engine: "edge"
+  # summarize_backend: "api"
+  # api:
+  #   base_url: "https://api.anthropic.com/v1/messages"
+  #   key: "sk-ant-xxx"
+  #   format: "anthropic"
+  #   model: "claude-3-5-haiku-latest"
   # voice: "zh-CN-XiaoxiaoNeural"
   # speed: 1
 
