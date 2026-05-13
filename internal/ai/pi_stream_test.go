@@ -10,18 +10,8 @@ func TestPiStreamParser_SessionEvent(t *testing.T) {
 	ch := make(chan StreamEvent, 10)
 	parser.ParseLine(`{"type":"session","version":3,"id":"019e2110-274a-73ec-9e14-f1a7b5c13e6f","timestamp":"2025-01-01T00:00:00Z","cwd":"/home/user/project"}`, ch)
 
-	select {
-	case evt := <-ch:
-		if evt.Type != "session_capture" {
-			t.Errorf("expected session_capture event, got %s", evt.Type)
-		}
-		if evt.Content != "019e2110-274a-73ec-9e14-f1a7b5c13e6f" {
-			t.Errorf("expected session ID in content, got '%s'", evt.Content)
-		}
-	default:
-		t.Error("expected event on channel")
-	}
-
+	// Parser captures session ID internally — CLIBackend.ExecuteStream()
+	// handles the session_capture event emission via GetCapturedSessionID().
 	if id := parser.GetCapturedSessionID(); id != "019e2110-274a-73ec-9e14-f1a7b5c13e6f" {
 		t.Errorf("expected captured session ID, got '%s'", id)
 	}
@@ -362,7 +352,9 @@ func TestPiStreamParser_FullStreamWithToolUse(t *testing.T) {
 verify:
 
 	// Expected event types in order
-	expected := []string{"session_capture", "thinking", "tool_use", "tool_result", "content", "metadata", "done"}
+	// Note: session_capture is NOT emitted by the parser directly;
+	// CLIBackend.ExecuteStream() handles that via GetCapturedSessionID().
+	expected := []string{"thinking", "tool_use", "tool_result", "content", "metadata", "done"}
 	if len(events) < len(expected) {
 		t.Fatalf("expected at least %d events, got %d", len(expected), len(events))
 	}

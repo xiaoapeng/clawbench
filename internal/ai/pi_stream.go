@@ -108,7 +108,8 @@ func (p *PiStreamParser) ParseLine(line string, ch chan<- StreamEvent) {
 		if msg.ID != "" {
 			p.sessionID = msg.ID
 			slog.Debug("pi stream: captured session ID", "session_id", msg.ID)
-			ch <- StreamEvent{Type: "session_capture", Content: msg.ID}
+			// Don't emit session_capture here — CLIBackend.ExecuteStream()
+			// handles emission via GetCapturedSessionID() after each ParseLine call.
 		}
 
 	case "message_update":
