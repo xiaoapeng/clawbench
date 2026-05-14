@@ -127,12 +127,12 @@ var listExecHelp = HelpInfo{
 	Description: "List recent task executions with status and summary.",
 	Positional:  "TASK_ID  (required) ID of the task",
 	Flags: []FlagHelp{
-		{Name: "limit", Type: "int", Default: "10", Desc: "Max number of executions to return"},
+		{Name: "limit", Type: "int", Default: "1", Desc: "Max number of executions to return"},
 		{Name: "project", Type: "string", Desc: "Project path", Required: true},
 	},
 	Examples: []string{
 		`clawbench task list-exec 1 --project /path/to/project`,
-		`clawbench task list-exec 1 --limit 5 --project /path/to/project`,
+		`clawbench task list-exec 1 --limit 10 --project /path/to/project`,
 	},
 }
 
@@ -424,7 +424,7 @@ func runGet(args []string) int {
 func runListExec(args []string) int {
 	args = reorderFlagsFirst(args)
 	fs := flagSet("list-exec")
-	limit := fs.Int("limit", 10, "Max number of executions to return")
+	limit := fs.Int("limit", 1, "Max number of executions to return")
 	projectPath := fs.String("project", "", "Project path")
 	parseOrHelp(fs, args, &listExecHelp)
 
