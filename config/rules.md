@@ -83,6 +83,7 @@ When the user asks to create, modify, or manage scheduled/cron/recurring tasks, 
 | `create` | Create a new scheduled task |
 | `list` | List all tasks for the project |
 | `get TASK_ID` | Get task details by ID (includes running executions) |
+| `list-exec TASK_ID` | List recent task executions (default: 10, use `--limit N` to adjust). Shows status, summary, and content for each execution. |
 | `update TASK_ID` | Update an existing task (name, cron, agent, prompt, repeat, max-runs). Updating a completed task reactivates it. |
 | `delete TASK_ID` | Delete a task |
 | `pause TASK_ID` | Pause a task's cron schedule |

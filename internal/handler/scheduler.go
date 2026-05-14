@@ -311,6 +311,7 @@ func ServeTaskByID(w http.ResponseWriter, r *http.Request) {
 
 // serveTaskExecutions returns the execution history for a task.
 // It joins task_executions with chat_history to fetch the assistant content.
+// Supports optional ?limit=N query parameter (default: unlimited).
 func serveTaskExecutions(w http.ResponseWriter, r *http.Request, taskID int64, projectPath string) {
 	task, err := service.GetTaskByID(taskID)
 	if err != nil {
@@ -320,6 +321,14 @@ func serveTaskExecutions(w http.ResponseWriter, r *http.Request, taskID int64, p
 	if task.ProjectPath != projectPath {
 		writeLocalizedError(w, r, model.Forbidden(nil, "AccessDenied"))
 		return
+	}
+
+	// Optional limit query parameter
+	limit := 0
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			limit = l
+		}
 	}
 
 	type Execution struct {
@@ -333,7 +342,7 @@ func serveTaskExecutions(w http.ResponseWriter, r *http.Request, taskID int64, p
 		IsUnread    bool    `json:"isUnread"`
 	}
 
-	rows, err := service.DB.Query(`
+	query := `
 		SELECT te.id, te.session_id, te.trigger_type, te.status, te.created_at,
 		       te.read_at, te.summary,
 		       ch.content AS assistant_content
@@ -343,8 +352,14 @@ func serveTaskExecutions(w http.ResponseWriter, r *http.Request, taskID int64, p
 		    AND ch.deleted = 0
 		    AND ch.streaming = 0
 		WHERE te.task_id = ?
-		ORDER BY te.created_at DESC
-	`, taskID)
+		ORDER BY te.created_at DESC`
+	args := []any{taskID}
+	if limit > 0 {
+		query += " LIMIT ?"
+		args = append(args, limit)
+	}
+
+	rows, err := service.DB.Query(query, args...)
 	if err != nil {
 		model.WriteError(w, model.Internal(fmt.Errorf("failed to load execution history")))
 		return

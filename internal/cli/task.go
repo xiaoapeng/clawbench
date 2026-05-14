@@ -14,6 +14,7 @@ var taskSubcommands = []CmdHelp{
 	{Name: "create", Desc: "Create a new scheduled task"},
 	{Name: "list", Desc: "List all tasks"},
 	{Name: "get", Desc: "Get task details by ID"},
+	{Name: "list-exec", Desc: "List recent task executions"},
 	{Name: "update", Desc: "Update an existing task"},
 	{Name: "delete", Desc: "Delete a task"},
 	{Name: "delete-exec", Desc: "Delete a task execution record"},
@@ -118,6 +119,20 @@ var deleteExecHelp = HelpInfo{
 	},
 	Examples: []string{
 		`clawbench task delete-exec 1 5 --project /path/to/project`,
+	},
+}
+
+var listExecHelp = HelpInfo{
+	Usage:       "clawbench task list-exec TASK_ID [flags]",
+	Description: "List recent task executions with status and summary.",
+	Positional:  "TASK_ID  (required) ID of the task",
+	Flags: []FlagHelp{
+		{Name: "limit", Type: "int", Default: "10", Desc: "Max number of executions to return"},
+		{Name: "project", Type: "string", Desc: "Project path", Required: true},
+	},
+	Examples: []string{
+		`clawbench task list-exec 1 --project /path/to/project`,
+		`clawbench task list-exec 1 --limit 5 --project /path/to/project`,
 	},
 }
 
@@ -280,6 +295,8 @@ func RunTaskCommand(args []string) int {
 		return runList(args[1:])
 	case "get":
 		return runGet(args[1:])
+	case "list-exec":
+		return runListExec(args[1:])
 	case "update":
 		return runUpdate(args[1:])
 	case "delete":
@@ -397,6 +414,38 @@ func runGet(args []string) int {
 		return outputError(fmt.Sprintf("failed to get task: %v", err))
 	}
 	if err := checkHTTPResponse(result, status, "get task"); err != nil {
+		return outputError(err.Error())
+	}
+
+	fmt.Println(mustMarshal(result))
+	return 0
+}
+
+func runListExec(args []string) int {
+	args = reorderFlagsFirst(args)
+	fs := flagSet("list-exec")
+	limit := fs.Int("limit", 10, "Max number of executions to return")
+	projectPath := fs.String("project", "", "Project path")
+	parseOrHelp(fs, args, &listExecHelp)
+
+	remaining := fs.Args()
+	if len(remaining) == 0 {
+		return outputError("task ID required")
+	}
+	if *projectPath == "" {
+		return outputError("missing required flag: --project")
+	}
+	if *limit <= 0 {
+		return outputError("--limit must be a positive integer")
+	}
+	taskID := remaining[0]
+
+	path := fmt.Sprintf("/api/tasks/%s/executions?limit=%d", taskID, *limit)
+	result, status, err := httpDoWithProject(http.MethodGet, path, nil, *projectPath)
+	if err != nil {
+		return outputError(fmt.Sprintf("failed to list executions: %v", err))
+	}
+	if err := checkHTTPResponse(result, status, "list executions"); err != nil {
 		return outputError(err.Error())
 	}
 
