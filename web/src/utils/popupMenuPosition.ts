@@ -3,6 +3,15 @@
  * the fixed-position style of a popup menu relative to an anchor element.
  *
  * Extracted from PopupMenu.vue for testability.
+ *
+ * Positioning strategy:
+ * - **Above anchor** (default): When the anchor is far enough from the viewport
+ *   top, the menu appears above the anchor using `bottom` positioning. The menu
+ *   grows upward from just above the anchor.
+ * - **Below anchor** (flip): When the anchor is near the viewport top and there
+ *   isn't enough space above for the menu, it flips below the anchor using
+ *   `top` positioning. This ensures the menu's top edge is always 4px below
+ *   the anchor's bottom edge, regardless of estimated vs actual menu height.
  */
 
 /**
@@ -35,30 +44,62 @@ export function computeMenuStyle(
   } = opts
 
   const estMenuHeight = 36 + menuItemsCount * 28
+  const gap = 4
 
+  // Horizontal positioning
+  const horizontal = computeHorizontal(rect, anchor, maxWidth, edgeMargin, viewportWidth)
+
+  // Decide vertical placement: above (default) or below (flip when near top)
+  const spaceAbove = rect.top - edgeMargin
+  const flipBelow = spaceAbove < estMenuHeight
+
+  if (flipBelow) {
+    // Menu appears BELOW the anchor using `top` positioning.
+    // This guarantees the menu top edge is always `gap`px below the anchor
+    // bottom edge, regardless of estimated vs actual menu height.
+    const top = rect.bottom + gap
+
+    return {
+      position: 'fixed',
+      top: `${top}px`,
+      ...horizontal,
+      maxWidth: `${maxWidth}px`,
+      maxHeight: `min(${maxHeight}px, calc(100vh - ${top + edgeMargin}px))`,
+      overflowY: 'auto',
+    }
+  }
+
+  // Menu appears ABOVE the anchor using `bottom` positioning.
+  // The menu grows upward from just above the anchor.
+  const bottom = viewportHeight - rect.top + gap
+
+  return {
+    position: 'fixed',
+    bottom: `${bottom}px`,
+    ...horizontal,
+    maxWidth: `${maxWidth}px`,
+    maxHeight: `min(${maxHeight}px, calc(100vh - ${edgeMargin * 2}px))`,
+    overflowY: 'auto',
+  }
+}
+
+/**
+ * Compute horizontal positioning (left or right) for the menu.
+ */
+function computeHorizontal(
+  rect: DOMRect,
+  anchor: 'left' | 'right',
+  maxWidth: number,
+  edgeMargin: number,
+  viewportWidth: number,
+): Record<string, string> {
   if (anchor === 'right') {
     let right = viewportWidth - rect.right
     if (right + maxWidth + edgeMargin > viewportWidth) {
       right = viewportWidth - maxWidth - edgeMargin
     }
     right = Math.max(edgeMargin, right)
-
-    let bottom = viewportHeight - rect.top + 4
-    if (viewportHeight - bottom < edgeMargin) {
-      bottom = viewportHeight - rect.bottom - 4 - estMenuHeight
-      if (viewportHeight - bottom - estMenuHeight < edgeMargin) {
-        bottom = viewportHeight - estMenuHeight - edgeMargin
-      }
-    }
-
-    return {
-      position: 'fixed',
-      bottom: `${bottom}px`,
-      right: `${right}px`,
-      maxWidth: `${maxWidth}px`,
-      maxHeight: `min(${maxHeight}px, calc(100vh - ${edgeMargin * 2}px))`,
-      overflowY: 'auto',
-    }
+    return { right: `${right}px` }
   }
 
   // Left-aligned (default)
@@ -67,21 +108,5 @@ export function computeMenuStyle(
     left = viewportWidth - maxWidth - edgeMargin
   }
   left = Math.max(edgeMargin, left)
-
-  let bottom = viewportHeight - rect.top + 4
-  if (viewportHeight - bottom < edgeMargin) {
-    bottom = viewportHeight - rect.bottom - 4 - estMenuHeight
-    if (viewportHeight - bottom - estMenuHeight < edgeMargin) {
-      bottom = viewportHeight - estMenuHeight - edgeMargin
-    }
-  }
-
-  return {
-    position: 'fixed',
-    bottom: `${bottom}px`,
-    left: `${left}px`,
-    maxWidth: `${maxWidth}px`,
-    maxHeight: `min(${maxHeight}px, calc(100vh - ${edgeMargin * 2}px))`,
-    overflowY: 'auto',
-  }
+  return { left: `${left}px` }
 }

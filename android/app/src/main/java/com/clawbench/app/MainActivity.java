@@ -35,6 +35,8 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.EditText;
 import android.widget.ProgressBar;
+import android.widget.RadioButton;
+import android.widget.RadioGroup;
 import android.widget.Toast;
 
 import android.content.pm.PackageManager;
@@ -439,13 +441,28 @@ public class MainActivity extends AppCompatActivity {
      */
     private void showServerDialog() {
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_server_url, null);
-        EditText input = dialogView.findViewById(R.id.serverUrlInput);
+        RadioGroup protocolGroup = dialogView.findViewById(R.id.protocolGroup);
+        RadioButton protocolHttps = dialogView.findViewById(R.id.protocolHttps);
+        EditText hostInput = dialogView.findViewById(R.id.hostInput);
+        EditText portInput = dialogView.findViewById(R.id.portInput);
         EditText passwordInput = dialogView.findViewById(R.id.passwordInput);
 
         // Pre-fill with saved URL if exists
         String savedUrl = prefs.getString(KEY_SERVER_URL, "");
-        input.setText(savedUrl);
-        input.setSelection(input.getText().length());
+        if (!savedUrl.isEmpty()) {
+            Uri parsed = Uri.parse(savedUrl);
+            String scheme = parsed.getScheme();
+            String host = parsed.getHost();
+            int port = parsed.getPort();
+
+            if ("http".equals(scheme)) {
+                protocolGroup.check(R.id.protocolHttp);
+            } else {
+                protocolGroup.check(R.id.protocolHttps);
+            }
+            if (host != null) hostInput.setText(host);
+            if (port > 0) portInput.setText(String.valueOf(port));
+        }
 
         // Pre-fill with saved password if exists
         String savedPassword = prefs.getString(KEY_SSH_PASSWORD, "");
@@ -455,17 +472,26 @@ public class MainActivity extends AppCompatActivity {
                 .setTitle(R.string.dialog_title)
                 .setView(dialogView)
                 .setPositiveButton(R.string.dialog_positive, (dialog, which) -> {
-                    String url = input.getText().toString().trim();
-                    if (url.isEmpty()) {
+                    String host = hostInput.getText().toString().trim();
+                    String portStr = portInput.getText().toString().trim();
+
+                    if (host.isEmpty()) {
                         Toast.makeText(this, R.string.error_no_url, Toast.LENGTH_SHORT).show();
                         showServerDialog();
                         return;
                     }
-                    if (!url.startsWith("http://") && !url.startsWith("https://")) {
-                        Toast.makeText(this, R.string.error_invalid_url, Toast.LENGTH_SHORT).show();
-                        showServerDialog();
-                        return;
+
+                    // Build URL from components
+                    boolean isHttps = protocolGroup.getCheckedRadioButtonId() == R.id.protocolHttps;
+                    String scheme = isHttps ? "https" : "http";
+
+                    // Default port based on scheme
+                    if (portStr.isEmpty()) {
+                        portStr = isHttps ? "443" : "80";
                     }
+
+                    String url = scheme + "://" + host + ":" + portStr;
+
                     // Remove trailing slash
                     if (url.endsWith("/")) {
                         url = url.substring(0, url.length() - 1);
