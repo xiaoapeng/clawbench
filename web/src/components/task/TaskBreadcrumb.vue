@@ -106,26 +106,11 @@ function navigate(target) {
   transition: background 0.15s, color 0.15s;
 }
 
-/* First crumb: rounded left */
+/* First crumb: flat left, no rounding */
 .crumb.first {
   padding-left: 8px;
-  border-radius: 4px 0 0 4px;
 }
 
-/* Last crumb: rounded right */
-.crumb:last-child {
-  border-radius: 0 4px 4px 0;
-}
-
-/* Only crumb: fully rounded */
-.crumb:only-child {
-  border-radius: 4px;
-}
-
-/* First + last same element: fully rounded */
-.crumb.first:last-child {
-  border-radius: 4px;
-}
 
 /* Right arrow — same color as crumb body */
 .crumb::after {
@@ -186,10 +171,6 @@ function navigate(target) {
   border-left-color: color-mix(in srgb, var(--accent-color, #0066cc) 75%, #000);
 }
 
-/* Last crumb: no arrow */
-.crumb:last-child::after {
-  display: none;
-}
 
 @media (hover: hover) {
   .crumb.current:hover {
