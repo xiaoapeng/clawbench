@@ -7,33 +7,33 @@
       <!-- File navigation: back/forward capsule group -->
       <div class="nav-capsule">
         <button class="nav-capsule-btn" :class="{ disabled: !canGoBack }" @click.stop="handleGoBack" :title="t('nav.prevFile')">
-          <ChevronLeft :size="12" />
+          <ChevronLeft :size="14" />
         </button>
         <button class="nav-capsule-btn" :class="{ disabled: !canGoForward }" @click.stop="handleGoForward" :title="t('nav.nextFile')">
-          <ChevronRight :size="12" />
+          <ChevronRight :size="14" />
         </button>
       </div>
 
       <!-- TOC button (only for file types that support TOC) -->
       <button v-if="hasToc" class="file-header-btn" :class="{ active: tocOpen }" @click.stop="$emit('toggleToc')" :title="t('file.header.toc')">
-        <List :size="12" />
+        <List :size="14" />
       </button>
 
 
       <!-- Search button (only for file types that support search) -->
       <button v-if="hasToc" class="file-header-btn" :class="{ active: searchOpen }" :disabled="!file.content" @click.stop="$emit('toggleSearch')" :title="t('file.header.search')">
-        <Search :size="12" />
+        <Search :size="14" />
       </button>
 
       <!-- Refresh button -->
       <button class="file-header-btn" @click.stop="$emit('refresh')" :title="t('nav.refresh')">
-        <RotateCw :size="12" />
+        <RotateCw :size="14" />
       </button>
 
       <!-- More actions dropdown -->
       <div class="dropdown-wrapper" ref="dropdownRef">
         <button class="file-header-btn" @click.stop="toggleMenu" :title="t('file.header.more')">
-          <MoreVertical :size="12" />
+          <MoreVertical :size="14" />
         </button>
         <Teleport to="body">
           <div v-if="menuOpen" ref="menuRef" class="file-header-dropdown-menu" :style="menuStyle">
@@ -224,8 +224,8 @@ onBeforeUnmount(() => {
 .file-header-bar {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 3px 8px;
+    gap: 4px;
+    padding: 2px 6px;
     background: var(--bg-secondary);
     border: none;
     font-size: 12px;
@@ -277,7 +277,7 @@ onBeforeUnmount(() => {
 .header-actions {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 2px;
     margin-left: auto;
     flex-shrink: 0;
 }
@@ -287,15 +287,15 @@ onBeforeUnmount(() => {
     display: flex;
     align-items: center;
     background: var(--bg-tertiary);
-    border-radius: 12px;
+    border-radius: 10px;
     overflow: hidden;
     flex-shrink: 0;
 }
 
 .nav-capsule-btn {
     padding: 0;
-    width: 24px;
-    height: 24px;
+    width: 26px;
+    height: 26px;
     border: none;
     border-radius: 0;
     background: transparent;
@@ -325,8 +325,8 @@ onBeforeUnmount(() => {
 .file-header-btn {
     margin-left: auto;
     padding: 0;
-    width: 24px;
-    height: 24px;
+    width: 26px;
+    height: 26px;
     border: none;
     border-radius: 50%;
     background: var(--bg-tertiary);
@@ -343,8 +343,8 @@ onBeforeUnmount(() => {
     color: var(--accent-color);
 }
 .file-header-btn svg {
-    width: 12px;
-    height: 12px;
+    width: 14px;
+    height: 14px;
 }
 .file-header-btn:disabled {
     opacity: 0.4;

@@ -43,6 +43,7 @@ function hljsThemeWrapper(): Plugin {
 
 const backendPort = process.env.VITE_BACKEND_PORT || 20000
 const frontendPort = parseInt(process.env.VITE_FRONTEND_PORT || '20001', 10)
+const backendProtocol = process.env.VITE_BACKEND_PROTOCOL || 'https'
 
 export default defineConfig({
   plugins: [
@@ -61,11 +62,13 @@ export default defineConfig({
     port: frontendPort,
     proxy: {
       '/api/terminal/ws': {
-        target: `ws://localhost:${backendPort}`,
+        target: `wss://localhost:${backendPort}`,
         ws: true,
+        secure: false,
       },
       '/api': {
-        target: `http://localhost:${backendPort}`,
+        target: `${backendProtocol}://localhost:${backendPort}`,
+        secure: false,
         // Don't buffer SSE responses - needed for streaming chat
         configure: (proxy) => {
           proxy.on('proxyRes', (proxyRes) => {
@@ -76,11 +79,11 @@ export default defineConfig({
           })
         },
       },
-      '/login': `http://localhost:${backendPort}`,
-      '/dialog': `http://localhost:${backendPort}`,
-      '/assets': `http://localhost:${backendPort}`,
-      '/sw.js': `http://localhost:${backendPort}`,
-      '/manifest.json': `http://localhost:${backendPort}`,
+      '/login': `${backendProtocol}://localhost:${backendPort}`,
+      '/dialog': `${backendProtocol}://localhost:${backendPort}`,
+      '/assets': `${backendProtocol}://localhost:${backendPort}`,
+      '/sw.js': `${backendProtocol}://localhost:${backendPort}`,
+      '/manifest.json': `${backendProtocol}://localhost:${backendPort}`,
     },
   },
   build: {
