@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref, type Ref } from 'vue'
 import { apiGet, apiPost, apiPut, apiDelete } from '@/utils/api'
 
 /** Base shape every CRUD list item must satisfy */
@@ -26,26 +26,42 @@ type GenericInstance = {
   reorderItems: (ids: number[]) => Promise<boolean>
 }
 
+/** Per-apiPrefix state bucket — each prefix gets its own independent refs */
+interface StateBucket {
+  items: Ref<unknown[]>
+  loaded: Ref<boolean>
+  showEditDialog: Ref<boolean>
+}
+
 const _singletons = new Map<string, GenericInstance>()
+const _state = new Map<string, StateBucket>()
 
-const _items = ref<unknown[]>([])
-const _loaded = ref(false)
-const _showEditDialog = ref(false)
+function getBucket(key: string): StateBucket {
+  if (!_state.has(key)) {
+    _state.set(key, {
+      items: ref<unknown[]>([]),
+      loaded: ref(false),
+      showEditDialog: ref(false),
+    })
+  }
+  return _state.get(key)!
+}
 
-async function _fetchItems(apiPrefix: string, force = false) {
-  if (_loaded.value && !force) return
+async function _fetchItems(key: string, force = false) {
+  const bucket = getBucket(key)
+  if (bucket.loaded.value && !force) return
   try {
-    _items.value = (await apiGet<unknown[]>(apiPrefix)) || []
-    _loaded.value = true
+    bucket.items.value = (await apiGet<unknown[]>(key)) || []
+    bucket.loaded.value = true
   } catch {
     // Silently fail on initial load
   }
 }
 
-async function _addItem(apiPrefix: string, item: Record<string, unknown>): Promise<boolean> {
+async function _addItem(key: string, item: Record<string, unknown>): Promise<boolean> {
   try {
-    await apiPost(apiPrefix, item)
-    await _fetchItems(apiPrefix, true)
+    await apiPost(key, item)
+    await _fetchItems(key, true)
     return true
   } catch {
     return false
@@ -53,62 +69,64 @@ async function _addItem(apiPrefix: string, item: Record<string, unknown>): Promi
 }
 
 async function _updateItem(
-  apiPrefix: string,
+  key: string,
   id: number,
   item: Record<string, unknown>
 ): Promise<boolean> {
   try {
-    await apiPut(`${apiPrefix}/${id}`, item)
-    await _fetchItems(apiPrefix, true)
+    await apiPut(`${key}/${id}`, item)
+    await _fetchItems(key, true)
     return true
   } catch {
     return false
   }
 }
 
-async function _deleteItem(apiPrefix: string, id: number): Promise<boolean> {
+async function _deleteItem(key: string, id: number): Promise<boolean> {
   try {
-    await apiDelete(`${apiPrefix}/${id}`)
-    await _fetchItems(apiPrefix, true)
+    await apiDelete(`${key}/${id}`)
+    await _fetchItems(key, true)
     return true
   } catch {
     return false
   }
 }
 
-async function _reorderItems(apiPrefix: string, ids: number[]): Promise<boolean> {
-  const oldItems = [..._items.value] as Record<string, unknown>[]
+async function _reorderItems(key: string, ids: number[]): Promise<boolean> {
+  const bucket = getBucket(key)
+  const oldItems = [...bucket.items.value] as Record<string, unknown>[]
   // Optimistic reorder
   const reordered = ids
     .map((id, i) => {
-      const item = (_items.value as Record<string, unknown>[]).find(it => it['id'] === id)
+      const item = (bucket.items.value as Record<string, unknown>[]).find(it => it['id'] === id)
       return item ? { ...item, sort_order: i } : null
     })
     .filter(Boolean) as Record<string, unknown>[]
-  _items.value = reordered
+  bucket.items.value = reordered
   try {
-    await apiPut(`${apiPrefix}/reorder`, { ids })
+    await apiPut(`${key}/reorder`, { ids })
     return true
   } catch {
-    _items.value = oldItems // Rollback
+    bucket.items.value = oldItems // Rollback
     return false
   }
 }
 
-/**
- * Generic composable that holds all shared CRUD + reorder logic.
- *
- * Uses a singleton map keyed by apiPrefix so all callers share the same
- * module-level refs — no duplicate network requests or state.
- */
+/** @internal Reset all singleton state — for tests only */
+export function _resetAllForTesting() {
+  _singletons.clear()
+  _state.clear()
+}
+
 export function useCrudList<T extends CrudItem>(options: UseCrudListOptions) {
   const key = options.apiPrefix
 
   if (!_singletons.has(key)) {
+    const bucket = getBucket(key)
     _singletons.set(key, {
-      items: _items as ReturnType<typeof useCrudList>['items'],
-      loaded: _loaded,
-      showEditDialog: _showEditDialog,
+      items: bucket.items as ReturnType<typeof useCrudList>['items'],
+      loaded: bucket.loaded,
+      showEditDialog: bucket.showEditDialog,
       fetchItems: (force?: boolean) => _fetchItems(key, force),
       addItem: (item: Record<string, unknown>) => _addItem(key, item),
       updateItem: (id: number, item: Record<string, unknown>) => _updateItem(key, id, item),
@@ -119,8 +137,8 @@ export function useCrudList<T extends CrudItem>(options: UseCrudListOptions) {
 
   return _singletons.get(key)! as {
     items: { value: T[] }
-    loaded: typeof _loaded
-    showEditDialog: typeof _showEditDialog
+    loaded: Ref<boolean>
+    showEditDialog: Ref<boolean>
     fetchItems: (force?: boolean) => Promise<void>
     addItem: (item: Omit<T, 'id' | 'sort_order'>) => Promise<boolean>
     updateItem: (id: number, item: Partial<T>) => Promise<boolean>
