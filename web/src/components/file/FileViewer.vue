@@ -8,6 +8,7 @@
       :toc-open="tocOpen"
       :search-open="searchOpen"
       :word-wrap="wordWrap"
+      :show-line-numbers="showLineNumbers"
       @delete="emit('delete', file.path)"
       @toggle-view="emit('toggleView')"
       @show-details="emit('showDetails')"
@@ -16,6 +17,7 @@
       @toggle-search="emit('toggleSearch')"
       @open-as-text="handleOpenAsText"
       @toggle-word-wrap="toggleWordWrap"
+      @toggle-line-numbers="toggleLineNumbers"
       @refresh="emit('refresh')"
     />
 
@@ -101,6 +103,7 @@
         :file="file"
         :view-mode="markdownViewMode"
         :word-wrap="wordWrap"
+        :show-line-numbers="showLineNumbers"
         @delete="emit('delete', file.path)"
         @show-details="emit('showDetails')"
         @open-git-history="emit('openGitHistory')"
@@ -113,6 +116,7 @@
           :language="rawFileLanguage"
           :file-path="file.path"
           :word-wrap="wordWrap"
+          :show-line-numbers="showLineNumbers"
         />
       </div>
     </div>
@@ -167,6 +171,20 @@ function toggleWordWrap() {
     wordWrap.value = !wordWrap.value
     try {
         localStorage.setItem('clawbench-word-wrap', String(wordWrap.value))
+    } catch { /* localStorage may be unavailable */ }
+}
+
+// Line numbers preference persisted to localStorage
+const showLineNumbers = ref(true)
+try {
+    const savedLn = localStorage.getItem('clawbench-line-numbers')
+    if (savedLn !== null) showLineNumbers.value = savedLn !== 'false'
+} catch { /* localStorage may be unavailable */ }
+
+function toggleLineNumbers() {
+    showLineNumbers.value = !showLineNumbers.value
+    try {
+        localStorage.setItem('clawbench-line-numbers', String(showLineNumbers.value))
     } catch { /* localStorage may be unavailable */ }
 }
 

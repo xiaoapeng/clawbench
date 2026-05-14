@@ -50,6 +50,11 @@
               {{ t('file.header.wordWrap') }}
               <span v-if="wordWrap" class="wrap-check">✓</span>
             </button>
+            <button v-if="!isMarkdownRendered" class="dropdown-item" @click="handleToggleLineNumbers">
+              <Hash :size="14" />
+              {{ t('file.header.lineNumbers') }}
+              <span v-if="showLineNumbers" class="wrap-check">✓</span>
+            </button>
             <a v-if="!isAppMode" class="dropdown-item" :href="'/api/local-file/' + encodeURIComponent(file.path) + '?download=1'" :download="file.name" @click="menuOpen = false">
               <Download :size="14" />
               {{ t('common.download') }}
@@ -76,7 +81,7 @@
 <script setup>
 import { computed, ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { List, Search, MoreVertical, Code2, Download, Trash2, GitBranch, TextWrap, RotateCw, ChevronLeft, ChevronRight } from 'lucide-vue-next'
+import { List, Search, MoreVertical, Code2, Download, Trash2, GitBranch, TextWrap, Hash, RotateCw, ChevronLeft, ChevronRight } from 'lucide-vue-next'
 import { getFileType } from '@/utils/fileType.ts'
 import { useAppMode } from '@/composables/useAppMode.ts'
 import { store } from '@/stores/app.ts'
@@ -87,8 +92,9 @@ const props = defineProps({
     tocOpen: Boolean,
     searchOpen: Boolean,
     wordWrap: Boolean,
+    showLineNumbers: Boolean,
 })
-const emit = defineEmits(['delete', 'toggleView', 'showDetails', 'openGitHistory', 'toggleToc', 'toggleSearch', 'openAsText', 'toggleWordWrap', 'refresh'])
+const emit = defineEmits(['delete', 'toggleView', 'showDetails', 'openGitHistory', 'toggleToc', 'toggleSearch', 'openAsText', 'toggleWordWrap', 'toggleLineNumbers', 'refresh'])
 
 const { isAppMode } = useAppMode()
 const { t } = useI18n()
@@ -166,6 +172,11 @@ function handleToggleView() {
 function handleToggleWordWrap() {
     menuOpen.value = false
     emit('toggleWordWrap')
+}
+
+function handleToggleLineNumbers() {
+    menuOpen.value = false
+    emit('toggleLineNumbers')
 }
 
 function handleOpenAsText() {

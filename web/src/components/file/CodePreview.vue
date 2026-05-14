@@ -1,5 +1,5 @@
 <template>
-  <pre class="raw-content-pre" :class="{ 'word-wrap': wordWrap }" ref="codeRef" :data-file-path="filePath" :data-language="language" @click="handleClick">
+  <pre class="raw-content-pre" :class="{ 'word-wrap': wordWrap, 'no-line-num': !showLineNumbers }" ref="codeRef" :data-file-path="filePath" :data-language="language" @click="handleClick">
     <code v-html="codeHtml" />
   </pre>
 </template>
@@ -20,6 +20,8 @@ const props = defineProps({
     filePath: { type: String, default: null },
     /** Enable word wrap */
     wordWrap: { type: Boolean, default: false },
+    /** Show line numbers */
+    showLineNumbers: { type: Boolean, default: true },
 })
 
 const codeHtml = ref('')
@@ -51,21 +53,22 @@ function handleClick(event) {
     handleDblClick(event)
 }
 
-function renderCode(content, lang) {
+function renderCode(content, lang, showNums) {
     return content.split('\n').map((rawLine, i) => {
         let h
         try { h = hljs.highlight(rawLine, { language: lang, ignoreIllegals: true }).value } catch { h = escapeHtml(rawLine) }
         h = h.replace(/^<span class="line">/, '').replace(/<\/span>\s*$/, '')
-        return `<div class="code-line" data-line="${i + 1}"><span class="line-num">${i + 1}</span><span class="code-text">${h}</span></div>`
+        const lineNum = showNums ? `<span class="line-num">${i + 1}</span>` : ''
+        return `<div class="code-line" data-line="${i + 1}">${lineNum}<span class="code-text">${h}</span></div>`
     }).join('')
 }
 
 function doRender(content) {
     if (!content) return
-    codeHtml.value = renderCode(content, props.language)
+    codeHtml.value = renderCode(content, props.language, props.showLineNumbers)
 }
 
-watch(() => props.content, doRender, { immediate: true })
+watch([() => props.content, () => props.showLineNumbers], () => doRender(props.content), { immediate: true })
 </script>
 
 <style scoped>
@@ -156,6 +159,11 @@ pre :deep(code) {
 .raw-content-pre.word-wrap :deep(code .line-num) {
     position: static;
     border-right: 1px solid var(--border-color);
+}
+
+/* No line numbers mode */
+.raw-content-pre.no-line-num :deep(code .code-text) {
+    padding-left: 0;
 }
 
 .raw-content-pre :deep(code .line-num:hover) {

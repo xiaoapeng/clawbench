@@ -435,6 +435,7 @@ export default {
       sourceView: '源码',
       renderedView: '渲染',
       wordWrap: '自动换行',
+      lineNumbers: '行号',
       fileHistory: '文件历史',
       confirmDelete: '确定要删除"{name}"吗？',
     },

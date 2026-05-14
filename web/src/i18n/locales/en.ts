@@ -435,6 +435,7 @@ export default {
       sourceView: 'Source',
       renderedView: 'Rendered',
       wordWrap: 'Word Wrap',
+      lineNumbers: 'Line Numbers',
       fileHistory: 'File history',
       confirmDelete: 'Delete "{name}"?',
     },

@@ -10,6 +10,7 @@
       language="markdown"
       :file-path="file.path"
       :word-wrap="wordWrap"
+      :show-line-numbers="showLineNumbers"
     />
   </div>
 </template>
@@ -28,6 +29,7 @@ const props = defineProps({
     file: Object,
     viewMode: String,
     wordWrap: Boolean,
+    showLineNumbers: { type: Boolean, default: true },
 })
 
 const renderedHtml = ref('')
