@@ -310,7 +310,7 @@ func TestServeProjects(t *testing.T) {
 
 		items, ok := result["items"].([]interface{})
 		assert.True(t, ok)
-		assert.Len(t, items, 3) // project1, project2, readme.md
+		assert.Len(t, items, 4) // project (auto-created), project1, project2, readme.md
 	})
 
 	t.Run("POST_CreatesNewDirectory", func(t *testing.T) {

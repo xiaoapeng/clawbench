@@ -36,9 +36,10 @@ type testEnv struct {
 func setupTestEnv(t *testing.T) (*testEnv, func()) {
 	t.Helper()
 
-	// Create temp directories
-	projectDir := t.TempDir()
+	// Create temp directories — project must be under WatchDir to match production
 	watchDir := t.TempDir()
+	projectDir := filepath.Join(watchDir, "project")
+	os.MkdirAll(projectDir, 0755)
 
 	// Save original globals
 	origToken := model.SessionToken

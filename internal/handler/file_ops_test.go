@@ -83,16 +83,53 @@ func TestServeFileRename(t *testing.T) {
 		assertStatus(t, w, http.StatusForbidden)
 	})
 
-	t.Run("BasePathOverrideIgnored_UsesProjectCookie", func(t *testing.T) {
+	t.Run("AbsolutePath_UnderWatchDir_Succeeds", func(t *testing.T) {
+		env, teardown := setupTestEnv(t)
+		defer teardown()
+
+		// Create a subdirectory under WatchDir to delete from
+		subDir := filepath.Join(env.WatchDir, "subproject")
+		os.MkdirAll(subDir, 0755)
+		createTestFile(t, subDir, "file.txt", "data")
+
+		req := newRequest(t, http.MethodPost, "/api/file/rename", map[string]string{
+			"path": filepath.Join(subDir, "file.txt"),
+			"name": "renamed.txt",
+		})
+		// No project cookie needed for absolute paths
+
+		w := callHandler(ServeFileRename, req)
+		assertOK(t, w)
+
+		_, err := os.Stat(filepath.Join(subDir, "renamed.txt"))
+		assert.NoError(t, err)
+	})
+
+	t.Run("AbsolutePath_EscapesWatchDir_Returns403", func(t *testing.T) {
 		env, teardown := setupTestEnv(t)
 		defer teardown()
 
 		createTestFile(t, env.ProjectDir, "file.txt", "data")
 
 		req := newRequest(t, http.MethodPost, "/api/file/rename", map[string]string{
-			"path":     "file.txt",
-			"name":     "renamed.txt",
-			"basePath": "/tmp", // Should be ignored — only project cookie is used
+			"path": "/tmp/file.txt", // Escapes WatchDir
+			"name": "renamed.txt",
+		})
+		withProjectCookie(req, env.ProjectDir)
+
+		w := callHandler(ServeFileRename, req)
+		assert.Equal(t, http.StatusForbidden, w.Code)
+	})
+
+	t.Run("RelativePath_UsesProjectCookie", func(t *testing.T) {
+		env, teardown := setupTestEnv(t)
+		defer teardown()
+
+		createTestFile(t, env.ProjectDir, "file.txt", "data")
+
+		req := newRequest(t, http.MethodPost, "/api/file/rename", map[string]string{
+			"path": "file.txt",
+			"name": "renamed.txt",
 		})
 		withProjectCookie(req, env.ProjectDir)
 
@@ -303,15 +340,48 @@ func TestServeFileDelete(t *testing.T) {
 		assertStatus(t, w, http.StatusNotFound)
 	})
 
-	t.Run("BasePathOverrideIgnored_UsesProjectCookie", func(t *testing.T) {
+	t.Run("AbsolutePath_UnderWatchDir_Succeeds", func(t *testing.T) {
+		env, teardown := setupTestEnv(t)
+		defer teardown()
+
+		// Create a subdirectory under WatchDir to delete from
+		subDir := filepath.Join(env.WatchDir, "subproject")
+		os.MkdirAll(subDir, 0755)
+		createTestFile(t, subDir, "del.txt", "gone")
+
+		req := newRequest(t, http.MethodPost, "/api/file/delete", map[string]string{
+			"path": filepath.Join(subDir, "del.txt"),
+		})
+		// No project cookie needed for absolute paths
+
+		w := callHandler(ServeFileDelete, req)
+		assertOK(t, w)
+
+		_, err := os.Stat(filepath.Join(subDir, "del.txt"))
+		assert.True(t, os.IsNotExist(err))
+	})
+
+	t.Run("AbsolutePath_EscapesWatchDir_Returns403", func(t *testing.T) {
+		env, teardown := setupTestEnv(t)
+		defer teardown()
+
+		req := newRequest(t, http.MethodPost, "/api/file/delete", map[string]string{
+			"path": "/tmp/something", // Escapes WatchDir
+		})
+		withProjectCookie(req, env.ProjectDir)
+
+		w := callHandler(ServeFileDelete, req)
+		assert.Equal(t, http.StatusForbidden, w.Code)
+	})
+
+	t.Run("RelativePath_UsesProjectCookie", func(t *testing.T) {
 		env, teardown := setupTestEnv(t)
 		defer teardown()
 
 		createTestFile(t, env.ProjectDir, "del.txt", "gone")
 
 		req := newRequest(t, http.MethodPost, "/api/file/delete", map[string]string{
-			"path":     "del.txt",
-			"basePath": "/tmp", // Should be ignored
+			"path": "del.txt",
 		})
 		withProjectCookie(req, env.ProjectDir)
 
@@ -385,7 +455,7 @@ func TestServeFileBatchDelete(t *testing.T) {
 		assertStatus(t, w, http.StatusBadRequest)
 	})
 
-	t.Run("NoProjectCookie_Returns403", func(t *testing.T) {
+	t.Run("NoProjectCookieWithRelativePaths_ReportsErrors", func(t *testing.T) {
 		_, teardown := setupTestEnv(t)
 		defer teardown()
 
@@ -394,7 +464,9 @@ func TestServeFileBatchDelete(t *testing.T) {
 		})
 
 		w := callHandler(ServeFileBatchDelete, req)
-		assertStatus(t, w, http.StatusForbidden)
+		// Batch delete reports per-path errors instead of failing the whole request
+		assertOK(t, w)
+		assertJSONField(t, w, "deleted", float64(0))
 	})
 
 	t.Run("PathTraversalInOnePath_SkipsThatPathAndDeletesOthers", func(t *testing.T) {
@@ -437,7 +509,7 @@ func TestServeFileBatchDelete(t *testing.T) {
 		assert.True(t, os.IsNotExist(err))
 	})
 
-	t.Run("BasePathOverrideIgnored_UsesProjectCookie", func(t *testing.T) {
+	t.Run("RelativePaths_UsesProjectCookie", func(t *testing.T) {
 		env, teardown := setupTestEnv(t)
 		defer teardown()
 
@@ -445,8 +517,7 @@ func TestServeFileBatchDelete(t *testing.T) {
 		createTestFile(t, env.ProjectDir, "y.txt", "y")
 
 		req := newRequest(t, http.MethodPost, "/api/file/batch-delete", map[string]interface{}{
-			"paths":    []string{"x.txt", "y.txt"},
-			"basePath": "/tmp", // Should be ignored
+			"paths": []string{"x.txt", "y.txt"},
 		})
 		withProjectCookie(req, env.ProjectDir)
 

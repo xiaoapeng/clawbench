@@ -169,7 +169,7 @@ async function doRename(item) {
         const resp = await fetch('/api/file/rename', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ path: item.name, name: newName, basePath: currentBrowseAbs })
+            body: JSON.stringify({ path: currentBrowseAbs + '/' + item.name, name: newName })
         })
         if (resp.ok) await loadBrowse()
         else {
@@ -185,7 +185,7 @@ async function doDelete(item) {
         const resp = await fetch('/api/file/delete', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ path: item.name, basePath: currentBrowseAbs })
+            body: JSON.stringify({ path: currentBrowseAbs + '/' + item.name })
         })
         if (resp.ok) {
             selectedPath.value = ''

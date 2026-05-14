@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -97,6 +98,54 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 func validateAndResolvePath(w http.ResponseWriter, r *http.Request, basePath, relPath string) (string, bool) {
 	absPath, ok := model.ValidatePath(basePath, relPath)
 	if !ok {
+		writeLocalizedError(w, r, model.Forbidden(nil, "AccessDenied"))
+		return "", false
+	}
+	return absPath, true
+}
+
+// resolveAbsPath resolves a path string to an absolute path under WatchDir.
+// Absolute paths are validated directly; relative paths are resolved against
+// the project path from cookie then validated. This unifies path handling for
+// all file mutation endpoints so callers don't need to worry about base-path
+// bookkeeping. Writes error on failure. Returns (absPath, true) on success.
+func resolveAbsPath(w http.ResponseWriter, r *http.Request, pathStr string) (string, bool) {
+	watchAbs, err := filepath.Abs(model.WatchDir)
+	if err != nil {
+		model.WriteError(w, model.Internal(fmt.Errorf("invalid watchDir: %w", err)))
+		return "", false
+	}
+
+	if filepath.IsAbs(pathStr) {
+		// Absolute path — validate it's under WatchDir directly
+		absPath, err := filepath.Abs(pathStr)
+		if err != nil {
+			writeLocalizedError(w, r, model.Forbidden(nil, "AccessDenied"))
+			return "", false
+		}
+		if !isPathUnderBase(absPath, watchAbs) {
+			writeLocalizedError(w, r, model.Forbidden(nil, "AccessDenied"))
+			return "", false
+		}
+		return absPath, true
+	}
+
+	// Relative path — resolve against projectPath from cookie
+	projectPath, ok := requireProject(w, r)
+	if !ok {
+		return "", false
+	}
+	baseAbs, err := filepath.Abs(projectPath)
+	if err != nil {
+		model.WriteError(w, model.Internal(fmt.Errorf("failed to resolve project path: %w", err)))
+		return "", false
+	}
+	absPath, ok := validateAndResolvePath(w, r, baseAbs, pathStr)
+	if !ok {
+		return "", false
+	}
+	// Double-check the resolved path is under WatchDir
+	if !isPathUnderBase(absPath, watchAbs) {
 		writeLocalizedError(w, r, model.Forbidden(nil, "AccessDenied"))
 		return "", false
 	}

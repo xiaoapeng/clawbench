@@ -8,17 +8,13 @@ import (
 	"path/filepath"
 	"strings"
 
+	"clawbench/internal/middleware"
 	"clawbench/internal/model"
 )
 
 // ServeFileRename handles file and directory rename operations.
 func ServeFileRename(w http.ResponseWriter, r *http.Request) {
 	if !requireMethod(w, r, http.MethodPost) {
-		return
-	}
-
-	projectPath, ok := requireProject(w, r)
-	if !ok {
 		return
 	}
 
@@ -34,24 +30,26 @@ func ServeFileRename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	baseAbs, err := filepath.Abs(projectPath)
-	if err != nil {
-		model.WriteError(w, model.Internal(fmt.Errorf("failed to resolve base path: %w", err)))
-		return
-	}
-
-	absOld, ok := validateAndResolvePath(w, r, baseAbs, req.Path)
+	absOld, ok := resolveAbsPath(w, r, req.Path)
 	if !ok {
 		return
 	}
+
+	// New path = same directory, new name
 	newPath := filepath.Join(filepath.Dir(absOld), req.Name)
 	absNew, err := filepath.Abs(newPath)
-	if err != nil || !isPathUnderBase(absNew, baseAbs) {
+	if err != nil {
+		writeLocalizedError(w, r, model.Forbidden(nil, "AccessDenied"))
+		return
+	}
+	// Validate new path is still under WatchDir
+	watchAbs, _ := filepath.Abs(model.WatchDir)
+	if !isPathUnderBase(absNew, watchAbs) {
 		writeLocalizedError(w, r, model.Forbidden(nil, "AccessDenied"))
 		return
 	}
 
-	slog.Info("rename attempt", slog.String("base", baseAbs), slog.String("old", absOld), slog.String("new", absNew))
+	slog.Info("rename attempt", slog.String("old", absOld), slog.String("new", absNew))
 	if err := os.Rename(absOld, absNew); err != nil {
 		slog.Error("rename failed", slog.String("old", absOld), slog.String("new", absNew), slog.String("err", err.Error()))
 		model.WriteError(w, model.Internal(fmt.Errorf("rename failed: %w", err)))
@@ -66,10 +64,7 @@ func ServeFileEditLine(w http.ResponseWriter, r *http.Request) {
 	if !requireMethod(w, r, http.MethodPost) {
 		return
 	}
-	projectPath, ok := requireProject(w, r)
-	if !ok {
-		return
-	}
+
 	var req struct {
 		Path        string `json:"path"`
 		LineNum     int    `json:"lineNum"`
@@ -85,11 +80,12 @@ func ServeFileEditLine(w http.ResponseWriter, r *http.Request) {
 		writeLocalizedErrorf(w, r, http.StatusBadRequest, "InvalidRequest")
 		return
 	}
-	basePath, _ := filepath.Abs(projectPath)
-	absPath, ok := validateAndResolvePath(w, r, basePath, req.Path)
+
+	absPath, ok := resolveAbsPath(w, r, req.Path)
 	if !ok {
 		return
 	}
+
 	data, err := os.ReadFile(absPath)
 	if err != nil {
 		model.WriteError(w, model.Internal(fmt.Errorf("cannot read file")))
@@ -122,11 +118,6 @@ func ServeFileDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	projectPath, ok := requireProject(w, r)
-	if !ok {
-		return
-	}
-
 	var req struct {
 		Path string `json:"path"`
 	}
@@ -138,13 +129,7 @@ func ServeFileDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	baseAbs, err := filepath.Abs(projectPath)
-	if err != nil {
-		model.WriteError(w, model.Internal(fmt.Errorf("failed to resolve base path: %w", err)))
-		return
-	}
-
-	absPath, ok := validateAndResolvePath(w, r, baseAbs, req.Path)
+	absPath, ok := resolveAbsPath(w, r, req.Path)
 	if !ok {
 		return
 	}
@@ -170,11 +155,6 @@ func ServeFileBatchDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	projectPath, ok := requireProject(w, r)
-	if !ok {
-		return
-	}
-
 	var req struct {
 		Paths []string `json:"paths"`
 	}
@@ -186,21 +166,38 @@ func ServeFileBatchDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	baseAbs, err := filepath.Abs(projectPath)
-	if err != nil {
-		model.WriteError(w, model.Internal(fmt.Errorf("failed to resolve base path: %w", err)))
-		return
-	}
-
+	watchAbs, _ := filepath.Abs(model.WatchDir)
 	deleted := 0
 	var errs []string
 	for _, p := range req.Paths {
-		// Use model.ValidatePath directly (not validateAndResolvePath which writes HTTP error)
-		absPath, ok := model.ValidatePath(baseAbs, p)
-		if !ok {
-			errs = append(errs, p+": access denied")
-			continue
+		// Resolve each path: absolute validated directly, relative resolved against project cookie
+		var absPath string
+		if filepath.IsAbs(p) {
+			ap, err := filepath.Abs(p)
+			if err != nil || !isPathUnderBase(ap, watchAbs) {
+				errs = append(errs, p+": access denied")
+				continue
+			}
+			absPath = ap
+		} else {
+			projectPath := middleware.GetProjectFromCookie(r)
+			if projectPath == "" {
+				errs = append(errs, p+": no project")
+				continue
+			}
+			baseAbs, err := filepath.Abs(projectPath)
+			if err != nil {
+				errs = append(errs, p+": access denied")
+				continue
+			}
+			ap, ok := model.ValidatePath(baseAbs, p)
+			if !ok || !isPathUnderBase(ap, watchAbs) {
+				errs = append(errs, p+": access denied")
+				continue
+			}
+			absPath = ap
 		}
+
 		info, err := os.Stat(absPath)
 		if err != nil {
 			errs = append(errs, p+": not found")
@@ -221,40 +218,14 @@ func ServeFileBatchDelete(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
-// validateCreatePath validates the path for file/directory creation operations.
-// Returns the absolute path of the item to create, or empty string on error (response already written).
-func validateCreatePath(w http.ResponseWriter, r *http.Request, projectPath, reqPath, reqName string) string {
-	basePath, _ := filepath.Abs(projectPath)
-	absDir, ok := model.ValidatePath(basePath, reqPath)
-	if !ok && reqPath != "" {
-		writeLocalizedError(w, r, model.Forbidden(nil, "AccessDenied"))
-		return ""
-	}
-	if reqPath == "" {
-		absDir = basePath
-	}
-
-	fullPath := filepath.Join(absDir, reqName)
-	absPath, err := filepath.Abs(fullPath)
-	if err != nil || !isPathUnderBase(absPath, basePath) {
-		writeLocalizedError(w, r, model.Forbidden(nil, "AccessDenied"))
-		return ""
-	}
-	return absPath
-}
-
 // ServeFileCreate handles file creation.
 func ServeFileCreate(w http.ResponseWriter, r *http.Request) {
 	if !requireMethod(w, r, http.MethodPost) {
 		return
 	}
-	projectPath, ok := requireProject(w, r)
-	if !ok {
-		return
-	}
 
 	var req struct {
-		Path string `json:"path"`
+		Path string `json:"path"` // directory to create in (absolute or relative)
 		Name string `json:"name"`
 	}
 	if !decodeJSON(w, r, &req) {
@@ -265,7 +236,7 @@ func ServeFileCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	absPath := validateCreatePath(w, r, projectPath, req.Path, req.Name)
+	absPath := validateCreatePath(w, r, req.Path, req.Name)
 	if absPath == "" {
 		return
 	}
@@ -288,13 +259,9 @@ func ServeDirCreate(w http.ResponseWriter, r *http.Request) {
 	if !requireMethod(w, r, http.MethodPost) {
 		return
 	}
-	projectPath, ok := requireProject(w, r)
-	if !ok {
-		return
-	}
 
 	var req struct {
-		Path string `json:"path"`
+		Path string `json:"path"` // directory to create in (absolute or relative)
 		Name string `json:"name"`
 	}
 	if !decodeJSON(w, r, &req) {
@@ -305,7 +272,7 @@ func ServeDirCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	absPath := validateCreatePath(w, r, projectPath, req.Path, req.Name)
+	absPath := validateCreatePath(w, r, req.Path, req.Name)
 	if absPath == "" {
 		return
 	}
@@ -318,28 +285,68 @@ func ServeDirCreate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
-// validateSrcDestPath validates source and destination paths for move/copy operations.
-// Returns (srcAbsPath, destAbsPath) or empty strings on error (response already written).
-func validateSrcDestPath(w http.ResponseWriter, r *http.Request, projectPath, srcRel, destRel string) (string, string) {
-	basePath, _ := filepath.Abs(projectPath)
-	srcAbsPath, ok := validateAndResolvePath(w, r, basePath, srcRel)
-	if !ok {
-		return "", ""
+// validateCreatePath validates the path for file/directory creation operations.
+// dirPath can be absolute (validated against WatchDir) or relative (resolved against projectPath).
+// Returns the absolute path of the item to create, or empty string on error (response already written).
+func validateCreatePath(w http.ResponseWriter, r *http.Request, dirPath, name string) string {
+	var absDir string
+	if dirPath == "" {
+		// No directory specified — use project root from cookie
+		projectPath, ok := requireProject(w, r)
+		if !ok {
+			return ""
+		}
+		var err error
+		absDir, err = filepath.Abs(projectPath)
+		if err != nil {
+			writeLocalizedError(w, r, model.Forbidden(nil, "AccessDenied"))
+			return ""
+		}
+	} else if filepath.IsAbs(dirPath) {
+		// Absolute directory path — validate against WatchDir
+		watchAbs, err := filepath.Abs(model.WatchDir)
+		if err != nil || !isPathUnderBase(dirPath, watchAbs) {
+			writeLocalizedError(w, r, model.Forbidden(nil, "AccessDenied"))
+			return ""
+		}
+		absDir = dirPath
+	} else {
+		// Relative directory path — resolve against projectPath
+		projectPath, ok := requireProject(w, r)
+		if !ok {
+			return ""
+		}
+		baseAbs, err := filepath.Abs(projectPath)
+		if err != nil {
+			writeLocalizedError(w, r, model.Forbidden(nil, "AccessDenied"))
+			return ""
+		}
+		resolved, ok := model.ValidatePath(baseAbs, dirPath)
+		if !ok {
+			writeLocalizedError(w, r, model.Forbidden(nil, "AccessDenied"))
+			return ""
+		}
+		absDir = resolved
 	}
-	destAbsPath, ok := validateAndResolvePath(w, r, basePath, destRel)
-	if !ok {
-		return "", ""
+
+	fullPath := filepath.Join(absDir, name)
+	absPath, err := filepath.Abs(fullPath)
+	if err != nil {
+		writeLocalizedError(w, r, model.Forbidden(nil, "AccessDenied"))
+		return ""
 	}
-	return srcAbsPath, destAbsPath
+	// Ensure the final path is under WatchDir
+	watchAbs, _ := filepath.Abs(model.WatchDir)
+	if !isPathUnderBase(absPath, watchAbs) {
+		writeLocalizedError(w, r, model.Forbidden(nil, "AccessDenied"))
+		return ""
+	}
+	return absPath
 }
 
 // ServeFileMove handles file and directory move operations.
 func ServeFileMove(w http.ResponseWriter, r *http.Request) {
 	if !requireMethod(w, r, http.MethodPost) {
-		return
-	}
-	projectPath, ok := requireProject(w, r)
-	if !ok {
 		return
 	}
 
@@ -355,8 +362,12 @@ func ServeFileMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	srcAbsPath, destAbsPath := validateSrcDestPath(w, r, projectPath, req.Path, req.Dest)
-	if srcAbsPath == "" {
+	srcAbsPath, ok := resolveAbsPath(w, r, req.Path)
+	if !ok {
+		return
+	}
+	destAbsPath, ok := resolveAbsPath(w, r, req.Dest)
+	if !ok {
 		return
 	}
 
@@ -373,10 +384,6 @@ func ServeFileCopy(w http.ResponseWriter, r *http.Request) {
 	if !requireMethod(w, r, http.MethodPost) {
 		return
 	}
-	projectPath, ok := requireProject(w, r)
-	if !ok {
-		return
-	}
 
 	var req struct {
 		Path string `json:"path"`
@@ -390,8 +397,12 @@ func ServeFileCopy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	srcAbsPath, destAbsPath := validateSrcDestPath(w, r, projectPath, req.Path, req.Dest)
-	if srcAbsPath == "" {
+	srcAbsPath, ok := resolveAbsPath(w, r, req.Path)
+	if !ok {
+		return
+	}
+	destAbsPath, ok := resolveAbsPath(w, r, req.Dest)
+	if !ok {
 		return
 	}
 
