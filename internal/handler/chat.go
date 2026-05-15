@@ -76,9 +76,9 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 			sessionID = requestedSessionID
 			sessionBackend = service.GetSessionBackend(sessionID)
 			if sessionBackend == "" {
-			writeLocalizedErrorf(w, r, http.StatusNotFound, "SessionNotFound")
-			return
-		}
+				writeLocalizedErrorf(w, r, http.StatusNotFound, "SessionNotFound")
+				return
+			}
 		} else {
 			// No specific session requested, get the most recent session across all backends
 			allSessions, err := service.GetSessions(projectPath, "")
@@ -92,7 +92,7 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 				agentID := model.GetDefaultAgentID()
 				sessionBackend2, defaultModel, _, _, ok := resolveAgentConfig(agentID)
 				if !ok {
-			writeLocalizedErrorf(w, r, http.StatusServiceUnavailable, "NoAgentsAvailable")
+					writeLocalizedErrorf(w, r, http.StatusServiceUnavailable, "NoAgentsAvailable")
 					return
 				}
 				sessionID, err = service.CreateSession(projectPath, sessionBackend2, T(r, "NewSession"), agentID, defaultModel, "default", "chat")
@@ -181,7 +181,7 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 	}
 	backendName := service.GetSessionBackend(sessionID)
 	if backendName == "" {
-	writeLocalizedErrorf(w, r, http.StatusBadRequest, "SessionBackendNotFound")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "SessionBackendNotFound")
 		return
 	}
 
@@ -956,15 +956,36 @@ func extractJSONCandidate(raw string) string {
 // name="AskUserQuestion". Tags are stripped from text; if no text remains the
 // block is replaced entirely, otherwise a new tool_use block is appended.
 //
-// Tolerates unclosed tags: AI models sometimes omit the </ask-question> closing
-// tag (especially when the JSON payload ends at the text block boundary). When
-// the standard regex fails to match, a fallback regex treats end-of-text as the
-// implicit closing boundary and attempts JSON extraction on the trailing content.
+// Tolerates three closing-tag variants:
+//   1. Standard </ask-question>
+//   2. Non-standard closing tags (e.g. </user_query>, obfuscated tags)
+//   3. No closing tag at all (tag runs to end-of-text)
 //
 // Returns the updated blocks slice.
 func convertAskQuestionBlocks(blocks []model.ContentBlock) []model.ContentBlock {
-	// Standard match: <ask-question>...</ask-question> with proper closing tag
-	re := regexp.MustCompile(`<ask-question\b[^>]*>([\s\S]*?)</ask-question>`)
+	// Pre-compiled regexes for the three matching strategies.
+	reStandard := regexp.MustCompile(`<ask-question\b[^>]*>([\s\S]*?)</ask-question>`)
+	reWrongClose := regexp.MustCompile(`<ask-question\b[^>]*>([\s\S]*?)</[^>]+>`)
+	reUnclosed := regexp.MustCompile(`<ask-question\b[^>]*>([\s\S]+)$`)
+
+	// findAskMatch tries three regex strategies (from strict to loose) to locate
+	// a valid <ask-question> tag in text. It returns the JSON content string and
+	// the [start, end) byte positions of the full tag span in text (for removal).
+	// Matches are tried from last to first because earlier occurrences may be prose
+	// references rather than actual structured questions.
+	// Returns ("", -1, -1) if no valid match is found.
+	findAskMatch := func(text string) (string, int, int) {
+		for _, re := range []*regexp.Regexp{reStandard, reWrongClose, reUnclosed} {
+			matches := re.FindAllStringSubmatchIndex(text, -1)
+			for j := len(matches) - 1; j >= 0; j-- {
+				pair := matches[j]
+				if candidate := extractJSONCandidate(text[pair[2]:pair[3]]); candidate != "" {
+					return candidate, pair[0], pair[1]
+				}
+			}
+		}
+		return "", -1, -1
+	}
 
 	// First pass: collect all conversions needed
 	type conversion struct {
@@ -975,84 +996,17 @@ func convertAskQuestionBlocks(blocks []model.ContentBlock) []model.ContentBlock 
 	var conversions []conversion
 
 	for i, block := range blocks {
-		if block.Type != "text" {
-			continue
-		}
-		if !strings.Contains(block.Text, "<ask-question") {
+		if block.Type != "text" || !strings.Contains(block.Text, "<ask-question") {
 			continue
 		}
 
-		var jsonContent string
-		matchStartIdx := -1 // position of the <ask-question> tag in block.Text; -1 for standard match
-
-		// Standard match: <ask-question>...</ask-question> with proper closing tag.
-		// Use FindAllStringSubmatch and iterate from the LAST match backward,
-		// because earlier occurrences may be prose references to the tag name
-		// rather than actual structured questions (e.g. "Forces structured
-		// `<ask-question>` XML tags"). The last match is most likely the real
-		// interactive question payload.
-		allMatches := re.FindAllStringSubmatch(block.Text, -1)
-		for j := len(allMatches) - 1; j >= 0; j-- {
-			candidate := extractJSONCandidate(allMatches[j][1])
-			if candidate != "" {
-				jsonContent = candidate
-				break
-			}
-		}
-
-		// Fallback: AI models sometimes emit non-standard closing tags (e.g.
-		// </｜｜DSML｜｜question> with fullwidth pipe chars). Try matching with a
-		// permissive closing tag pattern before falling back to unclosed.
-		if jsonContent == "" {
-			reWrongClose := regexp.MustCompile(`<ask-question\b[^>]*>([\s\S]*?)</[^>]+>`)
-			allWrongMatches := reWrongClose.FindAllStringSubmatch(block.Text, -1)
-			for j := len(allWrongMatches) - 1; j >= 0; j-- {
-				candidate := extractJSONCandidate(allWrongMatches[j][1])
-				if candidate != "" {
-					jsonContent = candidate
-					break
-				}
-			}
-		}
-
-		// Fallback: AI models sometimes omit </ask-question>, especially when the
-		// JSON payload ends at the text block boundary. Try matching each
-		// <ask-question> tag and treat everything after it (up to end-of-text)
-		// as the tag content. We iterate from the LAST match backward, because
-		// earlier occurrences may be prose references to the tag name rather than
-		// actual structured questions (e.g. "Forces structured `<ask-question>` XML tags").
-		if jsonContent == "" {
-			reUnclosed := regexp.MustCompile(`<ask-question\b[^>]*>`)
-			allIndices := reUnclosed.FindAllStringIndex(block.Text, -1)
-			// Try from last to first — the last <ask-question> is most likely
-			// the real interactive question; earlier ones tend to be prose mentions.
-			for j := len(allIndices) - 1; j >= 0; j-- {
-				startIdx := allIndices[j][0]
-				afterTag := block.Text[startIdx:]
-				subMatches := regexp.MustCompile(`<ask-question\b[^>]*>([\s\S]+)$`).FindStringSubmatch(afterTag)
-				if len(subMatches) < 2 {
-					continue
-				}
-				candidate := extractJSONCandidate(subMatches[1])
-				if candidate == "" {
-					continue // Not a real ask-question payload, try previous match
-				}
-				// Found a valid unclosed match — record the position and content.
-				jsonContent = candidate
-				matchStartIdx = startIdx
-				break
-			}
-		}
-
+		jsonContent, tagStart, tagEnd := findAskMatch(block.Text)
 		if jsonContent == "" {
 			continue
 		}
 
 		var input map[string]any
-		// Try parsing as object first ({questions: [...]})
 		if err := json.Unmarshal([]byte(jsonContent), &input); err != nil {
-			// Fallback: the JSON might be a bare array of questions (e.g. from
-			// <parameter name="questions">[...]</parameter> wrappers) — wrap it.
 			var questionsArr []any
 			if err2 := json.Unmarshal([]byte(jsonContent), &questionsArr); err2 == nil && len(questionsArr) > 0 {
 				input = map[string]any{"questions": questionsArr}
@@ -1073,16 +1027,8 @@ func convertAskQuestionBlocks(blocks []model.ContentBlock) []model.ContentBlock 
 			continue
 		}
 
-		// Remove the matched <ask-question> tag content from the text.
-		// For standard matches (with closing tag), use the regex replacement.
-		// For unclosed fallback matches, we know the tag starts at the position
-		// stored in matchStartIdx — truncate everything from there onward.
-		cleanText := strings.TrimSpace(re.ReplaceAllString(block.Text, ""))
-		if matchStartIdx >= 0 && cleanText == strings.TrimSpace(block.Text) {
-			// Standard regex didn't remove anything — this is an unclosed tag.
-			// Truncate from the <ask-question> position to end-of-text.
-			cleanText = strings.TrimSpace(block.Text[:matchStartIdx])
-		}
+		// Strip the matched tag span from the text.
+		cleanText := strings.TrimSpace(block.Text[:tagStart] + block.Text[tagEnd:])
 		conversions = append(conversions, conversion{index: i, input: input, cleanText: cleanText})
 	}
 
@@ -1098,22 +1044,14 @@ func convertAskQuestionBlocks(blocks []model.ContentBlock) []model.ContentBlock 
 		}
 
 		if c.cleanText == "" {
-			// No remaining text — replace the text block with the tool_use block
 			blocks[c.index] = toolBlock
 		} else {
-			// Has remaining text — strip the tag and insert tool_use block after
 			blocks[c.index].Text = c.cleanText
-			// Insert tool_use block after the text block
 			insertAt := c.index + 1
 			blocks = append(blocks[:insertAt], append([]model.ContentBlock{toolBlock}, blocks[insertAt:]...)...)
 		}
 	}
 
-	// Remove tool_use blocks for rejected tool calls (CLI "not found" errors).
-	// These occur when the AI model hallucinates tool names (e.g. "/commit" as a
-	// slash command, or "AskUserQuestion" alongside <ask-question> XML tags).
-	// Must run AFTER convertAskQuestionBlocks so AskUserQuestion conversions
-	// are in place before we strip the rejected originals.
 	blocks = removeRejectedToolBlocks(blocks)
 
 	return blocks

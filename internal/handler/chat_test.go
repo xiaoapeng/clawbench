@@ -1469,6 +1469,13 @@ func TestConvertAskQuestionBlocks_ObfuscatedCloseTag(t *testing.T) {
 	if !foundAskQ {
 		t.Error("expected to find an AskUserQuestion tool_use block from obfuscated close tag")
 	}
+
+	// Also verify that the <ask-question> tag was stripped from the text block
+	for _, b := range result {
+		if b.Type == "text" && strings.Contains(b.Text, "<ask-question") {
+			t.Error("text block should have <ask-question> tag stripped after wrong-close conversion")
+		}
+	}
 }
 
 // ============================================================================
