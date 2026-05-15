@@ -15,7 +15,7 @@ type Config struct {
 		CertFile string `yaml:"cert_file"`
 		KeyFile  string `yaml:"key_file"`
 	} `yaml:"tls"`
-	DevPort int `yaml:"dev_port"` // Localhost-only HTTP port for dev proxy (0 = auto when TLS enabled, -1 = disabled)
+	DevPort int `yaml:"dev_port"` // Localhost-only HTTP port for dev proxy (0 = auto=Port+2 when TLS enabled, -1 = disabled)
 	Upload struct {
 		MaxSizeMB int `yaml:"max_size_mb"` // Maximum file upload size in MB (default: 100)
 		MaxFiles  int `yaml:"max_files"`  // Maximum number of files per upload (default: 20)

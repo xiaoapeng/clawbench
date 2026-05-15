@@ -86,7 +86,7 @@ npm test                             # Vitest (all frontend tests)
 
 | Section | Key options |
 |---------|------------|
-| Server | `port` (20000), `host`, `log_level` ("info"), `watch_dir`, `password` (auto-UUID), `default_agent`, `dev_port` (0=auto, Port+1 when TLS) |
+| Server | `port` (20000), `host`, `log_level` ("info"), `watch_dir`, `password` (auto-UUID), `default_agent`, `dev_port` (0=auto, Port+2 when TLS) |
 | Upload | `upload.max_size_mb`, `upload.max_files` |
 | Chat UI | `chat.initial_messages`, `chat.page_size`, `chat.collapsed_height`, `chat.system_prompt_interval` (10) |
 | Session | `session.max_count` |
