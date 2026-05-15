@@ -18,7 +18,7 @@
 </template>
 
 <script setup>
-import { ref, watch, nextTick } from 'vue'
+import { ref, watch, nextTick, onBeforeUnmount } from 'vue'
 import CodePreview from './CodePreview.vue'
 import { useMarkdownRenderer } from '@/composables/useMarkdownRenderer.ts'
 import { useDoubleClickCopy } from '@/composables/useDoubleClickCopy.ts'
@@ -26,7 +26,7 @@ import { useQuoteQuestion } from '@/composables/useQuoteQuestion.ts'
 import { useFilePathAnnotation } from '@/composables/useFilePathAnnotation.ts'
 import { store } from '@/stores/app.ts'
 import { dirName, splitPath } from '@/utils/path.ts'
-import { flashRanges, flashType } from '@/composables/useFileRefresh.ts'
+import { flashRanges, flashType, flashTextSnippets } from '@/composables/useFileRefresh.ts'
 
 const props = defineProps({
     file: Object,
@@ -161,6 +161,117 @@ watch(() => props.viewMode, async (mode) => {
     await renderMermaidInElement(el, 'md-preview')
 })
 
+// ─── Rendered markdown flash-highlight via DOM search ───
+// When flashTextSnippets changes and we're in rendered mode,
+// search the rendered DOM for matching text and wrap it in flash spans.
+
+/** Remove all previously added flash spans from the DOM */
+function removeFlashSpans(container) {
+    if (!container) return
+    const existing = container.querySelectorAll('.md-char-flash-delete, .md-char-flash-add')
+    for (const span of existing) {
+        const parent = span.parentNode
+        if (parent) {
+            // Move all child nodes out of the span, then remove the span
+            while (span.firstChild) {
+                parent.insertBefore(span.firstChild, span)
+            }
+            parent.removeChild(span)
+        }
+    }
+    // Normalize merges adjacent text nodes that were split
+    container.normalize()
+}
+
+/**
+ * Search for snippet text in the rendered DOM and wrap matches in flash spans.
+ * Uses TreeWalker to find text nodes, then creates Ranges to wrap matches.
+ */
+function applyFlashToRenderedDOM(container, snippets, type) {
+    if (!container || !snippets || snippets.length === 0) return
+
+    const cls = type === 'delete' ? 'md-char-flash-delete' : 'md-char-flash-add'
+
+    for (const snippet of snippets) {
+        if (!snippet || snippet.length < 3) continue
+
+        // Walk all text nodes looking for the snippet
+        const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null)
+        const textNodes = []
+        while (walker.nextNode()) {
+            textNodes.push(walker.currentNode)
+        }
+
+        for (const textNode of textNodes) {
+            const text = textNode.textContent
+            const idx = text.indexOf(snippet)
+            if (idx === -1) continue
+
+            // Found a match — split the text node and wrap the matched portion
+            try {
+                const range = document.createRange()
+                range.setStart(textNode, idx)
+                range.setEnd(textNode, idx + snippet.length)
+
+                const span = document.createElement('span')
+                span.className = cls
+                range.surroundContents(span)
+            } catch {
+                // surroundContents fails if the range crosses element boundaries
+                // Fallback: just highlight the whole parent element
+                const parent = textNode.parentElement
+                if (parent && container.contains(parent) && !parent.classList.contains('markdown-body')) {
+                    parent.classList.add(cls)
+                }
+            }
+            // Only highlight first occurrence of each snippet to avoid over-flashing
+            break
+        }
+    }
+}
+
+/** Track the current flash apply so we can cancel if needed */
+let flashApplyId = 0
+
+watch([flashTextSnippets, flashType], async () => {
+    // Only apply to rendered mode
+    if (props.viewMode !== 'rendered') return
+
+    const applyId = ++flashApplyId
+
+    // Wait for DOM to be ready
+    await nextTick()
+    await nextTick()
+    if (applyId !== flashApplyId) return
+
+    const el = bodyRef.value
+    if (!el) return
+
+    // Remove any previous flash highlights
+    removeFlashSpans(el)
+
+    // Apply new ones
+    const snippets = flashTextSnippets.value
+    const type = flashType.value
+    if (snippets.length > 0) {
+        applyFlashToRenderedDOM(el, snippets, type)
+    }
+})
+
+// Clean up flash spans when viewMode switches away from rendered
+watch(() => props.viewMode, (mode) => {
+    if (mode !== 'rendered') {
+        const el = bodyRef.value
+        if (el) removeFlashSpans(el)
+    }
+})
+
+// Clean up on unmount
+onBeforeUnmount(() => {
+    const el = bodyRef.value
+    if (el) removeFlashSpans(el)
+})
+
 </script>
 
 <style scoped>
@@ -169,5 +280,37 @@ watch(() => props.viewMode, async (mode) => {
   flex: 1;
   flex-direction: column;
   min-height: 0;
+}
+</style>
+
+<style>
+/* ─── Markdown rendered flash animations ─── */
+
+@keyframes md-flash-delete-anim {
+    0%, 100% { background: transparent; }
+    8%, 28%  { background: rgba(255, 80, 80, 0.45); }
+    18%, 38% { background: transparent; }
+    48%, 68% { background: rgba(255, 80, 80, 0.3); }
+    58%, 78% { background: transparent; }
+    88%      { background: rgba(255, 80, 80, 0.15); }
+}
+.md-char-flash-delete {
+    animation: md-flash-delete-anim 1.2s ease-out forwards;
+    border-radius: 2px;
+    text-decoration: line-through;
+    text-decoration-color: rgba(255, 80, 80, 0.6);
+}
+
+@keyframes md-flash-add-anim {
+    0%, 100% { background: transparent; }
+    8%, 28%  { background: rgba(100, 200, 255, 0.45); }
+    18%, 38% { background: transparent; }
+    48%, 68% { background: rgba(100, 200, 255, 0.3); }
+    58%, 78% { background: transparent; }
+    88%      { background: rgba(100, 200, 255, 0.15); }
+}
+.md-char-flash-add {
+    animation: md-flash-add-anim 1.5s ease-out forwards;
+    border-radius: 2px;
 }
 </style>

@@ -10,11 +10,16 @@
  * Two-phase refresh when deletions are detected:
  *   Phase 1: Red-flash deleted characters in old content → wait ~1.2s
  *   Phase 2: Update store with new content → blue-flash added characters
+ *
+ * Two flash mechanisms:
+ * - flashRanges (line+char offset): Used by CodePreview for code/raw files
+ * - flashTextSnippets (text strings): Used by MarkdownPreview for rendered HTML,
+ *   where line/offset mapping is lost after markdown→HTML transformation
  */
 import { ref, watch } from 'vue'
 import { store } from '@/stores/app.ts'
 
-// ─── Flash state (consumed by CodePreview) ───
+// ─── Flash state (consumed by CodePreview & MarkdownPreview) ───
 
 export type FlashType = 'delete' | 'add'
 
@@ -33,6 +38,13 @@ export interface FlashRange {
  * reactivity to trigger the watch in CodePreview.
  */
 export const flashRanges = ref<FlashRange[]>([])
+
+/**
+ * Text snippets that changed — MarkdownPreview reads this to search
+ * for matching text in the rendered DOM and wrap it in flash spans.
+ * Used for rendered markdown where line/offset mapping is unavailable.
+ */
+export const flashTextSnippets = ref<string[]>([])
 export const flashType = ref<FlashType>('add')
 let flashTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -42,12 +54,13 @@ let refreshGeneration = 0
 function clearFlash() {
     if (flashTimer) { clearTimeout(flashTimer); flashTimer = null }
     flashRanges.value = []
+    flashTextSnippets.value = []
     flashType.value = 'add'
 }
 
 function scheduleClearFlash(ms: number) {
     if (flashTimer) clearTimeout(flashTimer)
-    flashTimer = setTimeout(() => { flashRanges.value = []; flashType.value = 'add'; flashTimer = null }, ms)
+    flashTimer = setTimeout(() => { flashRanges.value = []; flashTextSnippets.value = []; flashType.value = 'add'; flashTimer = null }, ms)
 }
 
 // ─── LCS diff algorithms ───
@@ -259,6 +272,60 @@ function charIndicesToRanges(indices: Set<number>, text: string): { start: numbe
     return ranges
 }
 
+// ─── Extract text snippets from diff result (for Markdown rendered mode) ───
+
+/**
+ * Extract changed text snippets from the diff result and source text.
+ * These snippets can be searched for in the rendered DOM to flash-highlight them.
+ * Filters out very short snippets (1-2 chars) to reduce false positives.
+ */
+function extractSnippets(text: string, diff: LineDiff, mode: 'delete' | 'add'): string[] {
+    const lines = text.split('\n')
+    const snippets: string[] = []
+    const MIN_SNIPPET_LEN = 3
+
+    if (mode === 'delete') {
+        // Whole-line deletions: extract non-empty trimmed content
+        for (const lineNum of diff.deletedInOld) {
+            const line = lines[lineNum - 1]
+            if (line && line.trim().length >= MIN_SNIPPET_LEN) {
+                snippets.push(line.trim())
+            }
+        }
+        // Char-level deletions
+        for (const [lineNum, ranges] of diff.deletedChars) {
+            const line = lines[lineNum - 1] || ''
+            for (const { start, end } of ranges) {
+                const s = line.slice(start, Math.min(end, line.length))
+                if (s.trim().length >= MIN_SNIPPET_LEN) {
+                    snippets.push(s.trim())
+                }
+            }
+        }
+    } else {
+        // Whole-line additions
+        for (const lineNum of diff.addedInNew) {
+            const line = lines[lineNum - 1]
+            if (line && line.trim().length >= MIN_SNIPPET_LEN) {
+                snippets.push(line.trim())
+            }
+        }
+        // Char-level additions
+        for (const [lineNum, ranges] of diff.addedChars) {
+            const line = lines[lineNum - 1] || ''
+            for (const { start, end } of ranges) {
+                const s = line.slice(start, Math.min(end, line.length))
+                if (s.trim().length >= MIN_SNIPPET_LEN) {
+                    snippets.push(s.trim())
+                }
+            }
+        }
+    }
+
+    // Deduplicate and limit count
+    return [...new Set(snippets)].slice(0, 20)
+}
+
 // ─── Scroll helpers ───
 
 function getScrollContainer(): HTMLElement | null {
@@ -390,12 +457,16 @@ export async function refreshCurrentFile(options: {
 
   // ─── Phase 1: Red-flash deletions (if any) ───
   if (hasDeletions && diffResult) {
-      // Combine whole-line deletions + char-level deletions
+      // For CodePreview (code files): line+offset ranges
       const delRanges: FlashRange[] = [
           ...wholeLineRanges(diffResult.deletedInOld),
           ...charMapToRanges(diffResult.deletedChars),
       ]
+      // For MarkdownPreview (rendered mode): text snippets to search in DOM
+      const delSnippets = extractSnippets(oldContent, diffResult, 'delete')
+
       flashRanges.value = delRanges
+      flashTextSnippets.value = delSnippets
       flashType.value = 'delete'
 
       // Wait for user to see the red flash
@@ -432,8 +503,13 @@ export async function refreshCurrentFile(options: {
           ...wholeLineRanges(diffResult.addedInNew),
           ...charMapToRanges(diffResult.addedChars),
       ]
-      if (addRanges.length > 0) {
+      const addSnippets = newContent
+          ? extractSnippets(newContent, diffResult, 'add')
+          : []
+
+      if (addRanges.length > 0 || addSnippets.length > 0) {
           flashRanges.value = addRanges
+          flashTextSnippets.value = addSnippets
           flashType.value = 'add'
           scheduleClearFlash(ADD_FLASH_CLEAR_MS)
       } else {
