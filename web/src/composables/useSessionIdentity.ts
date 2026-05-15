@@ -16,6 +16,7 @@ const currentBackend = ref('')
 const currentAgentId = ref('')
 const currentModelId = ref('')
 const currentModelName = ref('')
+const currentThinkingEffort = ref('')
 const runningSessions = ref(new Set<string>())
 
 // ───────────────────────────────────────────────────────────
@@ -77,6 +78,8 @@ export async function initSessionFromAPI() {
         const { modelId, modelName } = agentsApi.syncModelFromAgent(data.agentId || '')
         currentModelId.value = modelId
         currentModelName.value = modelName
+        // Initialize thinking effort from persisted session data
+        currentThinkingEffort.value = data.thinkingEffort || ''
       }
     }
   } catch (_) {
@@ -182,7 +185,7 @@ export function useSessionIdentity() {
       await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text, filePaths: filePaths || [], modelId: currentModelId.value || undefined }),
+        body: JSON.stringify({ message: text, filePaths: filePaths || [], modelId: currentModelId.value || undefined, thinkingEffort: currentThinkingEffort.value || undefined }),
       })
     } catch (err) {
       console.error('Failed to send message:', err)
@@ -207,6 +210,7 @@ export function useSessionIdentity() {
     currentAgentId,
     currentModelId,
     currentModelName,
+    currentThinkingEffort,
     runningSessions,
     agentHeaderTitle,
     // Action proxies

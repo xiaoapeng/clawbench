@@ -52,6 +52,11 @@ name: CodeBuddy
 icon: 🤖
 specialty: CodeBuddy 驱动的通用助手
 backend: codebuddy
+thinking_effort_levels:
+  - low
+  - medium
+  - high
+  - xhigh
 models:
   - id: glm-5.1
     name: GLM 5.1
@@ -78,6 +83,10 @@ models:
     name: 混元 2.0
 system_prompt: |
   You are a versatile assistant powered by CodeBuddy, capable of handling code, documentation, operations, research, and various tasks.
+
+# thinking_effort [optional]: Default thinking effort level when user hasn't selected one.
+# 留空或不设置 = 自动（不传 --effort 参数）。用户在前端选择后会覆盖此默认值。
+# thinking_effort: high
 
 # --- Example: codebuddy-overseas dual-account instance ---
 # id: codebuddy-overseas

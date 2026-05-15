@@ -3,6 +3,13 @@ name: Pi
 icon: 🥧
 specialty: 极简编程智能体 — 4 工具核心 + 多模型支持
 backend: pi
+thinking_effort_levels:
+  - "off"
+  - minimal
+  - low
+  - medium
+  - high
+  - xhigh
 models:
   # Anthropic (via MiniMax proxy)
   - id: anthropic/claude-sonnet-4-6
@@ -26,3 +33,7 @@ models:
     name: Copilot · Gemini 3.1 Pro
 system_prompt: |
   You are a versatile assistant powered by Pi, capable of handling code, documentation, operations, research, and various tasks.
+
+# thinking_effort [optional]: Default thinking effort level when user hasn't selected one.
+# 留空或不设置 = 自动（不传 --thinking 参数）。用户在前端选择后会覆盖此默认值。
+# thinking_effort: high

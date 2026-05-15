@@ -19,6 +19,11 @@ icon: 🔵
 specialty: CodeBuddy 海外版并行实例
 backend: codebuddy
 command: /home/user/codebuddy2
+thinking_effort_levels:
+  - low
+  - medium
+  - high
+  - xhigh
 models:
   - id: gpt-5.5
     name: GPT 5.5
@@ -57,3 +62,7 @@ models:
     name: Kimi K2.5
 system_prompt: |
   You are a versatile assistant capable of handling code, documentation, operations, research, and various tasks.
+
+# thinking_effort [optional]: Default thinking effort level when user hasn't selected one.
+# 留空或不设置 = 自动（不传 --effort 参数）。用户在前端选择后会覆盖此默认值。
+# thinking_effort: high

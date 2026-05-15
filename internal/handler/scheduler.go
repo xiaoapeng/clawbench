@@ -145,7 +145,7 @@ func ServeTaskByID(w http.ResponseWriter, r *http.Request) {
 			AgentID     string `json:"agent_id"`
 			Prompt      string `json:"prompt"`
 			RepeatMode  string `json:"repeat_mode"`
-			MaxRuns     int    `json:"max_runs"`
+			MaxRuns     *int   `json:"max_runs"` // pointer to distinguish "not provided" (nil) from "set to 0" (ISS-043)
 		}
 		if !decodeJSON(w, r, &req) {
 			return
@@ -271,7 +271,12 @@ func ServeTaskByID(w http.ResponseWriter, r *http.Request) {
 		if req.RepeatMode != "" {
 			task.RepeatMode = req.RepeatMode
 		}
-		task.MaxRuns = req.MaxRuns
+		// Only update MaxRuns if explicitly provided in the request (ISS-043).
+		// Go's JSON decoder leaves pointer fields nil when the key is absent,
+		// so we can distinguish "not provided" from "set to 0".
+		if req.MaxRuns != nil {
+			task.MaxRuns = *req.MaxRuns
+		}
 
 		// Editing a completed task implies reactivation — the user wants it to run again.
 		// Reset status to active and clear runCount so it starts fresh.

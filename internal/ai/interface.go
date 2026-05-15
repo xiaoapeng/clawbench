@@ -16,6 +16,7 @@ type ChatRequest struct {
 	Model                 string // per-request model override (empty = use global default)
 	Command               string // optional: custom command path for the AI backend CLI
 	AgentID               string // agent ID for logging and persistence
+	ThinkingEffort        string // thinking effort level, e.g., "high"; empty = auto (don't pass flag)
 	Resume                bool   // If true, resume an existing session instead of creating new
 	ScheduledExecution    bool   // If true, this is a scheduled task execution — skill-level anti-recursion block
 	AssistantMessageCount int    // Number of finalized assistant messages in the session (0 for new sessions)

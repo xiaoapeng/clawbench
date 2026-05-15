@@ -16,7 +16,7 @@ describe('useAgents', () => {
   const { agents, defaultAgentId, loadAgents, getAgentIcon, getAgentName,
     isDefaultAgent, getDefaultModelId, getAgentModels, isMultiModel,
     getAgent, getAgentModel, getAgentDefaultModelName, agentHeaderTitle,
-    syncModelFromAgent } = useAgents()
+    syncModelFromAgent, getAgentThinkingEffortLevels, hasThinkingEffortLevels } = useAgents()
 
   const testAgents = [
     {
@@ -27,18 +27,21 @@ describe('useAgents', () => {
         { id: 'claude-3.5', name: 'Claude 3.5 Sonnet', default: true },
         { id: 'claude-3-haiku', name: 'Claude 3 Haiku', default: false },
       ],
+      thinkingEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'],
     },
     {
       id: 'gpt',
       name: 'GPT-4',
       icon: '🧠',
       models: [{ id: 'gpt-4o', name: 'GPT-4o', default: true }],
+      thinkingEffortLevels: ['low', 'medium', 'high'],
     },
     {
       id: 'simple',
       name: 'Simple Agent',
       icon: '⚡',
       models: [],
+      // no thinkingEffortLevels — unsupported backend
     },
   ]
 
@@ -291,6 +294,50 @@ describe('useAgents', () => {
       const result = syncModelFromAgent('simple')
       expect(result.modelId).toBe('')
       expect(result.modelName).toBe('')
+    })
+  })
+
+  // --- getAgentThinkingEffortLevels ---
+
+  describe('getAgentThinkingEffortLevels', () => {
+    it('returns thinking effort levels for an agent with levels', () => {
+      const levels = getAgentThinkingEffortLevels('claude')
+      expect(levels).toEqual(['low', 'medium', 'high', 'xhigh', 'max'])
+    })
+
+    it('returns levels for another agent with different levels', () => {
+      const levels = getAgentThinkingEffortLevels('gpt')
+      expect(levels).toEqual(['low', 'medium', 'high'])
+    })
+
+    it('returns empty array for agent without thinking effort levels', () => {
+      const levels = getAgentThinkingEffortLevels('simple')
+      expect(levels).toEqual([])
+    })
+
+    it('returns empty array for unknown agent', () => {
+      const levels = getAgentThinkingEffortLevels('nonexistent')
+      expect(levels).toEqual([])
+    })
+  })
+
+  // --- hasThinkingEffortLevels ---
+
+  describe('hasThinkingEffortLevels', () => {
+    it('returns true for agent with thinking effort levels', () => {
+      expect(hasThinkingEffortLevels('claude')).toBe(true)
+    })
+
+    it('returns true for another agent with levels', () => {
+      expect(hasThinkingEffortLevels('gpt')).toBe(true)
+    })
+
+    it('returns false for agent without thinking effort levels', () => {
+      expect(hasThinkingEffortLevels('simple')).toBe(false)
+    })
+
+    it('returns false for unknown agent', () => {
+      expect(hasThinkingEffortLevels('nonexistent')).toBe(false)
     })
   })
 

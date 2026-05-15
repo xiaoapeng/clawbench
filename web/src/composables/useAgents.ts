@@ -101,6 +101,17 @@ function getAgentModel(agentId: string, modelId: string) {
     return models.find(m => m.id === modelId)
 }
 
+/** Get the thinking effort levels for an agent. Returns [] for unsupported backends. */
+function getAgentThinkingEffortLevels(agentId: string): string[] {
+    const agent = agents.value.find(a => a.id === agentId)
+    return agent?.thinkingEffortLevels || []
+}
+
+/** Check if an agent supports thinking effort selection (has levels defined). */
+function hasThinkingEffortLevels(agentId: string): boolean {
+    return getAgentThinkingEffortLevels(agentId).length > 0
+}
+
 export function useAgents() {
     return {
         agents,
@@ -117,5 +128,7 @@ export function useAgents() {
         getAgentDefaultModelName,
         agentHeaderTitle,
         syncModelFromAgent,
+        getAgentThinkingEffortLevels,
+        hasThinkingEffortLevels,
     }
 }

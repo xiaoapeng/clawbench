@@ -59,6 +59,11 @@ func buildPiStreamArgs(req ChatRequest) []string {
 		args = append(args, "--model", req.Model)
 	}
 
+	// Thinking effort level (e.g., --thinking high)
+	if req.ThinkingEffort != "" {
+		args = append(args, "--thinking", req.ThinkingEffort)
+	}
+
 	// Prompt is the last positional argument
 	args = append(args, req.Prompt)
 

@@ -139,12 +139,13 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 		sessionTitle, _ := service.GetSessionTitle(sessionID)
 		sessionAgentID := service.GetSessionAgentID(sessionID)
 		sessionModelID := service.GetSessionModel(sessionID)
+		sessionThinkingEffort := service.GetSessionThinkingEffort(sessionID)
 		running := service.IsSessionRunning(sessionID)
 		if err != nil {
-			writeJSON(w, http.StatusOK, map[string]any{"messages": []any{}, "running": running, "sessionId": sessionID, "sessionTitle": sessionTitle, "backend": sessionBackend, "agentId": sessionAgentID, "modelId": sessionModelID, "total": totalCount})
+			writeJSON(w, http.StatusOK, map[string]any{"messages": []any{}, "running": running, "sessionId": sessionID, "sessionTitle": sessionTitle, "backend": sessionBackend, "agentId": sessionAgentID, "modelId": sessionModelID, "thinkingEffort": sessionThinkingEffort, "total": totalCount})
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"messages": messages, "running": running, "sessionId": sessionID, "sessionTitle": sessionTitle, "backend": sessionBackend, "agentId": sessionAgentID, "modelId": sessionModelID, "total": totalCount})
+		writeJSON(w, http.StatusOK, map[string]any{"messages": messages, "running": running, "sessionId": sessionID, "sessionTitle": sessionTitle, "backend": sessionBackend, "agentId": sessionAgentID, "modelId": sessionModelID, "thinkingEffort": sessionThinkingEffort, "total": totalCount})
 		return
 	}
 
@@ -186,11 +187,12 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 
 	// Decode request body BEFORE the running check so we can enqueue when busy
 	var req struct {
-		Message   string   `json:"message"`
-		FilePaths []string `json:"filePaths"`
-		Files     []string `json:"files"`
-		AgentID   string   `json:"agentId"`
-		ModelID   string   `json:"modelId"`
+		Message        string   `json:"message"`
+		FilePaths      []string `json:"filePaths"`
+		Files          []string `json:"files"`
+		AgentID        string   `json:"agentId"`
+		ModelID        string   `json:"modelId"`
+		ThinkingEffort string   `json:"thinkingEffort"`
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxChatBodySize)
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -274,6 +276,12 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 		service.UpdateSessionModel(sessionID, req.ModelID)
 	}
 
+	// Persist thinking effort selection for this session so subsequent loads
+	// restore the user's choice instead of the agent default (auto/empty).
+	if req.ThinkingEffort != "" {
+		service.UpdateSessionThinkingEffort(sessionID, req.ThinkingEffort)
+	}
+
 	// Prevent concurrent sessions for the same session ID
 	if !service.TrySetSessionRunning(sessionID) {
 		// Session already running — enqueue the message
@@ -347,7 +355,7 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 		defer service.UnregisterSessionCancel(sessionID)
 
 		// Build the first chat request
-		firstChatReq := buildChatRequest(prompt, sessionID, projectPath, backendName, effectiveAgentID, req.ModelID, fileDir)
+		firstChatReq := buildChatRequest(prompt, sessionID, projectPath, backendName, effectiveAgentID, req.ModelID, req.ThinkingEffort, fileDir)
 
 		// Execute first message
 		result := executeStreamRun(ctx, r, streamCh, projectPath, sessionID, backendName, effectiveAgentID, firstChatReq, fileDir)
@@ -745,10 +753,12 @@ saveRaw:
 
 // buildChatRequest constructs an ai.ChatRequest from the given parameters.
 // modelOverride, if non-empty, takes precedence over the agent's default model.
-func buildChatRequest(prompt, sessionID, projectPath, backendName, agentID, modelOverride, fileDir string) ai.ChatRequest {
+// thinkingEffortOverride, if non-empty, takes precedence over the agent's YAML default.
+func buildChatRequest(prompt, sessionID, projectPath, backendName, agentID, modelOverride, thinkingEffortOverride, fileDir string) ai.ChatRequest {
 	systemPrompt := ""
 	agentModel := ""
 	agentCommand := ""
+	effectiveThinkingEffort := thinkingEffortOverride // Frontend selection takes priority
 
 	if agentID == "" {
 		agentID = model.GetDefaultAgentID()
@@ -766,6 +776,10 @@ func buildChatRequest(prompt, sessionID, projectPath, backendName, agentID, mode
 		}
 		if agent.Command != "" {
 			agentCommand = agent.Command
+		}
+		// Fall back to YAML config default when frontend didn't specify
+		if effectiveThinkingEffort == "" && agent.ThinkingEffort != "" {
+			effectiveThinkingEffort = agent.ThinkingEffort
 		}
 	}
 
@@ -795,6 +809,7 @@ func buildChatRequest(prompt, sessionID, projectPath, backendName, agentID, mode
 		Model:                 agentModel,
 		Command:               agentCommand,
 		AgentID:               agentID,
+		ThinkingEffort:        effectiveThinkingEffort,
 		Resume:                resume,
 		AssistantMessageCount: service.GetAssistantMessageCount(sessionID),
 	}
@@ -834,7 +849,7 @@ func buildChatRequestFromQueue(qMsg model.QueuedMessage, sessionID, projectPath,
 		prompt = fmt.Sprintf("[User uploaded %d file(s): %s]\n%s", len(qMsg.Files), strings.Join(qMsg.Files, ", "), prompt)
 	}
 
-	return buildChatRequest(prompt, sessionID, projectPath, backendName, agentID, "", fileDir)
+	return buildChatRequest(prompt, sessionID, projectPath, backendName, agentID, "", service.GetSessionThinkingEffort(sessionID), fileDir)
 }
 
 // CancelChat handles POST to cancel an ongoing AI stream for a session.

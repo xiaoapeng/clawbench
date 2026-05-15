@@ -20,6 +20,10 @@ name: Codex
 icon: 🤠
 specialty: OpenAI Codex CLI 编码助手（MiniMax 后端）
 backend: codex
+thinking_effort_levels:
+  - low
+  - medium
+  - high
 models:
   - id: codex-MiniMax-M2.7
     name: MiniMax M2.7
@@ -27,3 +31,7 @@ models:
 command: codex --profile m27
 system_prompt: |
   You are a coding assistant using OpenAI Codex CLI. Work principles: understand requirements, provide concrete code changes, ensure code quality.
+
+# thinking_effort [optional]: Default thinking effort level when user hasn't selected one.
+# 留空或不设置 = 自动（不传 -c model_reasoning_effort= 参数）。用户在前端选择后会覆盖此默认值。
+# thinking_effort: high

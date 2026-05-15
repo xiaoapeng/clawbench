@@ -542,6 +542,12 @@ func (p *StreamParser) ParseLine(line string, ch chan<- StreamEvent) {
 			if msg.Event.Message != nil && msg.Event.Message.Model != "" {
 				p.model = msg.Event.Message.Model
 			}
+			// Reset partial flags for a new assistant turn (ISS-028).
+			// Each message_start begins a fresh turn — previous partial
+			// content flags must not suppress content from the new turn.
+			p.receivedPartial = false
+			p.receivedPartialThinking = false
+			p.receivedPartialToolUse = false
 		case "message_delta", "message_stop":
 			// Structural events - no content to emit
 		}

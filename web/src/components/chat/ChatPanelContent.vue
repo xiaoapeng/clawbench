@@ -72,6 +72,8 @@
       :chatRunning="store.state.chatRunning"
       :currentModelId="identity.currentModelId.value"
       :currentModelName="identity.currentModelName.value"
+      :currentThinkingEffort="identity.currentThinkingEffort.value"
+      :thinkingEffortLevels="agents.getAgentThinkingEffortLevels(identity.currentAgentId.value)"
       :agentModels="agents.getAgentModels(identity.currentAgentId.value)"
       :isMultiModel="(id) => agents.isMultiModel(id)"
       :currentAgentId="identity.currentAgentId.value"
@@ -90,6 +92,7 @@
       @show-agent-selector="handleShowAgentSelector"
       @delete-session="(id) => manager.deleteCurrentSession((draftId) => inputBarRef.value?.deleteDraft(draftId))"
       @switch-model="handleSwitchModel"
+      @switch-thinking-effort="handleSwitchThinkingEffort"
     />
 
   </div>
@@ -415,6 +418,10 @@ function handleSwitchModel(model) {
   identity.currentModelName.value = model.name
 }
 
+function handleSwitchThinkingEffort(level) {
+  identity.currentThinkingEffort.value = level
+}
+
 async function sendMessage(text, extraFilePaths) {
     const inputText = text !== undefined ? text : (inputBarRef.value?.inputText?.trim() || '')
     const hasFiles = pendingFiles.value.length > 0 || attachedFiles.value.length > 0
@@ -465,7 +472,7 @@ async function sendMessageNow(text, filePaths, files) {
         const resp = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: text, filePaths, files: files || [], agentId: effectiveAgentId, modelId: identity.currentModelId.value || undefined }),
+            body: JSON.stringify({ message: text, filePaths, files: files || [], agentId: effectiveAgentId, modelId: identity.currentModelId.value || undefined, thinkingEffort: identity.currentThinkingEffort.value || undefined }),
         })
         const data = await resp.json()
         if (!resp.ok) {

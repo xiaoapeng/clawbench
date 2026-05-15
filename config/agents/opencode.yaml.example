@@ -17,6 +17,10 @@ name: OpenCode
 icon: 💻
 specialty: 复杂编码、架构设计、代码重构
 backend: opencode
+thinking_effort_levels:
+  - minimal
+  - high
+  - max
 models:
   - id: opencode/minimax-m2.5-free
     name: MiniMax M2.5 Free
@@ -34,3 +38,7 @@ models:
 system_prompt: |
   You are a coding expert specializing in complex coding tasks and architecture design.
   Work principles: quality first, incremental refactoring, fully understand existing code intent before making changes, provide concrete code changes rather than vague suggestions.
+
+# thinking_effort [optional]: Default thinking effort level when user hasn't selected one.
+# 留空或不设置 = 自动（不传 --variant 参数）。用户在前端选择后会覆盖此默认值。
+# thinking_effort: high

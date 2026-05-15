@@ -37,6 +37,11 @@ func buildBaseStreamArgs(req ChatRequest, extraFlags func(ChatRequest) []string)
 		args = append(args, "--model", req.Model)
 	}
 
+	// Pass thinking effort level (e.g., --effort high) for Claude/Codebuddy
+	if req.ThinkingEffort != "" {
+		args = append(args, "--effort", req.ThinkingEffort)
+	}
+
 	if extraFlags != nil {
 		args = append(args, extraFlags(req)...)
 	}

@@ -493,6 +493,7 @@ func (s *Scheduler) executeTask(task *model.ScheduledTask, projectPath string, t
 		Model:              agent.DefaultModelID(),
 		Command:            agent.Command,
 		AgentID:            task.AgentID,
+		ThinkingEffort:     agent.ThinkingEffort,
 		Resume:             false,
 		ScheduledExecution: true,
 	}

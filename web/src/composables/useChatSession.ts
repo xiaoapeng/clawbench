@@ -52,7 +52,7 @@ export function useChatSession(options: UseChatSessionOptions) {
 
   // ── Identity refs from singleton ──
   const identity = useSessionIdentity()
-  const { currentSessionTitle, currentBackend, currentAgentId, currentModelId, currentModelName, runningSessions } = identity
+  const { currentSessionTitle, currentBackend, currentAgentId, currentModelId, currentModelName, currentThinkingEffort, runningSessions } = identity
 
   // ── Agents from singleton ──
   const { agents, loadAgents, getAgentIcon, getAgentName, syncModelFromAgent, getAgentModel, agentHeaderTitle: makeAgentTitle } = useAgents()
@@ -74,6 +74,11 @@ export function useChatSession(options: UseChatSessionOptions) {
     } else {
       syncModelFromAgentLocal(agentId)
     }
+  }
+
+  // Helper: sync thinking effort from server data
+  function syncThinkingEffortFromData(thinkingEffortFromServer: string) {
+    currentThinkingEffort.value = thinkingEffortFromServer || ''
   }
 
   // Switching state — true while a session switch is in progress (distinct from
@@ -156,6 +161,7 @@ export function useChatSession(options: UseChatSessionOptions) {
       currentBackend.value = data.backend || ''
       currentAgentId.value = data.agentId || ''
       syncModelFromData(currentAgentId.value, data.modelId)
+      syncThinkingEffortFromData(data.thinkingEffort)
       onExtractScheduledTasks(messages.value)
       onRenderUpdate(true)
       if (data.running) {
@@ -242,6 +248,7 @@ export function useChatSession(options: UseChatSessionOptions) {
       currentBackend.value = data.backend || ''
       currentAgentId.value = data.agentId || ''
       syncModelFromData(currentAgentId.value, data.modelId)
+      syncThinkingEffortFromData(data.thinkingEffort)
       onExtractScheduledTasks(messages.value)
       onRenderUpdate(true)
       onScrollBottom(true)

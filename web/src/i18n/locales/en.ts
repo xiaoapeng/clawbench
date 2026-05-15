@@ -92,6 +92,7 @@ export default {
       autoSpeech: 'Auto speech',
       readAloud: 'Read',
       switchModel: 'Switch model',
+      switchThinkingEffort: 'Switch thinking effort',
       attachment: 'Attach',
     },
     create: {
@@ -99,6 +100,10 @@ export default {
     },
     modelSwitcher: {
       title: 'Select model',
+    },
+    thinkingEffortSwitcher: {
+      title: 'Thinking effort',
+      auto: 'Auto',
     },
     attach: {
       currentFile: 'Current file',

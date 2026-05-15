@@ -26,8 +26,10 @@ type Agent struct {
 	Specialty    string       `yaml:"specialty" json:"specialty"`
 	Backend      string       `yaml:"backend" json:"backend"`
 	Models       []AgentModel `yaml:"models" json:"models"`
-	Command      string       `yaml:"command" json:"command"`           // optional: custom command path for the AI backend CLI
-	SystemPrompt string       `yaml:"system_prompt" json:"systemPrompt"`
+	Command              string       `yaml:"command" json:"command"`                         // optional: custom command path for the AI backend CLI
+	ThinkingEffort       string       `yaml:"thinking_effort" json:"thinkingEffort"`           // e.g., "high"; empty = auto (don't pass flag)
+	ThinkingEffortLevels []string     `yaml:"thinking_effort_levels" json:"thinkingEffortLevels"` // valid levels for this backend, e.g. ["low","medium","high","xhigh"]
+	SystemPrompt         string       `yaml:"system_prompt" json:"systemPrompt"`
 }
 
 // DefaultModelID returns the default model ID for this agent.

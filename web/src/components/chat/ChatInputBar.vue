@@ -642,7 +642,7 @@ defineExpose({
 
 .chat-action-label {
   font-size: 11px;
-  line-height: 1;
+  line-height: 1.3;
 }
 
 /* Unified input container */
@@ -993,7 +993,7 @@ defineExpose({
 .model-chip .chat-action-label,
 .thinking-effort-chip .chat-action-label {
   max-width: 80px;
-  overflow: hidden;
+  overflow-x: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

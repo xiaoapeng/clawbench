@@ -92,6 +92,7 @@ export default {
       autoSpeech: '自动朗读',
       readAloud: '朗读',
       switchModel: '切换模型',
+      switchThinkingEffort: '切换思考档位',
       attachment: '附件',
     },
     create: {
@@ -99,6 +100,10 @@ export default {
     },
     modelSwitcher: {
       title: '选择模型',
+    },
+    thinkingEffortSwitcher: {
+      title: '选择思考档位',
+      auto: '自动',
     },
     attach: {
       currentFile: '当前文件',

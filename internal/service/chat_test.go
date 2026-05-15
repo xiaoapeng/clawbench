@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS chat_sessions (
 	model TEXT DEFAULT '',
 	session_type TEXT NOT NULL DEFAULT 'chat',
 	external_session_id TEXT DEFAULT '',
+	thinking_effort TEXT DEFAULT '',
 	deleted INTEGER NOT NULL DEFAULT 0,
 	created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 	updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -1407,4 +1408,79 @@ func TestGetSessions_AllBackendsFiltersBySessionType(t *testing.T) {
 	for _, s := range sessions {
 		assert.Equal(t, "chat", s.SessionType)
 	}
+}
+
+// ---------- GetSessionThinkingEffort / UpdateSessionThinkingEffort ----------
+
+func TestGetSessionThinkingEffort_DefaultEmpty(t *testing.T) {
+	setupDB(t)
+
+	sid := helperCreateSession(t, "/project", "claude", "Thinking Test")
+	// New session should have empty thinking effort (auto)
+	assert.Equal(t, "", service.GetSessionThinkingEffort(sid))
+}
+
+func TestGetSessionThinkingEffort_NonExistent(t *testing.T) {
+	setupDB(t)
+	// Non-existent session should return empty string
+	assert.Equal(t, "", service.GetSessionThinkingEffort("non-existent"))
+}
+
+func TestUpdateSessionThinkingEffort_Set(t *testing.T) {
+	setupDB(t)
+
+	sid := helperCreateSession(t, "/project", "claude", "Thinking Test")
+
+	// Set thinking effort
+	err := service.UpdateSessionThinkingEffort(sid, "high")
+	assert.NoError(t, err)
+
+	// Verify it was persisted
+	assert.Equal(t, "high", service.GetSessionThinkingEffort(sid))
+}
+
+func TestUpdateSessionThinkingEffort_Update(t *testing.T) {
+	setupDB(t)
+
+	sid := helperCreateSession(t, "/project", "claude", "Thinking Test")
+
+	// Set initial value
+	err := service.UpdateSessionThinkingEffort(sid, "low")
+	assert.NoError(t, err)
+	assert.Equal(t, "low", service.GetSessionThinkingEffort(sid))
+
+	// Update to different value
+	err = service.UpdateSessionThinkingEffort(sid, "xhigh")
+	assert.NoError(t, err)
+	assert.Equal(t, "xhigh", service.GetSessionThinkingEffort(sid))
+}
+
+func TestUpdateSessionThinkingEffort_ResetToAuto(t *testing.T) {
+	setupDB(t)
+
+	sid := helperCreateSession(t, "/project", "claude", "Thinking Test")
+
+	// Set thinking effort
+	err := service.UpdateSessionThinkingEffort(sid, "medium")
+	assert.NoError(t, err)
+	assert.Equal(t, "medium", service.GetSessionThinkingEffort(sid))
+
+	// Reset to auto (empty string)
+	err = service.UpdateSessionThinkingEffort(sid, "")
+	assert.NoError(t, err)
+	assert.Equal(t, "", service.GetSessionThinkingEffort(sid))
+}
+
+func TestGetSessionThinkingEffort_DeletedSession(t *testing.T) {
+	setupDB(t)
+
+	sid := helperCreateSession(t, "/project", "claude", "Thinking Delete")
+	err := service.UpdateSessionThinkingEffort(sid, "high")
+	assert.NoError(t, err)
+
+	// Delete session
+	_ = service.DeleteSession("/project", "claude", sid)
+
+	// Deleted session should return empty (query filters deleted=0)
+	assert.Equal(t, "", service.GetSessionThinkingEffort(sid))
 }

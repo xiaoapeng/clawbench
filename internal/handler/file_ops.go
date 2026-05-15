@@ -371,6 +371,14 @@ func ServeFileMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check if destination already exists (ISS-041).
+	// os.Rename atomically replaces the destination on Unix, silently
+	// destroying the target file. This check prevents accidental data loss.
+	if _, err := os.Stat(destAbsPath); err == nil {
+		writeLocalizedErrorf(w, r, http.StatusConflict, "FileAlreadyExists")
+		return
+	}
+
 	if err := os.Rename(srcAbsPath, destAbsPath); err != nil {
 		model.WriteError(w, model.Internal(fmt.Errorf("move failed: %w", err)))
 		return

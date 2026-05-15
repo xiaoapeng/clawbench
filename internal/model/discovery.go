@@ -17,14 +17,15 @@ import (
 
 // BackendSpec defines a known AI backend for auto-discovery.
 type BackendSpec struct {
-	ID            string                    // agent id, e.g. "claude"
-	Backend       string                    // backend type, e.g. "claude"
-	DefaultCmd    string                    // command to detect on PATH, e.g. "claude"
-	Name          string                    // display name, e.g. "Claude"
-	Icon          string                    // emoji icon, e.g. "🤖"
-	Specialty     string                    // short description, e.g. "代码编写与推理"
-	ListModelsCmd []string                  // optional: args to list models, e.g. ["models"]; empty = not supported
-	ParseModels   func(string) []AgentModel // optional: parse command stdout into AgentModel list; nil = not supported
+	ID                   string                    // agent id, e.g. "claude"
+	Backend              string                    // backend type, e.g. "claude"
+	DefaultCmd           string                    // command to detect on PATH, e.g. "claude"
+	Name                 string                    // display name, e.g. "Claude"
+	Icon                 string                    // emoji icon, e.g. "🤖"
+	Specialty            string                    // short description, e.g. "代码编写与推理"
+	ListModelsCmd        []string                  // optional: args to list models, e.g. ["models"]; empty = not supported
+	ParseModels          func(string) []AgentModel // optional: parse command stdout into AgentModel list; nil = not supported
+	ThinkingEffortLevels []string                  // supported thinking effort levels, e.g. ["low","medium","high"]; nil = not supported
 }
 
 // BackendRegistry lists all known AI backends for auto-discovery.
@@ -32,19 +33,24 @@ type BackendSpec struct {
 // is found on PATH, a YAML config is generated for that backend.
 // For backends with ListModelsCmd+ParseModels, model lists are auto-discovered too.
 var BackendRegistry = []BackendSpec{
-	{ID: "claude", Backend: "claude", DefaultCmd: "claude", Name: "Claude", Icon: "🤖", Specialty: "代码编写与推理"},
+	{ID: "claude", Backend: "claude", DefaultCmd: "claude", Name: "Claude", Icon: "🤖", Specialty: "代码编写与推理",
+		ThinkingEffortLevels: []string{"low", "medium", "high", "xhigh", "max"}},
 	{ID: "codebuddy", Backend: "codebuddy", DefaultCmd: "codebuddy", Name: "Codebuddy", Icon: "🐛", Specialty: "全栈开发助手",
-		ListModelsCmd: []string{"--help"}, ParseModels: ParseCodebuddyModels},
+		ListModelsCmd: []string{"--help"}, ParseModels: ParseCodebuddyModels,
+		ThinkingEffortLevels: []string{"low", "medium", "high", "xhigh"}},
 	{ID: "opencode", Backend: "opencode", DefaultCmd: "opencode", Name: "OpenCode", Icon: "📟", Specialty: "终端编码工具",
-		ListModelsCmd: []string{"models"}, ParseModels: ParseOpenCodeModels},
+		ListModelsCmd: []string{"models"}, ParseModels: ParseOpenCodeModels,
+		ThinkingEffortLevels: []string{"minimal", "high", "max"}},
 	{ID: "gemini", Backend: "gemini", DefaultCmd: "gemini", Name: "Gemini", Icon: "💎", Specialty: "多模态推理"},
-	{ID: "codex", Backend: "codex", DefaultCmd: "codex", Name: "Codex", Icon: "🐙", Specialty: "OpenAI 编码代理"},
+	{ID: "codex", Backend: "codex", DefaultCmd: "codex", Name: "Codex", Icon: "🐙", Specialty: "OpenAI 编码代理",
+		ThinkingEffortLevels: []string{"low", "medium", "high"}},
 	{ID: "qoder", Backend: "qoder", DefaultCmd: "qodercli", Name: "Qoder", Icon: "⚡", Specialty: "AI 编码助手"},
 	{ID: "vecli", Backend: "vecli", DefaultCmd: "vecli", Name: "VeCLI", Icon: "🌿", Specialty: "字节跳动 AI 助手"},
 	{ID: "deepseek", Backend: "deepseek", DefaultCmd: "deepseek", Name: "DeepSeek", Icon: "🔍", Specialty: "DeepSeek 推理与编码",
 		ListModelsCmd: []string{"models"}, ParseModels: ParseDeepSeekModels},
 	{ID: "pi", Backend: "pi", DefaultCmd: "pi", Name: "Pi", Icon: "🥧", Specialty: "极简编程智能体",
-		ListModelsCmd: []string{"--list-models"}, ParseModels: ParsePiModels},
+		ListModelsCmd: []string{"--list-models"}, ParseModels: ParsePiModels,
+		ThinkingEffortLevels: []string{"off", "minimal", "low", "medium", "high", "xhigh"}},
 }
 
 // CheckCLIExists runs `cmd --version` with a 5-second timeout.
@@ -91,13 +97,14 @@ func DiscoverModels(spec BackendSpec) []AgentModel {
 // System prompt and command are left empty. This is a pure function — no subprocess execution.
 func GenerateAgentYAML(spec BackendSpec, models []AgentModel) ([]byte, error) {
 	agent := Agent{
-		ID:           spec.ID,
-		Name:         spec.Name,
-		Icon:         spec.Icon,
-		Specialty:    spec.Specialty,
-		Backend:      spec.Backend,
-		Models:       models,
-		SystemPrompt: "",
+		ID:                   spec.ID,
+		Name:                 spec.Name,
+		Icon:                 spec.Icon,
+		Specialty:            spec.Specialty,
+		Backend:              spec.Backend,
+		Models:               models,
+		ThinkingEffortLevels: spec.ThinkingEffortLevels,
+		SystemPrompt:         "",
 	}
 	return yaml.Marshal(agent)
 }

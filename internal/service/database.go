@@ -184,6 +184,15 @@ func InitDB(runFromServer ...bool) error {
 		}
 	}
 
+	// Migrate: add thinking_effort column for per-session thinking effort selection
+	var hasThinkingEffort int
+	DB.QueryRow("SELECT COUNT(*) FROM pragma_table_info('chat_sessions') WHERE name='thinking_effort'").Scan(&hasThinkingEffort)
+	if hasThinkingEffort == 0 {
+		if _, err := DB.Exec("ALTER TABLE chat_sessions ADD COLUMN thinking_effort TEXT DEFAULT ''"); err != nil {
+			return fmt.Errorf("failed to add thinking_effort column: %w", err)
+		}
+	}
+
 	// Clean up orphaned streaming messages from previous crashes/restarts.
 	// Any message with streaming=1 at startup can never be finalized since
 	// its stream no longer exists. Mark them as cancelled so the UI shows

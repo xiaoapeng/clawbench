@@ -194,6 +194,11 @@ func buildOpenCodeStreamArgs(req ChatRequest) []string {
 		args = append(args, "--model", req.Model)
 	}
 
+	// Thinking effort level (e.g., --variant high)
+	if req.ThinkingEffort != "" {
+		args = append(args, "--variant", req.ThinkingEffort)
+	}
+
 	return args
 }
 

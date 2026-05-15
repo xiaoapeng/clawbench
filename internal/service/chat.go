@@ -323,6 +323,22 @@ func UpdateSessionModel(sessionID, modelID string) error {
 	return err
 }
 
+// GetSessionThinkingEffort returns the thinking effort level for a session, or empty string if not set.
+func GetSessionThinkingEffort(sessionID string) string {
+	var effort string
+	err := DB.QueryRow("SELECT thinking_effort FROM chat_sessions WHERE id = ? AND deleted = 0", sessionID).Scan(&effort)
+	if err != nil {
+		return ""
+	}
+	return effort
+}
+
+// UpdateSessionThinkingEffort updates the thinking_effort field for a session.
+func UpdateSessionThinkingEffort(sessionID, effort string) error {
+	_, err := DB.Exec("UPDATE chat_sessions SET thinking_effort = ? WHERE id = ?", effort, sessionID)
+	return err
+}
+
 // CreateSession creates a new chat session and returns its ID.
 // agentSource tracks how the agent was chosen: "default" (auto-assigned) or "user" (manually selected).
 // sessionType is "chat" or "scheduled"; empty string defaults to "chat".

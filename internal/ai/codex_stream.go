@@ -156,6 +156,11 @@ func buildCodexStreamArgs(req ChatRequest) []string {
 		args = append(args, "-m", req.Model)
 	}
 
+	// Thinking effort level (e.g., -c model_reasoning_effort=high)
+	if req.ThinkingEffort != "" {
+		args = append(args, "-c", "model_reasoning_effort="+req.ThinkingEffort)
+	}
+
 	// Skip git repo check (allows running in non-git dirs)
 	args = append(args, "--skip-git-repo-check")
 
@@ -401,6 +406,11 @@ func buildCodexResumeArgs(req ChatRequest, threadID string) []string {
 	if req.Model != "" {
 		args = append(args, "-c", fmt.Sprintf("model=%q", req.Model))
 		args = append(args, "-c", "model_provider=minimax")
+	}
+
+	// Thinking effort level (e.g., -c model_reasoning_effort=high)
+	if req.ThinkingEffort != "" {
+		args = append(args, "-c", "model_reasoning_effort="+req.ThinkingEffort)
 	}
 
 	// Thread ID for resuming
