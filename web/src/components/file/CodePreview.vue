@@ -201,6 +201,7 @@ pre :deep(code) {
 .raw-content-pre :deep(code .code-text) {
     white-space: pre;
     padding-left: 12px;
+    padding-right: 8px;
 }
 
 /* Word wrap mode */
@@ -234,7 +235,8 @@ pre :deep(code) {
 
 /* No line numbers mode */
 .raw-content-pre.no-line-num :deep(code .code-text) {
-    padding-left: 0;
+    padding-left: 8px;
+    padding-right: 8px;
 }
 
 .raw-content-pre :deep(code .line-num:hover) {
