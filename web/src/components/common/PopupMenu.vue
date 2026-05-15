@@ -9,13 +9,12 @@
 </template>
 
 <script setup>
-import { computed, watch, onBeforeUnmount } from 'vue'
+import { ref, watch, onBeforeUnmount } from 'vue'
 import { computeMenuStyle } from '@/utils/popupMenuPosition'
 
 const props = defineProps({
   show: Boolean,
   targetElement: { type: Object }, // DOM element reference
-  anchor: { type: String, default: 'left' }, // 'left' | 'right'
   maxWidth: { type: Number, default: 220 },
   maxHeight: { type: Number, default: 320 },
   edgeMargin: { type: Number, default: 6 },
@@ -24,18 +23,21 @@ const props = defineProps({
 
 const emit = defineEmits(['update:show'])
 
-// Menu style (reactive to targetElement and viewport)
-const menuStyle = computed(() => {
-  if (!props.targetElement) return {}
+// Reactive style — updated manually so we can react to DOM geometry changes
+// (scroll, resize) that Vue's computed cannot track.
+const menuStyle = ref({})
+
+/** Recalculate position from current anchor geometry. */
+function updatePosition() {
+  if (!props.targetElement) { menuStyle.value = {}; return }
   const rect = props.targetElement.getBoundingClientRect()
-  return computeMenuStyle(rect, {
-    anchor: props.anchor,
+  menuStyle.value = computeMenuStyle(rect, {
     maxWidth: props.maxWidth,
     maxHeight: props.maxHeight,
     edgeMargin: props.edgeMargin,
     menuItemsCount: props.menuItemsCount,
   })
-})
+}
 
 // Close on outside click
 function handleClickOutside(e) {
@@ -45,8 +47,19 @@ function handleClickOutside(e) {
   emit('update:show', false)
 }
 
+// Recalculate on scroll/resize while open
+function onLayoutChange() {
+  if (props.show) updatePosition()
+}
+
 watch(() => props.show, (val) => {
   if (val) {
+    // Compute position synchronously — the target element already exists in DOM
+    // and we need the style before the first paint of the menu.
+    updatePosition()
+    // Listen for layout changes that could move the anchor
+    window.addEventListener('scroll', onLayoutChange, true) // capture to catch all scrolls
+    window.addEventListener('resize', onLayoutChange)
     // Use setTimeout to avoid the opening click being treated as outside click
     setTimeout(() => {
       if (props.show) {
@@ -54,12 +67,16 @@ watch(() => props.show, (val) => {
       }
     }, 0)
   } else {
+    window.removeEventListener('scroll', onLayoutChange, true)
+    window.removeEventListener('resize', onLayoutChange)
     document.removeEventListener('click', handleClickOutside)
   }
 })
 
 // Cleanup on unmount
 onBeforeUnmount(() => {
+  window.removeEventListener('scroll', onLayoutChange, true)
+  window.removeEventListener('resize', onLayoutChange)
   document.removeEventListener('click', handleClickOutside)
 })
 </script>

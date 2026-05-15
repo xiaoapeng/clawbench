@@ -38,7 +38,7 @@
     <button ref="settingsBtnRef" class="settings-toggle" @click="toggleSettingsMenu" :title="t('appHeader.settings')">
       <Settings :size="20" />
     </button>
-    <PopupMenu v-model:show="settingsMenuOpen" :target-element="settingsBtnRef" anchor="right" :max-width="200" :max-height="280" :menu-items-count="settingsItemCount">
+    <PopupMenu v-model:show="settingsMenuOpen" :target-element="settingsBtnRef" :max-width="200" :max-height="280" :menu-items-count="settingsItemCount">
       <div class="settings-menu-title">{{ t('appHeader.settings') }}</div>
       <!-- Reconfigure server — always available in app mode -->
       <template v-if="isAppMode">

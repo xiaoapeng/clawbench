@@ -106,7 +106,7 @@
     </div>
 
     <!-- Quick commands popup -->
-    <PopupMenu v-model:show="showCommands" :target-element="cmdBtnRef" anchor="right" :max-width="220" :max-height="280" :menu-items-count="visibleCommands.length + 1">
+    <PopupMenu v-model:show="showCommands" :target-element="cmdBtnRef" :max-width="220" :max-height="280" :menu-items-count="visibleCommands.length + 1">
       <div class="quick-send-title">{{ t('terminal.quickCommands') }}</div>
       <button v-for="cmd in visibleCommands" :key="cmd.id" class="quick-send-item" @click="executeCommand(cmd)">
         {{ cmd.label }}

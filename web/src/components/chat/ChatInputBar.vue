@@ -37,6 +37,14 @@
         <span class="chat-action-label">{{ currentModelName }}</span>
         <ChevronDown v-if="isMultiModel(currentAgentId)" :size="10" />
       </button>
+      <!-- Thinking effort chip (show only when agent supports it) -->
+      <button v-if="thinkingEffortLevels.length > 0" class="chat-action-btn thinking-effort-chip" ref="thinkingEffortChipRef"
+        @click.stop="toggleThinkingEffortMenu"
+        :title="t('chat.actions.switchThinkingEffort')">
+        <Brain :size="14" />
+        <span class="chat-action-label">{{ thinkingEffortDisplay }}</span>
+        <ChevronDown :size="10" />
+      </button>
     </div>
     <!-- Input container -->
     <div class="chat-input-container" :class="{ 'drag-over': isDragOver }"
@@ -135,7 +143,7 @@
         </button>
       </PopupMenu>
       <!-- Teleported quick-send menu -->
-      <PopupMenu v-model:show="showQuickMenu" :target-element="sendBtnRef" anchor="right" :max-width="260" :max-height="280" :menu-items-count="quickSendItems.length + 1">
+      <PopupMenu v-model:show="showQuickMenu" :target-element="sendBtnRef" :max-width="260" :max-height="280" :menu-items-count="quickSendItems.length + 1">
         <div class="quick-send-title">{{ t('chat.quickSend.title') }}</div>
         <button v-for="item in quickSendItems" :key="item.id" class="quick-send-item" @click="handleQuickSend(item.command)">
           {{ item.label }}
@@ -154,6 +162,20 @@
           <span>{{ m.name }}</span>
         </button>
       </PopupMenu>
+      <!-- Teleported thinking effort switcher menu -->
+      <PopupMenu v-model:show="showThinkingEffortMenu" :target-element="thinkingEffortChipRef" :max-width="200" :max-height="320" :menu-items-count="thinkingEffortLevels.length + 1">
+        <div class="model-menu-title">{{ t('chat.thinkingEffortSwitcher.title') }}</div>
+        <button class="model-menu-item" :class="{ active: !currentThinkingEffort }" @click="selectThinkingEffort('')">
+          <Check v-if="!currentThinkingEffort" :size="14" />
+          <span v-else class="model-menu-check-spacer"></span>
+          <span>{{ t('chat.thinkingEffortSwitcher.auto') }}</span>
+        </button>
+        <button v-for="level in thinkingEffortLevels" :key="level" class="model-menu-item" :class="{ active: level === currentThinkingEffort }" @click="selectThinkingEffort(level)">
+          <Check v-if="level === currentThinkingEffort" :size="14" />
+          <span v-else class="model-menu-check-spacer"></span>
+          <span>{{ level }}</span>
+        </button>
+      </PopupMenu>
       <QuickSendDialog :open="props.active && quickSendStore.showEditDialog.value" @close="quickSendStore.showEditDialog.value = false" />
     </div>
   </div>
@@ -162,7 +184,7 @@
 <script setup>
 import { ref, computed, nextTick, watch, onBeforeUnmount, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { MessageSquare, List, Plus, Trash2, Volume2, Upload, Paperclip, FileImage, FileText, Folder, XCircle, Inbox, Send, Square, Cpu, ChevronDown, Check } from 'lucide-vue-next'
+import { MessageSquare, List, Plus, Trash2, Volume2, Upload, Paperclip, FileImage, FileText, Folder, XCircle, Inbox, Send, Square, Cpu, ChevronDown, Check, Brain } from 'lucide-vue-next'
 import { baseName } from '@/utils/path.ts'
 import { computeRecentReferencedFiles, computeHasFileGroups, computeAttachMenuItemCount } from '@/utils/chatInputUtils.ts'
 import PopupMenu from '@/components/common/PopupMenu.vue'
@@ -190,6 +212,8 @@ const props = defineProps({
   chatRunning: Boolean,
   currentModelId: String,
   currentModelName: String,
+  currentThinkingEffort: String,
+  thinkingEffortLevels: { type: Array, default: () => [] },
   agentModels: { type: Array, default: () => [] },
   isMultiModel: { type: Function, default: () => false },
   currentAgentId: String,
@@ -211,6 +235,7 @@ const emit = defineEmits([
   'show-agent-selector',
   'delete-session',
   'switch-model',
+  'switch-thinking-effort',
 ])
 
 const inputText = ref('')
@@ -224,6 +249,8 @@ const showQuickMenu = ref(false)
 const sendBtnRef = ref(null)
 const showModelMenu = ref(false)
 const modelChipRef = ref(null)
+const showThinkingEffortMenu = ref(false)
+const thinkingEffortChipRef = ref(null)
 
 // Stop button two-click confirmation state
 const stopPrimed = ref(false)
@@ -399,10 +426,23 @@ function selectModel(model) {
   emit('switch-model', model)
 }
 
+// Thinking effort display: show level name or "Auto"
+const thinkingEffortDisplay = computed(() => props.currentThinkingEffort || t('chat.thinkingEffortSwitcher.auto'))
+
+function toggleThinkingEffortMenu() {
+  showThinkingEffortMenu.value = !showThinkingEffortMenu.value
+}
+
+function selectThinkingEffort(level) {
+  showThinkingEffortMenu.value = false
+  emit('switch-thinking-effort', level)
+}
+
 // Menu mutual exclusion: opening one closes the others
-watch(showAttachMenu, (v) => { if (v) { showQuickMenu.value = false; showModelMenu.value = false } })
-watch(showQuickMenu, (v) => { if (v) { showAttachMenu.value = false; showModelMenu.value = false } })
-watch(showModelMenu, (v) => { if (v) { showAttachMenu.value = false; showQuickMenu.value = false } })
+watch(showAttachMenu, (v) => { if (v) { showQuickMenu.value = false; showModelMenu.value = false; showThinkingEffortMenu.value = false } })
+watch(showQuickMenu, (v) => { if (v) { showAttachMenu.value = false; showModelMenu.value = false; showThinkingEffortMenu.value = false } })
+watch(showModelMenu, (v) => { if (v) { showAttachMenu.value = false; showQuickMenu.value = false; showThinkingEffortMenu.value = false } })
+watch(showThinkingEffortMenu, (v) => { if (v) { showAttachMenu.value = false; showQuickMenu.value = false; showModelMenu.value = false } })
 
 onMounted(() => {
   fetchItems()
@@ -929,24 +969,29 @@ defineExpose({
 }
 
 /* Model switcher chip */
-.model-chip {
+.model-chip,
+.thinking-effort-chip {
   font-variant-numeric: tabular-nums;
 }
 
-.model-chip:not(.clickable) {
+.model-chip:not(.clickable),
+.thinking-effort-chip {
   cursor: default;
 }
 
-.model-chip:not(.clickable):hover {
+.model-chip:not(.clickable):hover,
+.thinking-effort-chip:hover {
   background: none;
   color: var(--text-muted, #999);
 }
 
-.model-chip:not(.clickable):active {
+.model-chip:not(.clickable):active,
+.thinking-effort-chip:active {
   transform: none;
 }
 
-.model-chip .chat-action-label {
+.model-chip .chat-action-label,
+.thinking-effort-chip .chat-action-label {
   max-width: 80px;
   overflow: hidden;
   text-overflow: ellipsis;
