@@ -933,7 +933,7 @@ function doDelete() {
 .dir-toolbar {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
 }
 
 .dir-toolbar :deep(.search-pill) {

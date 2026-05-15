@@ -277,7 +277,7 @@ onBeforeUnmount(() => {
 .header-actions {
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: 6px;
     margin-left: auto;
     flex-shrink: 0;
 }
@@ -287,17 +287,17 @@ onBeforeUnmount(() => {
     display: flex;
     align-items: center;
     background: var(--bg-tertiary);
-    border-radius: 10px;
-    overflow: hidden;
+    border-radius: 12px;
+    padding: 1.5px;
     flex-shrink: 0;
 }
 
 .nav-capsule-btn {
     padding: 0;
-    width: 26px;
-    height: 26px;
+    width: 22px;
+    height: 22px;
     border: none;
-    border-radius: 0;
+    border-radius: 10px;
     background: transparent;
     cursor: pointer;
     color: var(--text-secondary);
@@ -307,8 +307,28 @@ onBeforeUnmount(() => {
     transition: background 0.15s, color 0.15s;
 }
 
-.nav-capsule-btn:first-child {
-    border-right: 1px solid var(--border-color);
+.nav-capsule-btn svg {
+    width: 12px;
+    height: 12px;
+}
+
+.nav-capsule-btn + .nav-capsule-btn {
+    border-left: none;
+}
+
+.nav-capsule-btn:first-child::after {
+    content: '';
+    position: absolute;
+    right: -1px;
+    top: 25%;
+    bottom: 25%;
+    width: 1px;
+    background: var(--border-color);
+    pointer-events: none;
+}
+
+.nav-capsule-btn {
+    position: relative;
 }
 
 .nav-capsule-btn:hover:not(.disabled) {
