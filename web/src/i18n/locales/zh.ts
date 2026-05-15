@@ -365,6 +365,7 @@ export default {
     sortByName: '按名称排序',
     sortByTime: '按时间排序',
     sortByType: '按后缀排序',
+    sortBySize: '按大小排序',
     sortAsc: '升序',
     sortDesc: '降序',
     sortDefault: '默认排序',

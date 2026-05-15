@@ -365,6 +365,7 @@ export default {
     sortByName: 'Sort by name',
     sortByTime: 'Sort by time',
     sortByType: 'Sort by type',
+    sortBySize: 'Sort by size',
     sortAsc: 'Ascending',
     sortDesc: 'Descending',
     sortDefault: 'Default order',

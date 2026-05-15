@@ -362,7 +362,7 @@ type DirEntry struct {
 	Name      string `json:"name"`
 	Type      string `json:"type"`
 	Modified  string `json:"modified,omitempty"`
-	Size      int64  `json:"size,omitempty"`
+	Size      int64  `json:"size"`
 	Supported bool   `json:"supported"`
 }
 

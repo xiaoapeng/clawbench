@@ -27,6 +27,12 @@
               <ChevronUp v-if="sortField === 'type' && sortDir === 'asc'" :size="12" class="sort-dir-icon" />
               <ChevronDown v-else-if="sortField === 'type' && sortDir === 'desc'" :size="12" class="sort-dir-icon" />
             </button>
+            <button class="sort-dropdown-item" :class="{ active: sortField === 'size' }" @click="onSortSelect('size')">
+              <HardDrive :size="14" />
+              <span>{{ t('file.sortBySize') }}</span>
+              <ChevronUp v-if="sortField === 'size' && sortDir === 'asc'" :size="12" class="sort-dir-icon" />
+              <ChevronDown v-else-if="sortField === 'size' && sortDir === 'desc'" :size="12" class="sort-dir-icon" />
+            </button>
           </div>
         </div>
         <button class="toolbar-btn" @click="$emit('toggleHidden')" :title="showHidden ? t('file.hideHiddenFiles') : t('file.showHiddenFiles')">
@@ -267,7 +273,7 @@
 <script setup>
 import { ref, computed, reactive, inject, nextTick, onMounted, onUnmounted, Teleport, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Folder, ArrowDownAz, ArrowUpZa, ChevronDown, ChevronUp, Clock, FileText, Eye, EyeOff, ArrowRightLeft, Loader, FileImage, FileMusic, ChevronRight, Copy, Scissors, ClipboardPaste, FilePlus, FolderPlus, Pencil, Download, Trash2, FolderOpen, RotateCw, Terminal as TerminalIcon, CheckSquare, Check, X, LayoutList, LayoutGrid, FileVideo, Package } from 'lucide-vue-next'
+import { Folder, ArrowDownAz, ArrowUpZa, ChevronDown, ChevronUp, Clock, FileText, HardDrive, Eye, EyeOff, ArrowRightLeft, Loader, FileImage, FileMusic, ChevronRight, Copy, Scissors, ClipboardPaste, FilePlus, FolderPlus, Pencil, Download, Trash2, FolderOpen, RotateCw, Terminal as TerminalIcon, CheckSquare, Check, X, LayoutList, LayoutGrid, FileVideo, Package } from 'lucide-vue-next'
 import { getFileType } from '@/utils/fileType.ts'
 import { dirName } from '@/utils/path.ts'
 import { store } from '@/stores/app.ts'
@@ -641,13 +647,25 @@ const filteredEntries = computed(() => {
     if (q) entries = entries.filter(e => e.name.toLowerCase().includes(q))
     if (props.sortField) {
         entries = entries.sort((a, b) => {
-            if (props.sortField !== 'type') {
+            // When sorting by type, directories participate normally
+            // When sorting by size, directories go to the end
+            // When sorting by name/time, directories float to top
+            if (props.sortField === 'size') {
+                if (a.type === 'dir' && b.type !== 'dir') return 1
+                if (a.type !== 'dir' && b.type === 'dir') return -1
+            } else if (props.sortField !== 'type') {
                 if (a.type === 'dir' && b.type !== 'dir') return -1
                 if (a.type !== 'dir' && b.type === 'dir') return 1
             }
             let cmp = 0
             if (props.sortField === 'name') cmp = a.name.localeCompare(b.name)
             else if (props.sortField === 'time') cmp = new Date(a.modified) - new Date(b.modified)
+            else if (props.sortField === 'size') {
+                const sizeA = a.size ?? 0
+                const sizeB = b.size ?? 0
+                cmp = sizeA - sizeB
+                if (cmp === 0) cmp = a.name.localeCompare(b.name)
+            }
             else if (props.sortField === 'type') {
                 const extA = a.name.includes('.') ? a.name.split('.').pop().toLowerCase() : ''
                 const extB = b.name.includes('.') ? b.name.split('.').pop().toLowerCase() : ''
