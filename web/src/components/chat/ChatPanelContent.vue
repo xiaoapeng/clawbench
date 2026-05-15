@@ -416,10 +416,12 @@ async function handleShowAgentSelector() {
 function handleSwitchModel(model) {
   identity.currentModelId.value = model.id
   identity.currentModelName.value = model.name
+  identity.saveModelPref(identity.currentAgentId.value, model.id)
 }
 
 function handleSwitchThinkingEffort(level) {
   identity.currentThinkingEffort.value = level
+  identity.saveThinkingPref(identity.currentAgentId.value, level)
 }
 
 async function sendMessage(text, extraFilePaths) {

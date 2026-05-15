@@ -20,6 +20,34 @@ const currentThinkingEffort = ref('')
 const runningSessions = ref(new Set<string>())
 
 // ───────────────────────────────────────────────────────────
+// LocalStorage persistence for model & thinking effort prefs.
+// Keyed per agent so each agent remembers its own selections.
+// ───────────────────────────────────────────────────────────
+
+const LS_MODEL_PREFIX = 'clawbench_model_'
+const LS_THINKING_PREFIX = 'clawbench_thinking_'
+
+function saveModelPref(agentId: string, modelId: string) {
+  if (!agentId || !modelId) return
+  try { localStorage.setItem(LS_MODEL_PREFIX + agentId, modelId) } catch {}
+}
+
+function loadModelPref(agentId: string): string | null {
+  if (!agentId) return null
+  try { return localStorage.getItem(LS_MODEL_PREFIX + agentId) } catch { return null }
+}
+
+function saveThinkingPref(agentId: string, level: string) {
+  if (!agentId) return
+  try { localStorage.setItem(LS_THINKING_PREFIX + agentId, level) } catch {}
+}
+
+function loadThinkingPref(agentId: string): string | null {
+  if (!agentId) return null
+  try { return localStorage.getItem(LS_THINKING_PREFIX + agentId) } catch { return null }
+}
+
+// ───────────────────────────────────────────────────────────
 // Action callbacks — registered by ChatPanel on mount.
 // Inversion of control: singleton owns the identity refs, but
 // ChatPanel owns the session *operations*. Other consumers
@@ -74,12 +102,36 @@ export async function initSessionFromAPI() {
         currentSessionTitle.value = data.sessionTitle || ''
         currentBackend.value = data.backend || ''
         currentAgentId.value = data.agentId || ''
-        // Initialize model from agent default
-        const { modelId, modelName } = agentsApi.syncModelFromAgent(data.agentId || '')
-        currentModelId.value = modelId
-        currentModelName.value = modelName
-        // Initialize thinking effort from persisted session data
-        currentThinkingEffort.value = data.thinkingEffort || ''
+        // Initialize model: prefer server-persisted modelId, then localStorage pref, then agent default
+        if (data.modelId) {
+          currentModelId.value = data.modelId
+          const model = agentsApi.getAgentModel(data.agentId || '', data.modelId)
+          currentModelName.value = model?.name || data.modelId
+        } else {
+          const savedModelId = loadModelPref(data.agentId || '')
+          if (savedModelId) {
+            const model = agentsApi.getAgentModel(data.agentId || '', savedModelId)
+            if (model) {
+              currentModelId.value = savedModelId
+              currentModelName.value = model.name
+            } else {
+              // Saved model no longer available — fall back to agent default & clear stale pref
+              const { modelId, modelName } = agentsApi.syncModelFromAgent(data.agentId || '')
+              currentModelId.value = modelId
+              currentModelName.value = modelName
+            }
+          } else {
+            const { modelId, modelName } = agentsApi.syncModelFromAgent(data.agentId || '')
+            currentModelId.value = modelId
+            currentModelName.value = modelName
+          }
+        }
+        // Initialize thinking effort: prefer server data, then localStorage pref
+        if (data.thinkingEffort) {
+          currentThinkingEffort.value = data.thinkingEffort
+        } else {
+          currentThinkingEffort.value = loadThinkingPref(data.agentId || '') || ''
+        }
       }
     }
   } catch (_) {
@@ -136,10 +188,26 @@ export function useSessionIdentity() {
         currentSessionTitle.value = data.title || ''
         currentBackend.value = data.backend || ''
         currentAgentId.value = data.agentId || agentId || ''
-        // Initialize model from agent default
-        const { modelId, modelName } = agentsApi.syncModelFromAgent(currentAgentId.value)
-        currentModelId.value = modelId
-        currentModelName.value = modelName
+        // Initialize model: prefer localStorage pref, then agent default
+        const agentsApi = useAgents()
+        const savedModelId = loadModelPref(currentAgentId.value)
+        if (savedModelId) {
+          const model = agentsApi.getAgentModel(currentAgentId.value, savedModelId)
+          if (model) {
+            currentModelId.value = savedModelId
+            currentModelName.value = model.name
+          } else {
+            const { modelId, modelName } = agentsApi.syncModelFromAgent(currentAgentId.value)
+            currentModelId.value = modelId
+            currentModelName.value = modelName
+          }
+        } else {
+          const { modelId, modelName } = agentsApi.syncModelFromAgent(currentAgentId.value)
+          currentModelId.value = modelId
+          currentModelName.value = modelName
+        }
+        // Initialize thinking effort from localStorage pref
+        currentThinkingEffort.value = loadThinkingPref(currentAgentId.value) || ''
       }
     } catch (err) {
       console.error('Failed to create session:', err)
@@ -223,5 +291,10 @@ export function useSessionIdentity() {
     registerSessionActions,
     // Init (for App.vue)
     initSessionFromAPI,
+    // LocalStorage persistence helpers
+    saveModelPref,
+    saveThinkingPref,
+    loadModelPref,
+    loadThinkingPref,
   }
 }

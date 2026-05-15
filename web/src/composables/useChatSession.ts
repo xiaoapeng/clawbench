@@ -64,21 +64,41 @@ export function useChatSession(options: UseChatSessionOptions) {
     currentModelName.value = modelName
   }
 
-  // Helper: sync model state from server data, preferring the persisted modelId
+  // Helper: sync model state from server data, preferring persisted modelId
   // over the agent default. Falls back to agent default when server has no model.
+  // Also checks localStorage for a previously saved preference.
   function syncModelFromData(agentId: string, modelIdFromServer: string) {
     if (modelIdFromServer) {
+      // Server has a model — use it (it was explicitly chosen for this session)
       currentModelId.value = modelIdFromServer
       const model = getAgentModel(agentId, modelIdFromServer)
       currentModelName.value = model?.name || modelIdFromServer
     } else {
-      syncModelFromAgentLocal(agentId)
+      // No server model — check localStorage for saved preference
+      const savedModelId = identity.loadModelPref(agentId)
+      if (savedModelId) {
+        const model = getAgentModel(agentId, savedModelId)
+        if (model) {
+          currentModelId.value = savedModelId
+          currentModelName.value = model.name
+        } else {
+          // Saved model no longer available — clear stale pref and use default
+          syncModelFromAgentLocal(agentId)
+        }
+      } else {
+        syncModelFromAgentLocal(agentId)
+      }
     }
   }
 
   // Helper: sync thinking effort from server data
+  // Falls back to localStorage for a previously saved preference.
   function syncThinkingEffortFromData(thinkingEffortFromServer: string) {
-    currentThinkingEffort.value = thinkingEffortFromServer || ''
+    if (thinkingEffortFromServer) {
+      currentThinkingEffort.value = thinkingEffortFromServer
+    } else {
+      currentThinkingEffort.value = identity.loadThinkingPref(currentAgentId.value) || ''
+    }
   }
 
   // Switching state — true while a session switch is in progress (distinct from
@@ -292,7 +312,8 @@ export function useChatSession(options: UseChatSessionOptions) {
       currentSessionTitle.value = data.title || ''
       currentBackend.value = data.backend || ''
       currentAgentId.value = data.agentId || agentId || ''
-      syncModelFromAgentLocal(currentAgentId.value)
+      syncModelFromData(currentAgentId.value, '')
+      currentThinkingEffort.value = identity.loadThinkingPref(currentAgentId.value) || ''
       messages.value = []
       totalMessages.value = 0
       lastMessageSnapshot = ''  // New session — no messages yet

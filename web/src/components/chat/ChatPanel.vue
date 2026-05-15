@@ -422,6 +422,7 @@ async function handleShowAgentSelector() {
 function handleSwitchModel(model) {
   identity.currentModelId.value = model.id
   identity.currentModelName.value = model.name
+  identity.saveModelPref(identity.currentAgentId.value, model.id)
 }
 
 async function sendMessage(text, extraFilePaths) {
