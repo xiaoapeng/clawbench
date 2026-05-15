@@ -141,9 +141,16 @@ func ServeFileDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if info.IsDir() {
-		os.RemoveAll(absPath)
+		watchAbs, _ := filepath.Abs(model.WatchDir)
+		if err := safeRemoveAll(absPath, watchAbs); err != nil {
+			model.WriteError(w, model.Internal(fmt.Errorf("delete failed: %w", err)))
+			return
+		}
 	} else {
-		os.Remove(absPath)
+		if err := os.Remove(absPath); err != nil {
+			model.WriteError(w, model.Internal(fmt.Errorf("delete failed: %w", err)))
+			return
+		}
 	}
 
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
@@ -204,9 +211,15 @@ func ServeFileBatchDelete(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		if info.IsDir() {
-			os.RemoveAll(absPath)
+			if err := safeRemoveAll(absPath, watchAbs); err != nil {
+				errs = append(errs, p+": delete failed: "+err.Error())
+				continue
+			}
 		} else {
-			os.Remove(absPath)
+			if err := os.Remove(absPath); err != nil {
+				errs = append(errs, p+": delete failed: "+err.Error())
+				continue
+			}
 		}
 		deleted++
 	}
@@ -428,7 +441,8 @@ func ServeFileCopy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if srcInfo.IsDir() {
-		err = copyDir(srcAbsPath, destAbsPath)
+		watchAbs, _ := filepath.Abs(model.WatchDir)
+		err = copyDir(srcAbsPath, destAbsPath, watchAbs)
 	} else {
 		err = copyFile(srcAbsPath, destAbsPath)
 	}
@@ -460,7 +474,8 @@ func copyFile(src, dst string) error {
 }
 
 // copyDir copies a directory recursively from src to dst.
-func copyDir(src, dst string) error {
+// Symlinks whose targets escape watchBase are skipped to prevent data exfiltration.
+func copyDir(src, dst, watchBase string) error {
 	srcInfo, err := os.Stat(src)
 	if err != nil {
 		return err
@@ -479,14 +494,93 @@ func copyDir(src, dst string) error {
 		srcPath := filepath.Join(src, entry.Name())
 		dstPath := filepath.Join(dst, entry.Name())
 
+		// Skip symlinks that escape watchBase (prevent data exfiltration via symlink)
+		if entry.Type()&os.ModeSymlink != 0 {
+			target, linkErr := filepath.EvalSymlinks(srcPath)
+			if linkErr != nil || !isPathUnderBase(target, watchBase) {
+				slog.Warn("copyDir: skip symlink escaping watchDir", "path", srcPath)
+				continue
+			}
+			// Symlink target is within watchDir — copy the actual file/directory it points to
+			targetInfo, statErr := os.Stat(srcPath)
+			if statErr != nil {
+				continue
+			}
+			if targetInfo.IsDir() {
+				if err := copyDir(srcPath, dstPath, watchBase); err != nil {
+					return err
+				}
+			} else {
+				if err := copyFile(srcPath, dstPath); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+
 		if entry.IsDir() {
-			if err := copyDir(srcPath, dstPath); err != nil {
+			if err := copyDir(srcPath, dstPath, watchBase); err != nil {
 				return err
 			}
 		} else {
 			if err := copyFile(srcPath, dstPath); err != nil {
 				return err
 			}
+		}
+	}
+	return nil
+}
+
+// safeRemoveAll removes a directory tree without following symlinks that point
+// outside watchBase. This prevents os.RemoveAll from traversing symlinks and
+// deleting files outside the project directory (ISS-048).
+func safeRemoveAll(dir, watchBase string) error {
+	// Walk the tree and remove entries bottom-up, skipping symlink targets
+	// that escape watchBase. We use a two-pass approach:
+	// 1. Walk to collect paths and check symlinks
+	// 2. Remove entries from deepest to shallowest
+	var paths []string
+
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		}
+
+		// Check if this entry is a symlink pointing outside watchBase
+		if info.Mode()&os.ModeSymlink != 0 {
+			target, linkErr := filepath.EvalSymlinks(path)
+			if linkErr == nil && !isPathUnderBase(target, watchBase) {
+				// Symlink escapes watchDir — remove just the symlink, don't follow it
+				slog.Warn("safeRemoveAll: symlink escapes watchDir, removing symlink only", "path", path, "target", target)
+				os.Remove(path)
+				if info.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+		}
+
+		paths = append(paths, path)
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	// Remove paths from deepest to shallowest (bottom-up)
+	for i := len(paths) - 1; i >= 0; i-- {
+		p := paths[i]
+		info, statErr := os.Lstat(p)
+		if statErr != nil {
+			continue // already gone
+		}
+		if info.IsDir() {
+			os.Remove(p) // directory should be empty now
+		} else {
+			os.Remove(p)
 		}
 	}
 	return nil

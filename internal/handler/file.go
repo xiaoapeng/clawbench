@@ -266,7 +266,7 @@ func ServeLocalFile(w http.ResponseWriter, r *http.Request) {
 
 	// If ?download=1 is present, force download with Content-Disposition header
 	if r.URL.Query().Get("download") == "1" {
-		fileName := filepath.Base(absPath)
+		fileName := sanitizeArchiveName(filepath.Base(absPath))
 		w.Header().Set("Content-Disposition", "attachment; filename=\""+fileName+"\"")
 	}
 
