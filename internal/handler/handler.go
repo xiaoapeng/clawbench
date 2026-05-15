@@ -233,6 +233,7 @@ func RegisterRoutes(mux *http.ServeMux) {
 	register("/api/upload/file", middleware.Auth(UploadFile))
 	register("/api/dir", middleware.Auth(ListDir))
 	register("/api/files", middleware.Auth(ListFiles))
+	register("/api/file/thumb", middleware.Auth(FileThumb))
 	register("/api/file/", middleware.Auth(GetFile))
 	register("/api/git/project-history", middleware.Auth(ServeGitProjectHistory))
 	register("/api/git/init", middleware.Auth(ServeGitInit))

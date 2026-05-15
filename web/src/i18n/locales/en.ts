@@ -376,6 +376,8 @@ export default {
     alreadyInDir: 'Already in current directory',
     emptyDir: 'This directory is empty.',
     noFiles: 'No supported files found.',
+    viewList: 'List view',
+    viewGrid: 'Grid view',
     context: {
       copy: 'Copy',
       cut: 'Cut',

@@ -376,6 +376,8 @@ export default {
     alreadyInDir: '已在当前文件目录',
     emptyDir: '此目录为空',
     noFiles: '未找到支持的文件',
+    viewList: '列表视图',
+    viewGrid: '图标视图',
     context: {
       copy: '复制',
       cut: '剪切',

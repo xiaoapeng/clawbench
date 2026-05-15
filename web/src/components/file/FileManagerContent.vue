@@ -42,6 +42,10 @@
         <button class="toolbar-btn" :class="{ active: multiSelect.active }" @click="multiSelect.active ? exitMultiSelect() : enterMultiSelect()" :title="multiSelect.active ? t('file.multiSelect.exit') : t('file.multiSelect.enter')">
           <CheckSquare :size="16" />
         </button>
+        <button class="toolbar-btn" :class="{ active: viewMode === 'grid' }" @click="viewMode = viewMode === 'grid' ? 'list' : 'grid'" :title="viewMode === 'grid' ? t('file.viewList') : t('file.viewGrid')">
+          <LayoutGrid v-if="viewMode === 'list'" :size="16" />
+          <LayoutList v-else :size="16" />
+        </button>
         <SearchInput v-model="searchQuery" :placeholder="t('search.defaultPlaceholder')" @dblclick="searchQuery = ''" />
       </div>
       <!-- Multi-select info bar -->
@@ -58,8 +62,8 @@
     </div>
 
     <!-- File list -->
-    <div class="file-list" id="fileList"
-      @click="handleFileClick"
+    <div v-if="viewMode === 'list'" class="file-list" id="fileList"
+      @click="handleItemClick"
       @contextmenu.prevent="showCtx($event, null)"
       @touchstart="onContainerTouchStart"
       @touchmove="onContainerTouchMove"
@@ -114,13 +118,62 @@
           <div v-if="multiSelect.active" class="ms-check" :class="{ checked: multiSelect.selected.has(itemPath(entry.name)) }">
             <Check v-if="multiSelect.selected.has(itemPath(entry.name))" :size="12" />
           </div>
-          <FileImage v-if="isImage(entry)" class="file-icon" :size="16" color="#a855f7" />
+          <img v-if="isThumbLoaded(entry)" class="file-thumb" :src="thumbUrl(entry)" :alt="entry.name" loading="lazy" @error="onThumbError(entry)" />
+          <FileImage v-else-if="isImage(entry)" class="file-icon" :size="16" color="#a855f7" />
           <FileMusic v-else-if="isAudio(entry)" class="file-icon" :size="16" color="#22c55e" />
           <FileText v-else class="file-icon" :size="16" :color="getFileType(entry.name).color" />
           <span class="file-name">{{ entry.name }}</span>
           <span class="file-meta">{{ formatSize(entry.size) }} · {{ formatDate(entry.modified) }}</span>
         </div>
       </template>
+      <div v-if="hasMoreEntries" class="truncate-hint">
+        {{ t('file.truncateHint', { max: MAX_VISIBLE_ENTRIES, total: filteredEntries.length }) }}
+      </div>
+      </template>
+    </div>
+
+    <!-- File grid -->
+    <div v-else class="file-grid" id="fileList"
+      @click="handleItemClick"
+      @contextmenu.prevent="showCtx($event, null)"
+      @touchstart="onContainerTouchStart"
+      @touchmove="onContainerTouchMove"
+      @touchend="onContainerTouchEnd"
+      @touchcancel="onContainerTouchEnd"
+    >
+      <div v-if="dirLoading" class="dir-loading-overlay">
+        <Loader :size="24" class="dir-loading-spinner" />
+        <span>{{ t('common.loading') }}</span>
+      </div>
+      <template v-else>
+      <div v-if="filteredEntries.length === 0" class="empty-state">
+        <Folder :size="48" />
+        <p>{{ currentDir ? t('file.emptyDir') : t('file.noFiles') }}</p>
+      </div>
+
+      <div v-for="entry in visibleEntries" :key="entry.name"
+        class="grid-item"
+        :class="{
+          'grid-dir': entry.type === 'dir',
+          'grid-active': !multiSelect.active && entry.type !== 'dir' && currentFile?.path === itemPath(entry.name),
+          'ms-selected': multiSelect.active && multiSelect.selected.has(itemPath(entry.name))
+        }"
+        :data-action="entry.type === 'dir' ? 'dir' : 'file'"
+        :data-path="itemPath(entry.name)"
+        @contextmenu.prevent="showCtx($event, entry)"
+        @touchstart="onItemTouchStart($event, entry)"
+        @touchmove="onItemTouchMove"
+        @touchend="onItemTouchEnd"
+        @touchcancel="onItemTouchEnd">
+        <div v-if="multiSelect.active" class="grid-ms-check" :class="{ checked: multiSelect.selected.has(itemPath(entry.name)) }">
+          <Check v-if="multiSelect.selected.has(itemPath(entry.name))" :size="12" />
+        </div>
+        <div class="grid-thumb">
+          <img v-if="isThumbLoaded(entry)" :src="thumbUrl(entry)" :alt="entry.name" loading="lazy" @error="onThumbError(entry)" />
+          <component v-else :is="entryIcon(entry)" class="grid-icon" :size="32" :color="entryIconColor(entry)" />
+        </div>
+        <div class="grid-name">{{ entry.name }}</div>
+      </div>
       <div v-if="hasMoreEntries" class="truncate-hint">
         {{ t('file.truncateHint', { max: MAX_VISIBLE_ENTRIES, total: filteredEntries.length }) }}
       </div>
@@ -206,7 +259,7 @@
 <script setup>
 import { ref, computed, reactive, inject, nextTick, onMounted, onUnmounted, Teleport, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Folder, ArrowDownAz, ArrowUpZa, ChevronDown, ChevronUp, Clock, FileText, Eye, EyeOff, ArrowRightLeft, Loader, FileImage, FileMusic, ChevronRight, Copy, Scissors, ClipboardPaste, FilePlus, FolderPlus, Pencil, Download, Trash2, FolderOpen, RotateCw, Terminal as TerminalIcon, CheckSquare, Check, X } from 'lucide-vue-next'
+import { Folder, ArrowDownAz, ArrowUpZa, ChevronDown, ChevronUp, Clock, FileText, Eye, EyeOff, ArrowRightLeft, Loader, FileImage, FileMusic, ChevronRight, Copy, Scissors, ClipboardPaste, FilePlus, FolderPlus, Pencil, Download, Trash2, FolderOpen, RotateCw, Terminal as TerminalIcon, CheckSquare, Check, X, LayoutList, LayoutGrid, FileVideo } from 'lucide-vue-next'
 import { getFileType } from '@/utils/fileType.ts'
 import { dirName } from '@/utils/path.ts'
 import { store } from '@/stores/app.ts'
@@ -235,6 +288,54 @@ const emit = defineEmits(['navigateDir', 'selectFile', 'toggleSort', 'toggleHidd
 
 const searchQuery = ref('')
 const sortMenuOpen = ref(false)
+
+// ── View mode (list / grid) ──
+const VIEW_MODE_KEY = 'clawbench-file-view'
+const viewMode = ref(localStorage.getItem(VIEW_MODE_KEY) === 'grid' ? 'grid' : 'list')
+watch(viewMode, v => localStorage.setItem(VIEW_MODE_KEY, v))
+
+// ── Thumbnail loading errors ──
+const thumbErrors = reactive(new Set())
+function thumbUrl(entry) {
+    const path = itemPath(entry.name)
+    return `/api/file/thumb?path=${encodeURIComponent(path)}&w=200`
+}
+function onThumbError(entry) {
+    thumbErrors.add(entry.name)
+}
+// Extensions that the backend thumbnail API can decode (Go stdlib: png, jpg, gif, bmp, tiff).
+// SVG, WebP, AVIF, PDF are excluded — they'll cause a 404 round-trip if attempted.
+const THUMBABLE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff', '.tif'])
+
+function isThumbable(entry) {
+    if (entry.type !== 'image' && entry.type !== 'file') return false
+    const name = entry.name.toLowerCase()
+    for (const ext of THUMBABLE_EXTS) {
+        if (name.endsWith(ext)) return true
+    }
+    return false
+}
+
+function isThumbLoaded(entry) {
+    return isThumbable(entry) && !thumbErrors.has(entry.name)
+}
+function entryIcon(entry) {
+    if (entry.type === 'dir') return Folder
+    if (isImage(entry)) return FileImage
+    if (isAudio(entry)) return FileMusic
+    if (isVideo(entry)) return FileVideo
+    return FileText
+}
+function entryIconColor(entry) {
+    if (entry.type === 'dir') return undefined
+    if (isImage(entry)) return '#a855f7'
+    if (isAudio(entry)) return '#22c55e'
+    if (isVideo(entry)) return '#ef4444'
+    return getFileType(entry.name).color
+}
+function isVideo(entry) {
+    return getFileType(entry.name).isVideo
+}
 
 function onSortSelect(field) {
   emit('toggleSort', field)
@@ -314,6 +415,7 @@ function toggleSelectAll() {
 watch(() => props.currentDir, () => {
     searchQuery.value = ''
     if (multiSelect.active) exitMultiSelect()
+    thumbErrors.clear()
 })
 
 const ctxMenu = reactive({ visible: false, x: 0, y: 0, entry: null })
@@ -325,7 +427,7 @@ let containerPressPos = { x: 0, y: 0 }
 
 function onContainerTouchStart(e) {
     // Only trigger if touch started on empty area (not on a file-item)
-    if (e.target.closest('.file-item')) return
+    if (e.target.closest('.file-item, .grid-item')) return
     containerPressMoved = false
     const touch = e.touches[0]
     containerPressPos = { x: touch.clientX, y: touch.clientY }
@@ -553,9 +655,9 @@ const filteredEntries = computed(() => {
 const hasMoreEntries = computed(() => filteredEntries.value.length > MAX_VISIBLE_ENTRIES)
 const visibleEntries = computed(() => filteredEntries.value.slice(0, MAX_VISIBLE_ENTRIES))
 
-function handleFileClick(e) {
+function handleItemClick(e) {
     if (props.dirLoading) return
-    const item = e.target.closest('.file-item')
+    const item = e.target.closest('.file-item, .grid-item')
     if (!item) return
     const action = item.dataset.action
     const path = item.dataset.path
@@ -1042,6 +1144,15 @@ function doDelete() {
     height: 16px;
 }
 
+.file-thumb {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    object-fit: cover;
+    background: var(--bg-tertiary, #f5f5f5);
+}
+
 .file-name {
     flex: 1;
     overflow-x: auto;
@@ -1108,6 +1219,117 @@ function doDelete() {
 @keyframes dir-spin {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
+}
+
+/* ── File Grid ── */
+.file-grid {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+    gap: 8px;
+    align-content: start;
+}
+
+.grid-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    border-radius: 8px;
+    padding: 6px;
+    transition: background 0.15s, opacity 0.15s;
+    position: relative;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.grid-item:hover {
+    background: var(--bg-tertiary, #f0f0f0);
+}
+
+.grid-item.grid-active {
+    background: color-mix(in srgb, var(--accent-color, #4a90d9) 12%, transparent);
+}
+
+.grid-item.ms-selected {
+    background: color-mix(in srgb, var(--accent-color, #4a90d9) 8%, transparent);
+}
+
+.grid-thumb {
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-tertiary, #f5f5f5);
+}
+
+.grid-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.grid-item.grid-dir .grid-thumb {
+    background: color-mix(in srgb, var(--accent-color, #4a90d9) 8%, var(--bg-tertiary, #f5f5f5));
+}
+
+.grid-icon {
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+}
+
+.grid-name {
+    margin-top: 4px;
+    font-size: 12px;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    width: 100%;
+    color: var(--text-secondary, #666);
+}
+
+.grid-item.grid-dir .grid-name {
+    color: var(--text-primary, #1a1a1a);
+    font-weight: 500;
+}
+
+/* Grid multi-select check */
+.grid-ms-check {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid var(--border-color, #d0d0d0);
+    background: var(--bg-primary, #fff);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+    transition: all 0.15s;
+}
+
+.grid-ms-check.checked {
+    background: var(--accent-color, #4a90d9);
+    border-color: var(--accent-color, #4a90d9);
+    color: #fff;
+}
+
+[data-theme="dark"] .grid-thumb {
+    background: var(--bg-secondary, #2a2a2a);
+}
+
+[data-theme="dark"] .grid-item.grid-dir .grid-thumb {
+    background: color-mix(in srgb, var(--accent-color, #4a90d9) 12%, var(--bg-secondary, #2a2a2a));
 }
 
 </style>
