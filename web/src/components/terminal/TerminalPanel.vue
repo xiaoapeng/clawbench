@@ -923,13 +923,13 @@ function openEditDialog() {
 
 .key-group + .key-group {
   position: relative;
-  margin-left: 12px;
+  margin-left: 6px;
 }
 
 .key-group + .key-group::before {
   content: '';
   position: absolute;
-  left: -7px;
+  left: -4px;
   width: 1px;
   height: 16px;
   border-radius: 999px;
@@ -940,15 +940,15 @@ function openEditDialog() {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 31px;
-  height: 29px;
-  padding: 0 7px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 5px;
   border: none;
   border-radius: 8px;
   background: transparent;
   color: var(--toolbar-key-text);
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 700;
   letter-spacing: 0.01em;
   cursor: pointer;
   flex-shrink: 0;
@@ -989,8 +989,8 @@ function openEditDialog() {
 .toolbar-btn.shortcut {
   background: transparent;
   color: var(--toolbar-key-text);
-  font-weight: 700;
-  font-size: 10px;
+  font-weight: 800;
+  font-size: 11px;
 }
 
 .toolbar-btn.shortcut:active {
@@ -1047,9 +1047,10 @@ function openEditDialog() {
 }
 
 .toolbar-btn.btn-symbol {
-  color: var(--toolbar-key-muted);
+  color: var(--toolbar-key-text);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
+  font-size: 15px;
+  font-weight: 700;
 }
 </style>
 
