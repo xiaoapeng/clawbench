@@ -479,7 +479,6 @@ func TestBuildCodexResumeArgs(t *testing.T) {
 	// Resume args must include sandbox_permissions override (equivalent to --dangerously-bypass-approvals-and-sandbox)
 	foundSandbox := false
 	foundModelConfig := false
-	foundProviderConfig := false
 	foundThreadID := false
 	foundPrompt := false
 	for i, arg := range args {
@@ -488,9 +487,6 @@ func TestBuildCodexResumeArgs(t *testing.T) {
 		}
 		if strings.Contains(arg, "model=") {
 			foundModelConfig = true
-		}
-		if arg == "model_provider=minimax" {
-			foundProviderConfig = true
 		}
 		if arg == "019dc744-1f6e-75d0-9877-99c8d2f134da" {
 			foundThreadID = true
@@ -505,8 +501,11 @@ func TestBuildCodexResumeArgs(t *testing.T) {
 	if !foundModelConfig {
 		t.Error("expected -c model= override in resume args")
 	}
-	if !foundProviderConfig {
-		t.Error("expected -c model_provider=minimax in resume args")
+	// model_provider should NOT be hardcoded — let Codex resolve it from its own config (ISS-049)
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "model_provider=") {
+			t.Errorf("unexpected model_provider= in resume args: %q (ISS-049: provider should not be hardcoded)", arg)
+		}
 	}
 	if !foundThreadID {
 		t.Error("expected thread_id in args")

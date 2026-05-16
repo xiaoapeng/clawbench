@@ -402,10 +402,11 @@ func buildCodexResumeArgs(req ChatRequest, threadID string) []string {
 	// to exit without producing a text response.
 	args = append(args, "-c", "sandbox_permissions=[\"disk-full-read-access\",\"disk-full-write-access\"]")
 
-	// Restore model and provider via -c overrides (resume doesn't support -m/--profile)
+	// Restore model via -c override (resume doesn't support -m/--profile).
+	// Do NOT set model_provider — let Codex's own config resolve the provider
+	// from the model name. Hardcoding "minimax" breaks non-MiniMax models (ISS-049).
 	if req.Model != "" {
 		args = append(args, "-c", fmt.Sprintf("model=%q", req.Model))
-		args = append(args, "-c", "model_provider=minimax")
 	}
 
 	// Thinking effort level (e.g., -c model_reasoning_effort=high)
@@ -458,7 +459,13 @@ func (c *CodexBackend) ExecuteStream(ctx context.Context, req ChatRequest) (<-ch
 
 	cmd := exec.CommandContext(ctx, cmdBinary, fullArgs...)
 	cmd.Dir = req.WorkDir
-	cmd.Env = os.Environ() // inherit current environment (includes API keys from .env)
+	// Inject CLAWBENCH_SCHEDULED=1 for anti-recursion (ISS-085):
+	// prevents AI from creating new scheduled tasks during a scheduled execution.
+	if req.ScheduledExecution {
+		cmd.Env = append(os.Environ(), "CLAWBENCH_SCHEDULED=1")
+	} else {
+		cmd.Env = os.Environ() // inherit current environment (includes API keys from .env)
+	}
 
 	isResume := req.Resume && req.SessionID != ""
 

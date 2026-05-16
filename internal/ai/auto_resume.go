@@ -131,6 +131,8 @@ phase1Done:
 		Model:                 origReq.Model,
 		Command:               origReq.Command,
 		AgentID:               origReq.AgentID,
+		ThinkingEffort:        origReq.ThinkingEffort,
+		ScheduledExecution:    origReq.ScheduledExecution,
 		Resume:                true,
 		AssistantMessageCount: origReq.AssistantMessageCount,
 	}
