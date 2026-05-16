@@ -20,6 +20,7 @@ import (
 	"clawbench/internal/cli"
 	"clawbench/internal/handler"
 	"clawbench/internal/model"
+	"clawbench/internal/platform"
 	"clawbench/internal/rag"
 	"clawbench/internal/service"
 	"clawbench/internal/ssh"
@@ -393,6 +394,12 @@ func main() {
 			slog.Info("loaded .env file", slog.String("path", dotenvPath))
 		}
 	}
+
+	// Ensure $SHELL reflects the user's login shell (from /etc/passwd).
+	// On Debian/Ubuntu, $SHELL may be /bin/sh (dash) when started from
+	// non-login contexts (systemd, cron, nohup), but AI CLI tools read
+	// $SHELL to decide which shell their "Bash tool" uses.
+	platform.SetLoginShell()
 
 	// Print auto-generated password info (ISS-003d: don't log plaintext password)
 	if autoPassword != "" {
