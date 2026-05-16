@@ -126,6 +126,7 @@ cd clawbench
 | `tts.engine` | edge | Edge TTS, free and unlimited |
 | `tts.summarize_backend` | simple | Plain text cleanup, zero latency |
 | `tts.speed` | 1.0 | Normal speech rate |
+| `tts.max_cache_files` | 100 | Max cached TTS audio files; oldest auto-deleted when exceeded (-1=unlimited) |
 | `tts.inline_code_max_len` | 100 | Max characters (runes) to keep for inline code; exceeded content is removed |
 | `tts.max_summarize_runes` | 10000 | Max input characters for summarization; tail is truncated if exceeded |
 | `tasks.summarize_backend` | (empty) | Task execution summary backend, empty = disabled; same values as `tts.summarize_backend` |
@@ -332,7 +333,7 @@ config/agents/
 └── handyman.yaml      # Handyman — scheduled tasks, simple coding, daily operations
 ```
 
-- **Configurable Agents**: Each agent is defined via YAML with dedicated system prompt, model, and backend — no code changes needed
+- **Configurable Agents**: Each agent is defined via YAML with dedicated system prompt, model, backend, and thinking effort levels — no code changes needed
 - **Auto-Discovery**: On first startup, if `config/agents/` is empty, the system auto-scans for installed AI CLIs (claude, codebuddy, opencode, gemini, codex, qodercli, vecli, deepseek, pi) and generates minimal YAML configs for each detected backend. One-time only; existing files are never overwritten
 - **Shared Rules**: `config/rules.md` defines common behaviors and mandatory rules for all agents (scheduled task CLI, RAG search, media handling), avoiding duplicate configuration
 - **Template Placeholder**: `{{AVAILABLE_AGENTS}}` is auto-replaced with the available agent list, facilitating inter-agent dispatching
@@ -358,6 +359,9 @@ clawbench/
 │   │   ├── rag_api.go           # RAG search API
 │   │   ├── file.go              # File reading
 │   │   ├── file_ops.go          # File operations
+│   │   ├── file_thumb.go        # Image thumbnail generation (square canvas + dominant-color padding)
+│   │   ├── file_archive.go      # File archive download (zip, symlink traversal protection)
+│   │   ├── file_watch.go        # File change SSE notifications
 │   │   ├── upload.go            # File upload
 │   │   ├── git.go               # Git operations
 │   │   ├── project.go           # Project management

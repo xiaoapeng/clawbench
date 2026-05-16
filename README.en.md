@@ -157,7 +157,9 @@ Each `.yaml.example` file contains complete configuration fields and description
 
 ### 📁 File Browser
 - Recursive directory browsing with 120+ file extension support
-- Search filtering, sorting (name/time/extension)
+- Search filtering, sorting (name/time/extension/size)
+- **List/Grid View Toggle**: Grid view shows image thumbnails for visual file browsing
+- **Image Thumbnails**: Backend generates square thumbnails with dominant-color padding for quick preview
 - Context menu: rename, delete, copy, cut, paste, new file/folder, download, open as project
 - **Multi-Select Operations**: Toggle multi-select mode from toolbar, batch copy/cut/delete; mobile long-press triggers context menu
 - File upload (image support, configurable size and count)
@@ -166,6 +168,7 @@ Each `.yaml.example` file contains complete configuration fields and description
 ### 🎨 Code Preview
 - Syntax highlighting, sticky line numbers, word wrap toggle
 - Double-click to copy code line content (flash animation feedback)
+- **File Change Flash Highlight**: When files are modified externally, deleted characters flash red and new characters flash blue for quick change identification
 - **Quote & Ask**: Select a code snippet, one-click ask AI, auto-attaches file path and line number
 - Swipe gestures: swipe left/right to switch files
 
@@ -180,6 +183,8 @@ Each `.yaml.example` file contains complete configuration fields and description
 - **Streaming Response**: Real-time SSE push, thinking process and tool calls fully visible
 - **Multi-Agent Support**: General assistant, coding expert, handyman, etc. — YAML config, plug-and-play
 - **AI Backend Switching**: CodeBuddy, Claude Code, OpenCode, Gemini CLI, Codex, Qoder CLI, VeCLI, DeepSeek TUI, Pi — session-level isolation
+- **Thinking Effort Levels**: Per-agent thinking depth selection (Auto / Low / Medium / High), supported by 5 backends (Claude/CodeBuddy/OpenCode/Codex/Pi), selection auto-persisted
+- **Model Selection Persistence**: Model choice and thinking effort per agent auto-saved to localStorage, restored on reload/session switch
 - **Scheduled Tasks**: AI creates Cron schedules via CLI subcommands, executes automatically; independent tab with 4-level breadcrumb navigation; task cards embedded in chat messages; frequency presets (hourly/daily/weekly/monthly) + custom cron expressions; per-execution read tracking + TTS playback; execution auto-summary + completion notification (sound/haptic/toast)
 - **Multi-Session Management**: Create, switch, delete independent sessions, swipe to switch
 - **Image Upload**: Upload images for AI conversation (multimodal)
@@ -245,7 +250,7 @@ Each `.yaml.example` file contains complete configuration fields and description
 - Chinese / English bilingual UI, auto-detect system language
 
 ### 📱 Android App
-- Native bridge integration: auto-login, file download, port forwarding management
+- Native bridge integration: auto-login, file download (including POST archive downloads), port forwarding management
 - SSH password management, server dialog
 - Terminal volume key mapping: volume keys act as arrow keys when terminal is open
 

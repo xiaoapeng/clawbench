@@ -126,6 +126,7 @@ cd clawbench
 | `tts.engine` | edge | Edge TTS 免费无限制 |
 | `tts.summarize_backend` | simple | 纯文本清洗，零延迟 |
 | `tts.speed` | 1.0 | 正常语速 |
+| `tts.max_cache_files` | 100 | TTS 语音缓存文件最大数量；超出时自动删除最旧的（-1=不限） |
 | `tts.inline_code_max_len` | 100 | 行内代码保留最大字符数（rune），超出则删除 |
 | `tts.max_summarize_runes` | 10000 | 总结输入最大字符数，超出截取尾部 |
 | `tasks.summarize_backend` | (空) | 任务执行摘要后端，空则禁用；可用值同 `tts.summarize_backend` |
@@ -332,7 +333,7 @@ config/agents/
 └── handyman.yaml      # 勤杂工 — 定时任务、简单编码、日常操作
 ```
 
-- **Agent 配置化**：每个智能体通过 YAML 定义专属 system prompt、模型、后端，无需改代码
+- **Agent 配置化**：每个智能体通过 YAML 定义专属 system prompt、模型、后端、思考档位，无需改代码
 - **自动发现**：首次启动时若 `config/agents/` 为空，自动扫描已安装的 AI CLI（claude、codebuddy、opencode、gemini、codex、qodercli、vecli、deepseek、pi），为每个检测到的后端生成最小化 YAML 配置。仅执行一次，不会覆盖已有文件
 - **共享提示词**：`config/rules.md` 定义所有智能体的公共行为和强制规则（定时任务 CLI、RAG 搜索、媒体处理），避免重复配置
 - **模板占位符**：`{{AVAILABLE_AGENTS}}` 自动替换为可用智能体列表，方便智能体间互相调度
@@ -358,6 +359,9 @@ clawbench/
 │   │   ├── rag_api.go           # RAG 搜索 API
 │   │   ├── file.go              # 文件读取
 │   │   ├── file_ops.go          # 文件操作
+│   │   ├── file_thumb.go        # 图片缩略图生成（方形画布 + 主色调填充）
+│   │   ├── file_archive.go      # 文件打包下载（zip，防符号链接穿越）
+│   │   ├── file_watch.go        # 文件变更 SSE 推送
 │   │   ├── upload.go            # 文件上传
 │   │   ├── git.go               # Git 操作
 │   │   ├── project.go           # 项目管理
