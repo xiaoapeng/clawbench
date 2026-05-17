@@ -117,12 +117,22 @@ describe('findLastBlockOfType (coalescing logic)', () => {
 })
 
 describe('forceCleanupStreamingState', () => {
-  it('removes streaming flag from assistant message', () => {
+  it('removes empty streaming assistant message (no content, no blocks)', () => {
     const messages = [
       { role: 'assistant', content: '', blocks: [], streaming: true },
     ]
     const onRenderNeeded = vi.fn()
     forceCleanupStreamingState(messages, { onRenderNeeded })
+    expect(messages).toHaveLength(0)
+  })
+
+  it('keeps streaming assistant message with content', () => {
+    const messages = [
+      { role: 'assistant', content: 'hello', blocks: [], streaming: true },
+    ]
+    const onRenderNeeded = vi.fn()
+    forceCleanupStreamingState(messages, { onRenderNeeded })
+    expect(messages).toHaveLength(1)
     expect(messages[0].streaming).toBeUndefined()
   })
 

@@ -193,8 +193,12 @@ export function useChatStream(options: UseChatStreamOptions) {
       } catch (err) {
         console.error('Polling error:', err)
         stopPolling()
+        // Remove empty assistant placeholder if it still exists
+        const emptyIdx = messages.value.findIndex((m: any) => m.role === 'assistant' && !m.content && (!m.blocks || m.blocks.length === 0))
+        if (emptyIdx !== -1) messages.value.splice(emptyIdx, 1)
         onToast(gt('chat.stream.connectionFailed'), { icon: '⚠️' })
         loading.value = false
+        onRenderNeeded(true)
         onStreamEnd?.('error')
       }
     }, 2000)

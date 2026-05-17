@@ -134,11 +134,30 @@ describe('findLastBlockOfType', () => {
 })
 
 describe('forceCleanupStreamingState', () => {
-  it('removes streaming flag', () => {
+  it('removes empty streaming message from array (no content, no blocks)', () => {
     const messages = [
       { role: 'assistant', content: '', blocks: [], streaming: true },
     ]
     forceCleanupStreamingState(messages, { onRenderNeeded: vi.fn() })
+    expect(messages).toHaveLength(0)
+  })
+
+  it('keeps streaming message with content', () => {
+    const messages = [
+      { role: 'assistant', content: 'hello', blocks: [], streaming: true },
+    ]
+    forceCleanupStreamingState(messages, { onRenderNeeded: vi.fn() })
+    expect(messages).toHaveLength(1)
+    expect(messages[0].streaming).toBeUndefined()
+    expect(messages[0].content).toBe('hello')
+  })
+
+  it('keeps streaming message with blocks', () => {
+    const messages = [
+      { role: 'assistant', content: '', blocks: [{ type: 'text', text: 'hello' }], streaming: true },
+    ]
+    forceCleanupStreamingState(messages, { onRenderNeeded: vi.fn() })
+    expect(messages).toHaveLength(1)
     expect(messages[0].streaming).toBeUndefined()
   })
 
@@ -179,7 +198,7 @@ describe('forceCleanupStreamingState', () => {
 
   it('calls onExtractScheduledTasks when streaming message found', () => {
     const messages = [
-      { role: 'assistant', content: '', blocks: [], streaming: true },
+      { role: 'assistant', content: 'has content', blocks: [], streaming: true },
     ]
     const onExtractScheduledTasks = vi.fn()
     forceCleanupStreamingState(messages, { onRenderNeeded: vi.fn(), onExtractScheduledTasks })
@@ -219,20 +238,28 @@ describe('forceCleanupStreamingState', () => {
     expect(messages[1].blocks[0].done).toBe(true)
   })
 
-  it('handles streaming message with empty blocks', () => {
+  it('removes empty streaming message (no content, empty blocks)', () => {
     const messages = [
       { role: 'assistant', content: '', blocks: [], streaming: true },
     ]
     forceCleanupStreamingState(messages, { onRenderNeeded: vi.fn() })
-    expect(messages[0].streaming).toBeUndefined()
-    expect(messages[0].blocks).toEqual([])
+    expect(messages).toHaveLength(0)
   })
 
-  it('handles streaming message with no blocks property', () => {
+  it('keeps streaming message with no blocks property but has content', () => {
     const messages = [
       { role: 'assistant', content: 'text only', streaming: true },
     ]
     forceCleanupStreamingState(messages, { onRenderNeeded: vi.fn() })
+    expect(messages).toHaveLength(1)
     expect(messages[0].streaming).toBeUndefined()
+  })
+
+  it('removes streaming message with no blocks property and no content', () => {
+    const messages = [
+      { role: 'assistant', content: '', streaming: true },
+    ]
+    forceCleanupStreamingState(messages, { onRenderNeeded: vi.fn() })
+    expect(messages).toHaveLength(0)
   })
 })

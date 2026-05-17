@@ -498,7 +498,6 @@ async function sendMessageNow(text, filePaths, files) {
     } catch (err) {
         stream.stopPolling()
         stream.disconnectStream()
-        messages.value.push({ role: 'assistant', content: t('chat.sendError', { error: err.message }), file_path: '' })
         loading.value = false
         toast.show(t('toast.sendFailed'), { icon: '⚠️', type: 'error' })
         // Clear session ID on error to prevent using invalid session

@@ -49,6 +49,15 @@ export function forceCleanupStreamingState(
     // Extract scheduled tasks from the just-finished message
     // (this path doesn't go through loadHistory, so we must call it explicitly)
     callbacks.onExtractScheduledTasks?.(messages)
+
+    // If the streaming message received no content at all (e.g. network lost
+    // before any SSE event arrived), remove it entirely so the user doesn't
+    // see an empty AI reply bubble.
+    const hasContent = streamingMsg.content || (streamingMsg.blocks && streamingMsg.blocks.length > 0)
+    if (!hasContent) {
+      const idx = messages.indexOf(streamingMsg)
+      if (idx !== -1) messages.splice(idx, 1)
+    }
   }
   callbacks.onRenderNeeded(true)
   return streamingMsg
