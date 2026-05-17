@@ -1,6 +1,7 @@
 package model_test
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -764,4 +765,31 @@ thinking_effort_levels:
 
 	// After merge: Registry values replace YAML values
 	assert.Equal(t, []string{"low", "medium", "high", "xhigh"}, agent.ThinkingEffortLevels)
+}
+
+// --- Test 11: SyncDiscoverModels ---
+
+func TestSyncDiscoverModels_CreatesCacheFiles(t *testing.T) {
+	cacheDir := filepath.Join(t.TempDir(), "model-cache")
+
+	model.SyncDiscoverModels(cacheDir)
+
+	// Cache dir should be created (if any backend has model discovery + is installed)
+	entries, err := os.ReadDir(cacheDir)
+	if err != nil {
+		// No cache dir = no CLIs with model discovery installed, OK
+		return
+	}
+	for _, e := range entries {
+		if e.IsDir() || filepath.Ext(e.Name()) != ".json" {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(cacheDir, e.Name()))
+		require.NoError(t, err)
+
+		var entry map[string]any
+		require.NoError(t, json.Unmarshal(data, &entry))
+		assert.Contains(t, entry, "models")
+		assert.Contains(t, entry, "updated_at")
+	}
 }

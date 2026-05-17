@@ -239,6 +239,26 @@ func SyncDiscoverAgents(dir string) map[string]bool {
 	return present
 }
 
+// SyncDiscoverModels runs DiscoverModels for all backends that support it
+// and writes results to the model cache. This is called synchronously
+// on first startup (when cache is empty).
+func SyncDiscoverModels(cacheDir string) {
+	for _, spec := range BackendRegistry {
+		if len(spec.ListModelsCmd) == 0 || spec.ParseModels == nil {
+			continue
+		}
+		models := DiscoverModels(spec)
+		if len(models) == 0 {
+			continue
+		}
+		if err := WriteModelCache(cacheDir, spec.Backend, models); err != nil {
+			slog.Warn("failed to write model cache", "backend", spec.Backend, "error", err)
+		} else {
+			slog.Info("cached discovered models", "backend", spec.Backend, "count", len(models))
+		}
+	}
+}
+
 // --- Model list parsers ---
 
 // MergeDiscoveredData fills models and thinking_effort_levels for loaded agents.
