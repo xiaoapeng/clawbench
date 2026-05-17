@@ -1,6 +1,6 @@
 <template>
   <div class="task-tab" v-show="active">
-    <TaskListPage v-if="currentView === 'list' && !formViewOpen" ref="listPageRef" @create="onCreate" @select="onTaskSelect" />
+    <TaskListPage v-if="currentView === 'list' && !formViewOpen" ref="listPageRef" @create="onCreate" @select="onTaskSelect" @history="onTaskHistoryFromList" />
     <TaskDetailPage v-else-if="currentView === 'settings' && !execDetailOpen && !formViewOpen" :task="selectedTaskData" @edit="onEdit" @deleted="onTaskDeleted" @history="onTaskHistory" />
     <TaskHistoryTab v-else-if="currentView === 'history' && !execDetailOpen && !formViewOpen" :task="selectedTaskData" @open-file="onOpenFile" />
     <TaskExecDetail v-else-if="execDetailOpen && !formViewOpen" :execDetail="selectedExecData" :taskName="selectedTaskData?.name" @close="closeExecDetail" @open-file="onOpenFile" />
@@ -68,6 +68,10 @@ function onTaskSelect(taskId: string) {
 
 function onTaskHistory() {
   navigateToTaskHistory(selectedTaskId.value!)
+}
+
+function onTaskHistoryFromList(taskId: number) {
+  navigateToTaskHistory(taskId)
 }
 </script>
 

@@ -60,7 +60,7 @@ npm test                             # Vitest (all frontend tests)
 
 **State management:** Single `reactive()` store in `stores/app.ts` — no Pinia/Vuex.
 
-**Key composables (chat):** `useChatSession` (CRUD), `useChatStream` (SSE + reconnect + polling fallback), `useChatRender` (block parsing + coalescing), `useAutoSpeech` (TTS), `useQuickSend` (SQLite CRUD), `useReconnect` (generic exponential backoff), `useFileRefresh` (file change detection + flash highlight), `useSessionIdentity` (model/thinking effort persistence).
+**Key composables (chat):** `useChatSession` (CRUD), `useChatStream` (SSE + reconnect + polling fallback), `useChatRender` (block parsing + coalescing), `useAutoSpeech` (TTS), `useQuickSend` (SQLite CRUD), `useReconnect` (generic exponential backoff), `useFileRefresh` (file change detection + flash highlight), `useSessionIdentity` (model/thinking effort persistence), `useLocalhostAnnotation` (detect localhost URLs in chat, append port-forward + WebView open buttons; App mode only).
 
 **Key composables (terminal):** `useTerminalSession` (WebSocket lifecycle), `useTerminalKeys` (modifier state machine), `useTerminalGestures` (touch swipe/pinch), `useTerminalViewport` (xterm.js + soft keyboard avoidance).
 

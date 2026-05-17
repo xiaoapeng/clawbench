@@ -48,6 +48,14 @@
               <span>{{ t('task.nextRun', { time: formatDateTime(task.nextRunAt) }) }}</span>
             </div>
           </div>
+          <button
+            v-if="task.runCount > 0 || task.runningCount > 0"
+            class="task-item-history-btn"
+            @click.stop="$emit('history', task.id)"
+            :title="t('task.history')"
+          >
+            <History :size="14" />
+          </button>
         </div>
       </div>
     </div>
@@ -55,7 +63,7 @@
 </template>
 
 <script setup lang="ts">
-import { Plus, Loader2, CalendarX, Clock, Repeat, CalendarClock } from 'lucide-vue-next'
+import { Plus, Loader2, CalendarX, Clock, Repeat, CalendarClock, History } from 'lucide-vue-next'
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useTaskTab } from '@/composables/useTaskTab'
@@ -74,6 +82,7 @@ const loading = ref(false)
 defineEmits<{
   create: []
   select: [taskId: number]
+  history: [taskId: number]
 }>()
 
 async function refresh() {
@@ -353,5 +362,33 @@ onMounted(refresh)
   border-radius: 4px;
   border: 1px solid var(--border-color, #e5e5e5);
   width: fit-content;
+}
+
+.task-item-history-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--text-muted, #999);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+  align-self: center;
+}
+
+@media (hover: hover) {
+  .task-item-history-btn:hover {
+    background: var(--bg-tertiary, #eef1f4);
+    color: var(--accent-color, #0066cc);
+  }
+}
+
+.task-item-history-btn:active {
+  transform: scale(0.9);
+  background: var(--border-color, #e5e5e5);
 }
 </style>

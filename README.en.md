@@ -209,6 +209,7 @@ Each `.yaml.example` file contains complete configuration fields and description
 - **Tool Call Visualization**: Name, parameters, execution results displayed in real time with success/error status
 - **Extended Thinking**: Complex tasks auto-trigger extended thinking, reasoning visible in real time
 - **File Path Navigation**: Clickable file paths in AI responses
+- **Localhost URL Navigation**: localhost URLs in AI responses (e.g., http://localhost:3000) are auto-detected with an open button; in App mode, port forwarding is auto-registered and the URL opens via WebView with zero manual config
 - **Quick Send**: Preset common commands (continue, build, commit, etc.) with drag reorder, one-click send
 - **Quote & Ask**: Select code or text, ask AI directly, auto-attaches context
 - **Current Directory Attachment**: Chat input supports attaching current directory context, AI auto-gets directory structure
@@ -235,6 +236,7 @@ Each `.yaml.example` file contains complete configuration fields and description
 ### 🔀 SSH Tunnel Port Forwarding
 - **Remote Development**: Access server local ports directly from Android App
 - **Protocol Transparent**: HTTP, HTTPS, WebSocket, SSE, gRPC — no URL rewriting needed
+- **Auto-Open Localhost URLs**: localhost URLs appearing in chat (e.g., web services started by AI) can be opened with one tap — port forwarding is auto-registered and the URL opens via WebView in App mode
 
 ### 💻 Web Terminal
 - **Interactive Terminal**: PTY + WebSocket + xterm.js, operate server terminal directly in browser
