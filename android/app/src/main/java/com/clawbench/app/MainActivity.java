@@ -179,9 +179,16 @@ public class MainActivity extends AppCompatActivity {
 
         setupWebView();
 
-        // Show the static login page. It will pre-fill saved config and
-        // let the user connect via the JS bridge (AndroidNative.connectToServer).
-        webView.loadUrl(LOGIN_HTML_URL);
+        // Auto-connect if there's a saved URL (user has configured before).
+        // This preserves the original behavior: returning users go straight
+        // to the app. Only first-time users see the login page.
+        String savedUrl = prefs.getString(KEY_SERVER_URL, null);
+        if (savedUrl != null) {
+            webView.setVisibility(View.INVISIBLE);
+            webView.loadUrl(savedUrl);
+        } else {
+            webView.loadUrl(LOGIN_HTML_URL);
+        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
