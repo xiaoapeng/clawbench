@@ -269,11 +269,211 @@ describe('annotateFilePaths', () => {
     expect(result.detectedPaths.length).toBeGreaterThanOrEqual(2)
   })
 
-  it('handles paths after > character in blockquote without annotating them', () => {
-    const input = '>src/main.go'
+  it('annotates paths inside blockquote elements (blockquote is valid context)', () => {
+    // After markdown rendering, ">src/main.go" becomes <blockquote><p>src/main.go</p></blockquote>
+    // The DOM-based approach naturally handles this — the text node is inside a <blockquote>
+    // but not inside <pre>/<a>/<code>, so it's a valid annotation target.
+    const input = '<blockquote><p>src/main.go</p></blockquote>'
     const result = annotateFilePaths(input, { projectRoot })
-    // The bare-path regex skips paths prefixed with '>'
+    // Paths inside blockquotes are annotated — they are legitimate file references
+    expect(result.detectedPaths).toContain('src/main.go')
+  })
+
+  it('does not double-annotate absolute paths that contain a bare relative path segment', () => {
+    // Regression: absolute path like /home/user/project/public/landing/index.html
+    // would be annotated by the absolute-path regex, then the bare relative-path regex
+    // would match "public/landing/index.html" inside the generated data-file-path
+    // attribute of both the <span> and <button> tags, producing broken HTML like:
+    //   data-file-path="<span class="chat-file-path"..."
+    const input = '<p>/home/user/project/public/landing/index.html这个是出问题的文件。</p>'
+    const result = annotateFilePaths(input, { projectRoot })
+
+    // Should detect exactly one path
+    expect(result.detectedPaths).toHaveLength(1)
+    expect(result.detectedPaths[0]).toBe('public/landing/index.html')
+
+    // The data-file-path attribute must NOT contain a nested <span>
+    expect(result.html).not.toContain('data-file-path="<span')
+    expect(result.html).not.toContain('data-file-path="&lt;span')
+
+    // The data-file-path attribute should contain the correct resolved path
+    expect(result.html).toContain('data-file-path="public/landing/index.html"')
+  })
+
+  // ── DOM traversal specific tests ──
+
+  it('does not re-annotate paths inside <a> tag text content', () => {
+    // <a> tags are handled in step 1 (append button after the link).
+    // The text inside <a> should NOT be matched again by the text-node regex.
+    const input = '<a href="src/utils.ts">see src/utils.ts</a>'
+    const result = annotateFilePaths(input, { projectRoot })
+    // Should detect the path once (from the href), not twice
+    expect(result.detectedPaths).toHaveLength(1)
+    expect(result.detectedPaths[0]).toBe('src/utils.ts')
+    // Should only have one open button
+    const btnCount = (result.html.match(/chat-file-open-btn/g) || []).length
+    expect(btnCount).toBe(1)
+  })
+
+  it('does not re-annotate paths inside <code> tag text content', () => {
+    // <code> tags are handled in step 2 (add class + button).
+    // The text inside <code> should NOT be matched again by the text-node regex.
+    const input = '<p>check <code>src/main.go</code> for details</p>'
+    const result = annotateFilePaths(input, { projectRoot })
+    expect(result.detectedPaths).toHaveLength(1)
+    expect(result.detectedPaths[0]).toBe('src/main.go')
+    // Only one span/button pair
+    const btnCount = (result.html.match(/chat-file-open-btn/g) || []).length
+    expect(btnCount).toBe(1)
+  })
+
+  it('does not annotate code inside <pre> blocks', () => {
+    // <pre><code> is a multi-line code block — paths inside should NOT be annotated
+    const input = '<pre><code>import "/home/user/project/src/main.go"</code></pre>'
+    const result = annotateFilePaths(input, { projectRoot })
     expect(result.detectedPaths).toHaveLength(0)
+    expect(result.html).not.toContain('chat-file-path')
+  })
+
+  it('annotates absolute path immediately followed by CJK characters', () => {
+    // Original bug: /home/user/project/public/landing/index.html这个文件
+    // The path ends at the CJK character boundary — regex should not eat the Chinese text
+    const input = '<p>/home/user/project/src/main.go有问题</p>'
+    const result = annotateFilePaths(input, { projectRoot })
+    expect(result.detectedPaths).toHaveLength(1)
+    expect(result.detectedPaths[0]).toBe('src/main.go')
+    // The CJK text should remain outside the span
+    expect(result.html).toContain('有问题')
+  })
+
+  it('does not annotate ../ relative paths that go above projectRoot', () => {
+    // ../lib/utils.ts resolves to /home/user/lib/utils.ts which is outside projectRoot
+    const input = '<p>see ../lib/utils.ts</p>'
+    const result = annotateFilePaths(input, { projectRoot })
+    expect(result.detectedPaths).toHaveLength(0)
+  })
+
+  it('annotates ./ relative paths that stay within projectRoot', () => {
+    const input = '<p>see ./src/main.go</p>'
+    const result = annotateFilePaths(input, { projectRoot })
+    expect(result.detectedPaths).toContain('src/main.go')
+  })
+
+  it('detects multiple absolute paths in the same HTML', () => {
+    const input = '<p>Edit /home/user/project/src/main.go and /home/user/project/lib/utils.ts</p>'
+    const result = annotateFilePaths(input, { projectRoot })
+    expect(result.detectedPaths).toHaveLength(2)
+    expect(result.detectedPaths).toContain('src/main.go')
+    expect(result.detectedPaths).toContain('lib/utils.ts')
+  })
+
+  it('does not match paths in existing data-file-path attributes', () => {
+    // Pre-existing annotation HTML should not be re-matched by text node regex
+    // because data-file-path is an HTML attribute, and DOM traversal only processes text nodes
+    const input = '<span class="chat-file-path" data-file-path="src/main.go">src/main.go</span>'
+    const result = annotateFilePaths(input, { projectRoot })
+    // The span's text content is inside the span element, which is not a text node
+    // directly under the body — it's inside the span, so the walker won't pick it up
+    // (parent.tagName check skips CODE, but SPAN is not filtered, so the text inside
+    // the span IS a text node that gets walked). However, the regex will match
+    // "src/main.go" in the text node and try to resolve it — which succeeds.
+    // This is expected: if someone passes already-annotated HTML through the function
+    // again, it may double-annotate. The caller is responsible for not doing that.
+    // What we DO guarantee is that HTML ATTRIBUTES are never matched.
+    expect(result.html).not.toContain('data-file-path="&lt;span')
+  })
+
+  it('does not annotate mailto: links', () => {
+    const input = '<a href="mailto:user@example.com">email</a>'
+    const result = annotateFilePaths(input, { projectRoot })
+    expect(result.detectedPaths).toHaveLength(0)
+  })
+
+  it('does not annotate tel: links', () => {
+    const input = '<a href="tel:+1234567890">call</a>'
+    const result = annotateFilePaths(input, { projectRoot })
+    expect(result.detectedPaths).toHaveLength(0)
+  })
+
+  it('handles path followed by punctuation (period, comma, semicolon)', () => {
+    const input = '<p>see src/main.go, lib/utils.ts; and more</p>'
+    const result = annotateFilePaths(input, { projectRoot })
+    // Both paths should be detected
+    expect(result.detectedPaths).toContain('src/main.go')
+    expect(result.detectedPaths).toContain('lib/utils.ts')
+  })
+
+  it('handles path followed by closing parenthesis', () => {
+    const input = '<p>see src/main.go) for details</p>'
+    const result = annotateFilePaths(input, { projectRoot })
+    expect(result.detectedPaths).toContain('src/main.go')
+  })
+
+  it('produces valid HTML with span and button for text node paths', () => {
+    const input = '<p>see src/main.go</p>'
+    const result = annotateFilePaths(input, { projectRoot })
+    // The output should contain a <span class="chat-file-path"> with the path
+    // and a <button class="chat-file-open-btn"> with the same data-file-path
+    expect(result.html).toContain('<span class="chat-file-path"')
+    expect(result.html).toContain('data-file-path="src/main.go"')
+    expect(result.html).toContain('chat-file-open-btn')
+  })
+
+  it('produces valid HTML with class and button for code node paths', () => {
+    const input = '<code>src/main.go</code>'
+    const result = annotateFilePaths(input, { projectRoot })
+    // The <code> should get the chat-file-path class and data-file-path attribute
+    expect(result.html).toContain('class="chat-file-path"')
+    expect(result.html).toContain('data-file-path="src/main.go"')
+    expect(result.html).toContain('chat-file-open-btn')
+  })
+
+  it('handles HTML with only tags and no text', () => {
+    const input = '<p></p>'
+    const result = annotateFilePaths(input, { projectRoot })
+    expect(result.detectedPaths).toHaveLength(0)
+  })
+
+  it('handles path in a deeply nested element', () => {
+    const input = '<div><section><article><p>edit src/main.go</p></article></section></div>'
+    const result = annotateFilePaths(input, { projectRoot })
+    expect(result.detectedPaths).toContain('src/main.go')
+  })
+
+  it('does not annotate absolute paths that are not under projectRoot', () => {
+    const input = '<p>check /etc/nginx/nginx.conf and /home/user/project/src/main.go</p>'
+    const result = annotateFilePaths(input, { projectRoot })
+    // Only the project-relative path should be detected
+    expect(result.detectedPaths).toHaveLength(1)
+    expect(result.detectedPaths[0]).toBe('src/main.go')
+  })
+
+  it('preserves surrounding text when annotating a path in a text node', () => {
+    const input = '<p>Before src/main.go after</p>'
+    const result = annotateFilePaths(input, { projectRoot })
+    expect(result.html).toContain('Before')
+    expect(result.html).toContain('after')
+    expect(result.detectedPaths).toContain('src/main.go')
+  })
+
+  it('annotates bare relative path with multiple segments', () => {
+    const input = '<p>see internal/handler/chat.go</p>'
+    const result = annotateFilePaths(input, { projectRoot })
+    expect(result.detectedPaths).toContain('internal/handler/chat.go')
+  })
+
+  it('does not annotate URL-like strings', () => {
+    const input = '<p>visit https://example.com/page.html</p>'
+    const result = annotateFilePaths(input, { projectRoot })
+    // https:// URLs should not be treated as file paths
+    // (the regex does not match strings starting with http/https)
+    expect(result.detectedPaths).toHaveLength(0)
+  })
+
+  it('annotates <a> with relative href and baseDir', () => {
+    const input = '<a href="components/App.vue">App</a>'
+    const result = annotateFilePaths(input, { projectRoot, baseDir: 'src' })
+    expect(result.detectedPaths).toContain('src/components/App.vue')
   })
 })
 

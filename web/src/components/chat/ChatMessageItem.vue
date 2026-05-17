@@ -741,6 +741,7 @@ const { getAgentIcon, getAgentName } = chatSession
 
 .chat-message.user .chat-file-path {
     background: rgba(0, 0, 0, 0.15);
+    color: rgba(255, 255, 255, 0.9);
 }
 
 .chat-message.user .chat-file-open-btn {
@@ -749,6 +750,7 @@ const { getAgentIcon, getAgentName } = chatSession
 
 .chat-message.user .chat-file-open-btn:hover {
     color: white;
+    background: rgba(255, 255, 255, 0.15);
 }
 
 .chat-message.assistant pre {

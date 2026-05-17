@@ -611,6 +611,38 @@ onUnmounted(() => {
 
 <style>
 /* Non-scoped styles for v-html penetration — tool detail rendering */
+
+/* ── File path annotation (from annotateFilePaths in text blocks) ── */
+.content-blocks .chat-file-path {
+  font-family: 'SF Mono', 'Fira Code', Menlo, Monaco, monospace;
+  font-size: 0.95em;
+  background: color-mix(in srgb, var(--text-muted, #999) 8%, transparent);
+  padding: 1px 4px;
+  border-radius: 3px;
+  word-break: break-all;
+}
+
+.content-blocks .chat-file-open-btn {
+  background: none;
+  border: none;
+  padding: 2px;
+  cursor: pointer;
+  color: var(--text-muted, #999);
+  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s;
+  font-size: 12px;
+  line-height: 1;
+  vertical-align: baseline;
+}
+
+.content-blocks .chat-file-open-btn:hover {
+  color: var(--accent-color, #4a90d9);
+  background: var(--bg-tertiary, #f0f0f0);
+}
+
 :root[data-theme="dark"] .content-blocks .chat-tool-call[data-category="bash"]   { --tool-accent: #34d399; }
 :root[data-theme="dark"] .content-blocks .chat-tool-call[data-category="search"] { --tool-accent: #a78bfa; }
 :root[data-theme="dark"] .content-blocks .chat-tool-call[data-category="task"]   { --tool-accent: #fbbf24; }
