@@ -41,7 +41,7 @@
               <Code2 :size="14" />
               {{ t('file.header.openAsText') }}
             </button>
-            <button v-if="isMarkdown" class="dropdown-item" @click="handleToggleView">
+            <button v-if="isMarkdown || isHtml" class="dropdown-item" @click="handleToggleView">
               <Code2 :size="14" />
               {{ viewMode === 'rendered' ? t('file.header.sourceView') : t('file.header.renderedView') }}
             </button>
@@ -124,7 +124,8 @@ function updateMenuPosition() {
 
 const fileType = computed(() => props.file ? getFileType(props.file.name) : null)
 const isMarkdown = computed(() => fileType.value?.isMarkdown || false)
-const isMarkdownRendered = computed(() => isMarkdown.value && props.viewMode === 'rendered')
+const isHtml = computed(() => fileType.value?.isHtml || false)
+const isMarkdownRendered = computed(() => (isMarkdown.value || isHtml.value) && props.viewMode === 'rendered')
 const hasToc = computed(() => {
     if (!props.file) return false
     const ft = fileType.value

@@ -3,8 +3,15 @@
 # ClawBench 智能体配置示例 — OpenCode 后端
 # =============================================================================
 #
-# OpenCode CLI — supports MiniMax models via profiles.
-# OpenCode CLI — 通过 profile 支持 MiniMax 模型。
+# OpenCode CLI — supports multiple providers via provider/model format.
+# OpenCode CLI — 通过 provider/model 格式支持多提供商模型。
+#
+# Model discovery: OpenCode models are auto-discovered via `opencode models`
+# command. Model IDs use "provider/model" format (e.g. opencode/minimax-m2.5-free).
+# The provider prefix is shown in model names for disambiguation when multiple
+# providers offer the same base model.
+# 模型发现：OpenCode 模型通过 `opencode models` 命令自动发现。
+# 模型 ID 使用 "provider/model" 格式，名称中显示提供商前缀以便区分。
 #
 # This file is NOT loaded (the .yaml.example extension is ignored by LoadAgents).
 # 本文件不会被加载（.yaml.example 后缀会被 LoadAgents 忽略）。
@@ -17,24 +24,25 @@ name: OpenCode
 icon: 💻
 specialty: 复杂编码、架构设计、代码重构
 backend: opencode
-thinking_effort_levels:
-  - minimal
-  - high
-  - max
-models:
-  - id: opencode/minimax-m2.5-free
-    name: MiniMax M2.5 Free
-    default: true
-  - id: opencode/hy3-preview-free
-    name: HY3 Preview Free
-  - id: opencode/nemotron-3-super-free
-    name: Nemotron 3 Super Free
-  - id: minimax-cn/MiniMax-M2.7
-    name: MiniMax M2.7
-  - id: minimax-cn/MiniMax-M2.5
-    name: MiniMax M2.5
-  - id: minimax-cn/MiniMax-M2.5-highspeed
-    name: MiniMax M2.5 高速
+
+# Models are auto-discovered via `opencode models`. To override, uncomment:
+# Model IDs use "provider/model" format. The Name includes the provider prefix
+# for disambiguation (e.g. "opencode/MiniMax M2.5 Free" vs "minimax-cn/MiniMax M2.7").
+# models:
+#   - id: opencode/minimax-m2.5-free
+#     name: opencode/MiniMax M2.5 Free
+#     default: true
+#   - id: opencode/hy3-preview-free
+#     name: opencode/HY3 Preview Free
+#   - id: opencode/nemotron-3-super-free
+#     name: opencode/Nemotron 3 Super Free
+#   - id: minimax-cn/MiniMax-M2.7
+#     name: minimax-cn/MiniMax M2.7
+#   - id: minimax-cn/MiniMax-M2.5
+#     name: minimax-cn/MiniMax M2.5
+#   - id: minimax-cn/MiniMax-M2.5-highspeed
+#     name: minimax-cn/MiniMax M2.5 高速
+
 system_prompt: |
   You are a coding expert specializing in complex coding tasks and architecture design.
   Work principles: quality first, incremental refactoring, fully understand existing code intent before making changes, provide concrete code changes rather than vague suggestions.

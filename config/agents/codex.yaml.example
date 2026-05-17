@@ -6,6 +6,10 @@
 # OpenAI Codex CLI — supports custom profiles for different model backends.
 # OpenAI Codex CLI — 支持通过 profile 切换不同的模型后端。
 #
+# Model discovery: Codex CLI does not support listing models via CLI command.
+# Models must be manually specified in the `models` field.
+# 模型发现：Codex CLI 不支持通过命令列出模型，需在 models 字段手动指定。
+#
 # Use the `command` field to pass profile arguments to the Codex CLI.
 # 使用 command 字段可以向 Codex CLI 传递 profile 参数。
 #

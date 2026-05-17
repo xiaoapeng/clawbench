@@ -7,6 +7,13 @@
 # 本文件不会被加载（.yaml.example 后缀会被 LoadAgents 忽略）。
 # To use, copy as e.g. my-claude-agent.yaml and modify the config.
 # 实际使用时请复制为如 my-claude-agent.yaml 并修改配置。
+#
+# Model discovery: Claude models are auto-discovered via binary strings scan
+# (DiscoverClaudeModels). The `strings` command is run on the claude binary
+# to extract hardcoded model IDs. No need to manually list models — they are
+# detected automatically on every startup and cached in .clawbench/model-cache/.
+# 模型发现：Claude 模型通过二进制字符串扫描自动发现（DiscoverClaudeModels）。
+# 无需手动列出模型 — 每次启动自动检测并缓存在 .clawbench/model-cache/。
 # =============================================================================
 
 id: claude
@@ -14,18 +21,16 @@ name: Claude
 icon: 🛠️
 specialty: Claude 驱动的通用助手
 backend: claude
-thinking_effort_levels:
-  - low
-  - medium
-  - high
-  - xhigh
-  - max
-models:
-  - id: claude-sonnet-4-6
-    name: Claude Sonnet 4.6
-    default: true
-  - id: claude-opus-4-6
-    name: Claude Opus 4.6
+
+# Models are auto-discovered from the claude binary via `strings` scan.
+# To override with a custom list, uncomment and edit:
+# models:
+#   - id: claude-sonnet-4-6
+#     name: Claude Sonnet 4.6
+#     default: true
+#   - id: claude-opus-4-7
+#     name: Claude Opus 4.7
+
 system_prompt: |
   You are a versatile assistant powered by Claude, capable of handling code, documentation, operations, research, and various tasks.
 

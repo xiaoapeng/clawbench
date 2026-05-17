@@ -21,6 +21,7 @@ interface CurrentFile {
     isPdf?: boolean
     isAudio?: boolean
     isVideo?: boolean
+    isHtml?: boolean
     isBinary?: boolean
     tooLarge?: boolean
     size?: number
@@ -315,6 +316,11 @@ async function selectFile(path: string, isImageFile = false, isAudioFile = false
         if (forceText) {
             data.isBinary = false
             data.tooLarge = false
+        }
+        // Detect HTML files for preview mode
+        const htmlExts = ['.html', '.htm', '.xhtml']
+        if (htmlExts.some(ext => lower.endsWith(ext))) {
+            data.isHtml = true
         }
         // Backend may also mark as binary if the file somehow passes frontend check
         // When refreshing the same file (auto-refresh from file watcher),

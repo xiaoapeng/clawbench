@@ -7,6 +7,13 @@
 # Uses a separate `command` to access overseas/international models.
 # 海外版 — 双账号实例，指向第二个 CLI 二进制文件，访问海外/国际模型。
 #
+# Note: Because this agent uses a custom `command`, auto-discovery runs against
+# the default codebuddy binary. If the overseas binary has different models,
+# you must list them manually in the `models` field — they won't be overwritten
+# by background refresh (user-defined models are preserved).
+# 注意：因为此智能体使用自定义 command，自动发现针对默认 codebuddy 二进制。
+# 如果海外版二进制有不同的模型，需要手动列出——用户定义的模型不会被后台刷新覆盖。
+#
 # This file is NOT loaded (the .yaml.example extension is ignored by LoadAgents).
 # 本文件不会被加载（.yaml.example 后缀会被 LoadAgents 忽略）。
 # To use, copy as e.g. my-overseas-agent.yaml and modify the config.
@@ -19,11 +26,10 @@ icon: 🔵
 specialty: CodeBuddy 海外版并行实例
 backend: codebuddy
 command: /home/user/codebuddy2
-thinking_effort_levels:
-  - low
-  - medium
-  - high
-  - xhigh
+
+# Models must be manually listed for custom command binaries.
+# Auto-discovery targets the default binary, so overseas models won't be
+# auto-detected. User-defined models are preserved across refreshes.
 models:
   - id: gpt-5.5
     name: GPT 5.5

@@ -1,36 +1,43 @@
+# =============================================================================
+# ClawBench Agent Configuration Example — Pi Backend
+# ClawBench 智能体配置示例 — Pi 后端
+# =============================================================================
+#
+# Pi — minimalist coding agent with 4 core tools + multi-model support.
+# Pi — 极简编程智能体，4 工具核心 + 多模型支持。
+#
+# Model discovery: Pi models are auto-discovered via `pi --list-models`
+# command at runtime. No need to manually list models.
+# 模型发现：Pi 模型通过 `pi --list-models` 命令在运行时自动发现，无需手动列出。
+#
+# This file is NOT loaded (the .yaml.example extension is ignored by LoadAgents).
+# 本文件不会被加载（.yaml.example 后缀会被 LoadAgents 忽略）。
+# To use, copy as e.g. my-pi-agent.yaml and modify the config.
+# 实际使用时请复制为如 my-pi-agent.yaml 并修改配置。
+# =============================================================================
+
 id: pi
 name: Pi
 icon: 🥧
 specialty: 极简编程智能体 — 4 工具核心 + 多模型支持
 backend: pi
-thinking_effort_levels:
-  - "off"
-  - minimal
-  - low
-  - medium
-  - high
-  - xhigh
-models:
-  # Anthropic (via MiniMax proxy)
-  - id: anthropic/claude-sonnet-4-6
-    name: Claude Sonnet 4.6
-    default: true
-  - id: anthropic/claude-opus-4-7
-    name: Claude Opus 4.7
-  - id: anthropic/claude-haiku-4-5
-    name: Claude Haiku 4.5
-  # MiniMax
-  - id: minimax/MiniMax-M2.7
-    name: MiniMax M2.7
-  - id: minimax/MiniMax-M2.7-highspeed
-    name: MiniMax M2.7 高速
-  # GitHub Copilot
-  - id: github-copilot/claude-sonnet-4.6
-    name: Copilot · Sonnet 4.6
-  - id: github-copilot/gpt-5.5
-    name: Copilot · GPT-5.5
-  - id: github-copilot/gemini-3.1-pro-preview
-    name: Copilot · Gemini 3.1 Pro
+
+# Models are auto-discovered via `pi --list-models`. To override, uncomment:
+# Model IDs use "provider/model" format (e.g. anthropic/claude-sonnet-4-6).
+# models:
+#   # Anthropic (via MiniMax proxy)
+#   - id: anthropic/claude-sonnet-4-6
+#     name: Claude Sonnet 4.6
+#     default: true
+#   - id: anthropic/claude-opus-4-7
+#     name: Claude Opus 4.7
+#   # MiniMax
+#   - id: minimax/MiniMax-M2.7
+#     name: MiniMax M2.7
+#   # GitHub Copilot
+#   - id: github-copilot/claude-sonnet-4.6
+#     name: Copilot · Sonnet 4.6
+
 system_prompt: |
   You are a versatile assistant powered by Pi, capable of handling code, documentation, operations, research, and various tasks.
 

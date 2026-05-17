@@ -5,6 +5,7 @@ export interface FileType {
     label: string
     color: string
     isMarkdown: boolean
+    isHtml?: boolean
     isImage?: boolean
     isPdf?: boolean
     isAudio?: boolean
@@ -39,7 +40,7 @@ const FILE_TYPES: FileType[] = [
     { exts: ['.ps1', '.psm1'], lang: 'powershell', label: 'PS', color: '#012456', isMarkdown: false },
     { exts: ['.sql'], lang: 'sql', label: 'SQL', color: '#e38c00', isMarkdown: false },
     { exts: ['.graphql', '.gql'], lang: 'graphql', label: 'GraphQL', color: '#e10098', isMarkdown: false },
-    { exts: ['.html', '.htm', '.xhtml'], lang: 'xml', label: 'HTML', color: '#e44d26', isMarkdown: false },
+    { exts: ['.html', '.htm', '.xhtml'], lang: 'xml', label: 'HTML', color: '#e44d26', isMarkdown: false, isHtml: true },
     { exts: ['.css', '.scss', '.sass', '.less', '.styl'], lang: 'css', label: 'CSS', color: '#563d7c', isMarkdown: false },
     { exts: ['.vue', '.svelte'], lang: 'vue', label: 'Vue', color: '#41b883', isMarkdown: false },
     { exts: ['.dockerfile', '.dockerignore', 'dockerfile'], lang: 'dockerfile', label: 'Docker', color: '#384d54', isMarkdown: false },

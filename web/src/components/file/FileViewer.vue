@@ -109,6 +109,27 @@
         @open-git-history="emit('openGitHistory')"
       />
 
+      <!-- HTML file -->
+      <template v-else-if="isHtml">
+        <iframe
+          v-if="markdownViewMode === 'rendered'"
+          ref="htmlPreviewRef"
+          class="html-preview-iframe"
+          :srcdoc="file.content"
+          sandbox="allow-scripts allow-same-origin"
+        />
+        <CodePreview
+          v-else
+          :content="file.content"
+          language="xml"
+          :file-path="file.path"
+          :word-wrap="wordWrap"
+          :show-line-numbers="showLineNumbers"
+          :flash-ranges="flashRanges"
+          :flash-type="flashType"
+        />
+      </template>
+
       <!-- Code / plain text -->
       <div v-else class="raw-content-viewer">
         <CodePreview
@@ -155,9 +176,11 @@ const emit = defineEmits(['delete', 'showDetails', 'openGitHistory', 'toggleToc'
 const fileType = computed(() => props.file ? getFileType(props.file.name) : null)
 const rawFileLanguage = computed(() => getFileType(props.file?.name)?.lang || 'plaintext')
 const isMarkdown = computed(() => fileType.value?.isMarkdown || false)
+const isHtml = computed(() => fileType.value?.isHtml || false)
 const loading = ref(false)
 const contentRef = ref(null)
 const pdfPreviewRef = ref(null)
+const htmlPreviewRef = ref(null)
 
 // Expose PDF outline and scrollToPage for TOC integration
 const pdfOutline = computed(() => pdfPreviewRef.value?.outline || [])
@@ -214,6 +237,9 @@ function getScrollEl() {
     if (!el) return null
     if (isMarkdown.value) {
         return el.querySelector('.markdown-body')
+    }
+    if (isHtml.value && markdownViewMode.value === 'rendered') {
+        return null // iframe handles its own scrolling
     }
     return el.querySelector('.raw-content-pre')
 }
@@ -445,6 +471,14 @@ defineExpose({
     padding: 16px;
     border-radius: var(--radius-md);
     margin: 20px 0;
+}
+
+.html-preview-iframe {
+    flex: 1;
+    width: 100%;
+    height: 100%;
+    border: none;
+    background: #fff;
 }
 </style>
 

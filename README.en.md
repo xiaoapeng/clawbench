@@ -126,7 +126,7 @@ cd clawbench
 ./server.sh
 ```
 
-That's it — on first startup, ClawBench automatically scans for installed AI CLI tools and generates agent configs for each detected backend. No manual configuration needed.
+That's it — on every startup, ClawBench automatically scans for installed AI CLI tools, generates minimal agent configs for each detected backend, and auto-discovers available models and thinking effort levels. No manual configuration needed.
 
 > A random password is auto-generated on first startup and printed to the console. Save it securely.
 
@@ -137,7 +137,7 @@ Once deployed, access `http://server-ip:20000` from your phone app or mobile bro
 
 ### Customize Agents
 
-Auto-generated agent configs use minimal defaults. To customize model lists, system prompts, icons, etc., edit the YAML files in `config/agents/` and restart the server:
+Auto-generated agent configs use minimal defaults (no model lists or thinking effort levels — these are auto-discovered at runtime). To customize model lists, system prompts, icons, etc., edit the YAML files in `config/agents/` and restart the server:
 
 ```bash
 # Edit an existing agent
@@ -253,7 +253,9 @@ Each `.yaml.example` file contains complete configuration fields and description
 
 ### 📱 Android App
 - Native bridge integration: auto-login, file download (including POST archive downloads), port forwarding management
+- Static HTML login page: shown on first launch or connection failure, matches web UI visual style
 - SSH password management, server dialog
+- WebView connection protection: WebView hidden during connection attempts to prevent browser error page flash
 - Terminal volume key mapping: volume keys act as arrow keys when terminal is open
 
 ### 🔔 Notifications
