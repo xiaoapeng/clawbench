@@ -136,6 +136,8 @@
     max-width:640px;margin:0 auto;
     text-align:center;
   }
+  .install-section{margin-bottom:32px}
+  .install-section:last-child{margin-bottom:0}
   .install-label{
     font-size:12px;
     color:var(--text-faint);
@@ -182,6 +184,19 @@
     overflow-x:auto;
     -webkit-overflow-scrolling:touch;
   }
+  .install-link{
+    display:inline-flex;align-items:center;gap:8px;
+    background:var(--surface);
+    border:1px solid var(--border-subtle);
+    border-radius:8px;
+    padding:10px 18px;
+    text-decoration:none;
+    color:var(--text-dim);
+    font-size:13px;font-weight:500;
+    transition:color .2s,border-color .2s;
+  }
+  .install-link:hover{color:var(--text);border-color:var(--border)}
+  .install-link svg{width:18px;height:18px;flex-shrink:0}
   .copy-btn{
     flex-shrink:0;
     background:none;border:none;cursor:pointer;
@@ -281,35 +296,44 @@
 </section>
 
 <section class="install">
-  <div class="install-label reveal">Install</div>
-  <div class="install-tabs reveal">
-    <button class="active" onclick="switchTab(this,'mac')">macOS</button>
-    <button onclick="switchTab(this,'linux')">Linux</button>
-    <button onclick="switchTab(this,'win')">Windows</button>
-  </div>
-  <div class="install-cmd-wrap active" id="tab-mac">
-    <div class="install-cmd">
-      <code>curl -fsSL https://github.com/xulongzhe/clawbench/releases/latest/download/install.sh | bash</code>
-      <button class="copy-btn" onclick="copyCmd(this)" aria-label="Copy">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-      </button>
+  <div class="install-section reveal">
+    <div class="install-label">Server</div>
+    <div class="install-tabs">
+      <button class="active" onclick="switchTab(this,'mac')">macOS</button>
+      <button onclick="switchTab(this,'linux')">Linux</button>
+      <button onclick="switchTab(this,'win')">Windows</button>
+    </div>
+    <div class="install-cmd-wrap active" id="tab-mac">
+      <div class="install-cmd">
+        <code>curl -fsSL https://github.com/xulongzhe/clawbench/releases/latest/download/install.sh | bash</code>
+        <button class="copy-btn" onclick="copyCmd(this)" aria-label="Copy">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="install-cmd-wrap" id="tab-linux">
+      <div class="install-cmd">
+        <code>curl -fsSL https://github.com/xulongzhe/clawbench/releases/latest/download/install.sh | bash</code>
+        <button class="copy-btn" onclick="copyCmd(this)" aria-label="Copy">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="install-cmd-wrap" id="tab-win">
+      <div class="install-cmd">
+        <code>irm https://github.com/xulongzhe/clawbench/releases/latest/download/install.ps1 | iex</code>
+        <button class="copy-btn" onclick="copyCmd(this)" aria-label="Copy">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+        </button>
+      </div>
     </div>
   </div>
-  <div class="install-cmd-wrap" id="tab-linux">
-    <div class="install-cmd">
-      <code>curl -fsSL https://github.com/xulongzhe/clawbench/releases/latest/download/install.sh | bash</code>
-      <button class="copy-btn" onclick="copyCmd(this)" aria-label="Copy">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-      </button>
-    </div>
-  </div>
-  <div class="install-cmd-wrap" id="tab-win">
-    <div class="install-cmd">
-      <code>irm https://github.com/xulongzhe/clawbench/releases/latest/download/install.ps1 | iex</code>
-      <button class="copy-btn" onclick="copyCmd(this)" aria-label="Copy">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-      </button>
-    </div>
+  <div class="install-section reveal">
+    <div class="install-label">Client</div>
+    <a class="install-link" href="https://github.com/xulongzhe/clawbench/releases/latest/download/clawbench-android.apk">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.523 2.297l1.674 2.9a.5.5 0 01-.865.5l-1.696-2.938A8.032 8.032 0 0012 1.5a8.032 8.032 0 00-4.636 1.259L5.668 5.697a.5.5 0 01-.865-.5l1.674-2.9A9.97 9.97 0 002 10.5h20a9.97 9.97 0 00-4.477-8.203zM7 8.5a1 1 0 110-2 1 1 0 010 2zm10 0a1 1 0 110-2 1 1 0 010 2zM2 11.5v8a2 2 0 002 2h16a2 2 0 002-2v-8H2z"/></svg>
+      Android APK
+    </a>
   </div>
 </section>
 
