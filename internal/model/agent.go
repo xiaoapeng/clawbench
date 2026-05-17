@@ -30,6 +30,11 @@ type Agent struct {
 	ThinkingEffort       string       `yaml:"thinking_effort,omitempty" json:"thinkingEffort"`           // e.g., "high"; empty = auto (don't pass flag)
 	ThinkingEffortLevels []string     `yaml:"thinking_effort_levels,omitempty" json:"thinkingEffortLevels"` // valid levels for this backend, e.g. ["low","medium","high","xhigh"]
 	SystemPrompt         string       `yaml:"system_prompt,omitempty" json:"systemPrompt"`
+
+	// ModelsAutoDetected indicates whether Models were filled by auto-discovery
+	// (from cache) rather than user-defined in YAML. Used by AsyncRefreshModelCache
+	// to know which agents should have their models updated.
+	ModelsAutoDetected bool `yaml:"-" json:"-"`
 }
 
 // DefaultModelID returns the default model ID for this agent.

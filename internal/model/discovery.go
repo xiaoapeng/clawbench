@@ -296,9 +296,9 @@ func AsyncRefreshModelCache(cacheDir string) {
 			}
 			slog.Info("refreshed model cache", "backend", spec.Backend, "count", len(models))
 
-			// Update in-memory agents with empty models
+			// Update in-memory agents whose models were auto-detected (not user-defined)
 			for _, agent := range AgentList {
-				if agent.Backend == spec.Backend && len(agent.Models) == 0 {
+				if agent.Backend == spec.Backend && agent.ModelsAutoDetected {
 					agent.Models = models
 				}
 			}
@@ -347,6 +347,7 @@ func MergeDiscoveredData(cacheDir string, present ...map[string]bool) {
 			cached := ReadModelCache(cacheDir, agent.Backend)
 			if len(cached) > 0 {
 				agent.Models = cached
+				agent.ModelsAutoDetected = true
 			}
 		}
 	}
