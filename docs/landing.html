@@ -143,6 +143,28 @@
     letter-spacing:0.08em;
     margin-bottom:16px;
   }
+  .install-tabs{
+    display:flex;justify-content:center;gap:0;
+    margin-bottom:16px;
+  }
+  .install-tabs button{
+    background:none;border:1px solid var(--border-subtle);
+    color:var(--text-dim);
+    padding:6px 16px;
+    font-size:13px;font-weight:500;
+    cursor:pointer;
+    transition:color .2s,background .2s;
+  }
+  .install-tabs button:first-child{border-radius:6px 0 0 6px}
+  .install-tabs button:last-child{border-radius:0 6px 6px 0}
+  .install-tabs button:not(:first-child){border-left:none}
+  .install-tabs button.active{
+    background:var(--surface);
+    color:var(--text);
+  }
+  .install-tabs button:hover:not(.active){color:var(--text)}
+  .install-cmd-wrap{display:none}
+  .install-cmd-wrap.active{display:block}
   .install-cmd{
     display:inline-flex;align-items:center;
     background:var(--surface);
@@ -260,11 +282,34 @@
 
 <section class="install">
   <div class="install-label reveal">Install</div>
-  <div class="install-cmd reveal">
-    <code>curl -fsSL https://github.com/xulongzhe/clawbench/releases/latest/download/install.sh | bash</code>
-    <button class="copy-btn" onclick="copyCmd(this)" aria-label="Copy">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-    </button>
+  <div class="install-tabs reveal">
+    <button class="active" onclick="switchTab(this,'mac')">macOS</button>
+    <button onclick="switchTab(this,'linux')">Linux</button>
+    <button onclick="switchTab(this,'win')">Windows</button>
+  </div>
+  <div class="install-cmd-wrap active" id="tab-mac">
+    <div class="install-cmd">
+      <code>curl -fsSL https://github.com/xulongzhe/clawbench/releases/latest/download/install.sh | bash</code>
+      <button class="copy-btn" onclick="copyCmd(this)" aria-label="Copy">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+      </button>
+    </div>
+  </div>
+  <div class="install-cmd-wrap" id="tab-linux">
+    <div class="install-cmd">
+      <code>curl -fsSL https://github.com/xulongzhe/clawbench/releases/latest/download/install.sh | bash</code>
+      <button class="copy-btn" onclick="copyCmd(this)" aria-label="Copy">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+      </button>
+    </div>
+  </div>
+  <div class="install-cmd-wrap" id="tab-win">
+    <div class="install-cmd">
+      <code>irm https://github.com/xulongzhe/clawbench/releases/latest/download/install.ps1 | iex</code>
+      <button class="copy-btn" onclick="copyCmd(this)" aria-label="Copy">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+      </button>
+    </div>
   </div>
 </section>
 
@@ -289,6 +334,13 @@ function copyCmd(btn){
 
 const obs=new IntersectionObserver(e=>{e.forEach(x=>{if(x.isIntersecting){x.target.classList.add('visible');obs.unobserve(x.target)}})},{threshold:0.15});
 document.querySelectorAll('.reveal').forEach(el=>obs.observe(el));
+
+function switchTab(btn,id){
+  document.querySelectorAll('.install-tabs button').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.install-cmd-wrap').forEach(w=>w.classList.remove('active'));
+  document.getElementById('tab-'+id).classList.add('active');
+}
 </script>
 </body>
 </html>
