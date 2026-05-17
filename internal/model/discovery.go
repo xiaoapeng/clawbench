@@ -93,18 +93,17 @@ func DiscoverModels(spec BackendSpec) []AgentModel {
 	return models
 }
 
-// GenerateAgentYAML creates a YAML config for the given backend spec with the provided models.
-// System prompt and command are left empty. This is a pure function — no subprocess execution.
-func GenerateAgentYAML(spec BackendSpec, models []AgentModel) ([]byte, error) {
+// GenerateAgentYAML creates a minimal YAML config for the given backend spec.
+// Only id, name, icon, specialty, and backend are written.
+// Models, thinking_effort_levels, and system_prompt are NOT written —
+// they are filled at runtime from auto-discovery and BackendRegistry.
+func GenerateAgentYAML(spec BackendSpec) ([]byte, error) {
 	agent := Agent{
-		ID:                   spec.ID,
-		Name:                 spec.Name,
-		Icon:                 spec.Icon,
-		Specialty:            spec.Specialty,
-		Backend:              spec.Backend,
-		Models:               models,
-		ThinkingEffortLevels: spec.ThinkingEffortLevels,
-		SystemPrompt:         "",
+		ID:        spec.ID,
+		Name:      spec.Name,
+		Icon:      spec.Icon,
+		Specialty: spec.Specialty,
+		Backend:   spec.Backend,
 	}
 	return yaml.Marshal(agent)
 }
@@ -154,7 +153,7 @@ func DiscoverAgents(dir string) error {
 			continue
 		}
 
-		data, err := GenerateAgentYAML(r.spec, DiscoverModels(r.spec))
+		data, err := GenerateAgentYAML(r.spec)
 		if err != nil {
 			skipped++
 			continue

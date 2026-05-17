@@ -66,9 +66,10 @@ func TestGenerateAgentYAML_Format(t *testing.T) {
 		Name:       "Claude",
 		Icon:       "🤖",
 		Specialty:  "代码编写与推理",
+		ThinkingEffortLevels: []string{"low", "medium", "high", "xhigh", "max"},
 	}
 
-	data, err := model.GenerateAgentYAML(spec, nil)
+	data, err := model.GenerateAgentYAML(spec)
 	require.NoError(t, err)
 
 	// Verify it's valid YAML and parses back to Agent struct
@@ -84,6 +85,13 @@ func TestGenerateAgentYAML_Format(t *testing.T) {
 	assert.Empty(t, agent.Models)
 	assert.Empty(t, agent.SystemPrompt)
 	assert.Empty(t, agent.Command)
+	assert.Empty(t, agent.ThinkingEffortLevels)
+
+	// Minimal YAML: should NOT contain models, thinking_effort_levels, or system_prompt
+	content := string(data)
+	assert.NotContains(t, content, "models:")
+	assert.NotContains(t, content, "thinking_effort")
+	assert.NotContains(t, content, "system_prompt:")
 }
 
 func TestGenerateAgentYAML_ContainsRequiredFields(t *testing.T) {
@@ -96,15 +104,17 @@ func TestGenerateAgentYAML_ContainsRequiredFields(t *testing.T) {
 		Specialty:  "Testing",
 	}
 
-	data, err := model.GenerateAgentYAML(spec, nil)
+	data, err := model.GenerateAgentYAML(spec)
 	require.NoError(t, err)
 
 	content := string(data)
 	assert.Contains(t, content, "id: test")
 	assert.Contains(t, content, "name: Test")
 	assert.Contains(t, content, "backend: test")
-	assert.Contains(t, content, "models: []")
-	assert.Contains(t, content, "system_prompt: \"\"")
+	// Minimal YAML: no models, no system_prompt, no thinking_effort_levels
+	assert.NotContains(t, content, "models:")
+	assert.NotContains(t, content, "system_prompt:")
+	assert.NotContains(t, content, "thinking_effort")
 }
 
 // --- Test 3: checkCLIExists ---
@@ -175,7 +185,7 @@ func TestDiscoverAgents_GeneratedYAMLsLoadable(t *testing.T) {
 		Icon:       "🧪",
 		Specialty:  "Testing",
 	}
-	data, err := model.GenerateAgentYAML(spec, nil)
+	data, err := model.GenerateAgentYAML(spec)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "test-loadable.yaml"), data, 0644))
 
@@ -424,51 +434,6 @@ func TestDiscoverModels_WithRealCLI(t *testing.T) {
 	}
 }
 
-func TestGenerateAgentYAML_WithNilModels(t *testing.T) {
-	spec := model.BackendSpec{
-		ID:         "test-nil-models",
-		Backend:    "test",
-		DefaultCmd: "nonexistent",
-		Name:       "Test",
-		Icon:       "T",
-		Specialty:  "Testing",
-	}
-
-	data, err := model.GenerateAgentYAML(spec, nil)
-	require.NoError(t, err)
-
-	var agent model.Agent
-	err = yaml.Unmarshal(data, &agent)
-	require.NoError(t, err)
-	assert.Empty(t, agent.Models, "nil models should result in empty model list")
-}
-
-func TestGenerateAgentYAML_WithModels(t *testing.T) {
-	spec := model.BackendSpec{
-		ID:         "test-with-models",
-		Backend:    "test",
-		DefaultCmd: "nonexistent",
-		Name:       "Test",
-		Icon:       "T",
-		Specialty:  "Testing",
-	}
-	models := []model.AgentModel{
-		{ID: "model-a", Name: "Model A", Default: true},
-		{ID: "model-b", Name: "Model B", Default: false},
-	}
-
-	data, err := model.GenerateAgentYAML(spec, models)
-	require.NoError(t, err)
-
-	var agent model.Agent
-	err = yaml.Unmarshal(data, &agent)
-	require.NoError(t, err)
-	require.Len(t, agent.Models, 2)
-	assert.Equal(t, "model-a", agent.Models[0].ID)
-	assert.True(t, agent.Models[0].Default)
-	assert.Equal(t, "model-b", agent.Models[1].ID)
-	assert.False(t, agent.Models[1].Default)
-}
 
 func TestDiscoverModels_WithEchoCLI(t *testing.T) {
 	// Test the full DiscoverModels flow using "echo" as a CLI that always exists.
