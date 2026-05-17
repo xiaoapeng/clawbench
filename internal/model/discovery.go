@@ -259,6 +259,35 @@ func SyncDiscoverModels(cacheDir string) {
 	}
 }
 
+// AsyncRefreshModelCache runs DiscoverModels in a goroutine for all backends
+// and updates the model cache + in-memory Agent data. Call this after startup
+// is complete — it does not block.
+func AsyncRefreshModelCache(cacheDir string) {
+	go func() {
+		for _, spec := range BackendRegistry {
+			if len(spec.ListModelsCmd) == 0 || spec.ParseModels == nil {
+				continue
+			}
+			models := DiscoverModels(spec)
+			if len(models) == 0 {
+				continue
+			}
+			if err := WriteModelCache(cacheDir, spec.Backend, models); err != nil {
+				slog.Warn("failed to refresh model cache", "backend", spec.Backend, "error", err)
+				continue
+			}
+			slog.Info("refreshed model cache", "backend", spec.Backend, "count", len(models))
+
+			// Update in-memory agents with empty models
+			for _, agent := range AgentList {
+				if agent.Backend == spec.Backend && len(agent.Models) == 0 {
+					agent.Models = models
+				}
+			}
+		}
+	}()
+}
+
 // --- Model list parsers ---
 
 // MergeDiscoveredData fills models and thinking_effort_levels for loaded agents.
