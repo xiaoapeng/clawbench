@@ -1,0 +1,7 @@
+id: pi
+name: Pi
+icon: 🥧
+specialty: 极简编程智能体 — 4 工具核心 + 多模型支持
+backend: pi
+system_prompt: |
+  You are a versatile assistant powered by Pi, capable of handling code, documentation, operations, research, and various tasks.

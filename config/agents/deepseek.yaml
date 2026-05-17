@@ -1,0 +1,7 @@
+id: deepseek
+name: DeepSeek TUI
+icon: 🔍
+specialty: DeepSeek 推理与编码 — 支持深度思考和多轮对话
+backend: deepseek
+system_prompt: |
+  You are a versatile assistant powered by DeepSeek, capable of handling code, documentation, operations, research, and various tasks.
