@@ -322,15 +322,15 @@ anthropic/claude-sonnet-4-6
 
 	// First model should be default
 	assert.Equal(t, "opencode/minimax-m2.5-free", models[0].ID)
-	assert.Equal(t, "minimax-m2.5-free", models[0].Name, "Name should be model part after /")
+	assert.Equal(t, "opencode/minimax-m2.5-free", models[0].Name, "Name should include provider for disambiguation")
 	assert.True(t, models[0].Default, "first model should be default")
 
 	// Provider/model format
 	assert.Equal(t, "minimax/MiniMax-M2.5", models[2].ID)
-	assert.Equal(t, "MiniMax-M2.5", models[2].Name)
+	assert.Equal(t, "minimax/MiniMax-M2.5", models[2].Name)
 
 	assert.Equal(t, "anthropic/claude-sonnet-4-6", models[4].ID)
-	assert.Equal(t, "claude-sonnet-4-6", models[4].Name)
+	assert.Equal(t, "anthropic/claude-sonnet-4-6", models[4].Name)
 }
 
 func TestParseOpenCodeModels_EmptyOutput(t *testing.T) {

@@ -534,6 +534,8 @@ var opencodeModelLineRe = regexp.MustCompile(`^(\S+)/(\S+)$`)
 //	minimax/MiniMax-M2.5
 //	anthropic/claude-sonnet-4-6
 //
+// The Name field includes the provider prefix for disambiguation,
+// since different providers may offer models with identical names.
 // The first model is marked as default.
 func ParseOpenCodeModels(output string) []AgentModel {
 	var models []AgentModel
@@ -549,7 +551,7 @@ func ParseOpenCodeModels(output string) []AgentModel {
 
 		models = append(models, AgentModel{
 			ID:      line, // full "provider/model" as ID (opencode uses this format)
-			Name:    m[2], // model name part only for display
+			Name:    m[1] + "/" + m[2], // include provider in display name for disambiguation
 			Default: len(models) == 0,
 		})
 	}
