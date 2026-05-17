@@ -241,6 +241,50 @@ func SyncDiscoverAgents(dir string) map[string]bool {
 
 // --- Model list parsers ---
 
+// MergeDiscoveredData fills models and thinking_effort_levels for loaded agents.
+// - Models: uses user-defined models if present; otherwise reads from model cache.
+// - ThinkingEffortLevels: always from BackendRegistry by backend type (YAML values ignored).
+// - Present map: if provided, agents whose backend is not in present are soft-removed
+//   (removed from AgentList/Agents map, but YAML file is preserved).
+func MergeDiscoveredData(cacheDir string, present ...map[string]bool) {
+	var presentMap map[string]bool
+	if len(present) > 0 {
+		presentMap = present[0]
+	}
+
+	// Soft-remove agents whose CLI is not present
+	if presentMap != nil {
+		var keep []*Agent
+		for _, agent := range AgentList {
+			if !presentMap[agent.Backend] {
+				slog.Info("soft-removing agent (CLI not found)", "id", agent.ID, "backend", agent.Backend)
+				delete(Agents, agent.ID)
+				continue
+			}
+			keep = append(keep, agent)
+		}
+		AgentList = keep
+	}
+
+	// Fill models and thinking effort levels
+	for _, agent := range AgentList {
+		spec := FindSpecByBackend(agent.Backend)
+
+		// ThinkingEffortLevels: always from Registry (ignore YAML values)
+		if spec != nil {
+			agent.ThinkingEffortLevels = spec.ThinkingEffortLevels
+		}
+
+		// Models: user-defined takes priority; otherwise use cache
+		if len(agent.Models) == 0 {
+			cached := ReadModelCache(cacheDir, agent.Backend)
+			if len(cached) > 0 {
+				agent.Models = cached
+			}
+		}
+	}
+}
+
 // codebuddyModelRe extracts model IDs from codebuddy --help output.
 // Format: "Currently supported: (glm-4.7, glm-4.6, ...)"
 var codebuddyModelRe = regexp.MustCompile(`Currently supported: \(([^)]+)\)`)

@@ -586,3 +586,182 @@ func TestSyncDiscoverAgents_ReturnsPresentMap(t *testing.T) {
 		}
 	}
 }
+
+// --- Test 10: MergeDiscoveredData ---
+
+func TestMergeDiscoveredData_FillsEmptyModelsFromCache(t *testing.T) {
+	t.Cleanup(func() {
+		model.Agents = nil
+		model.AgentList = nil
+	})
+
+	dir := filepath.Join(t.TempDir(), "agents")
+	require.NoError(t, os.MkdirAll(dir, 0755))
+
+	// Create a minimal YAML with codebuddy backend (exists in Registry)
+	yamlContent := `id: test-merge
+name: Test Merge
+backend: codebuddy
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "test-merge.yaml"), []byte(yamlContent), 0644))
+	require.NoError(t, model.LoadAgents(dir))
+
+	agent := model.Agents["test-merge"]
+	require.NotNil(t, agent)
+	assert.Empty(t, agent.Models)
+	assert.Empty(t, agent.ThinkingEffortLevels)
+
+	// Create a cache with models for codebuddy
+	cacheDir := filepath.Join(t.TempDir(), "model-cache")
+	cachedModels := []model.AgentModel{
+		{ID: "model-a", Name: "Model A", Default: true},
+		{ID: "model-b", Name: "Model B", Default: false},
+	}
+	require.NoError(t, model.WriteModelCache(cacheDir, "codebuddy", cachedModels))
+
+	model.MergeDiscoveredData(cacheDir)
+
+	// Agent should now have models from cache and thinking_effort_levels from Registry
+	assert.Len(t, agent.Models, 2)
+	assert.Equal(t, "model-a", agent.Models[0].ID)
+	assert.Equal(t, []string{"low", "medium", "high", "xhigh"}, agent.ThinkingEffortLevels)
+}
+
+func TestMergeDiscoveredData_PreservesUserModels(t *testing.T) {
+	t.Cleanup(func() {
+		model.Agents = nil
+		model.AgentList = nil
+	})
+
+	dir := filepath.Join(t.TempDir(), "agents")
+	require.NoError(t, os.MkdirAll(dir, 0755))
+
+	// Create YAML with user-defined models
+	yamlContent := `id: test-preserve
+name: Test Preserve
+backend: codebuddy
+models:
+  - id: my-custom-model
+    name: My Custom Model
+    default: true
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "test-preserve.yaml"), []byte(yamlContent), 0644))
+	require.NoError(t, model.LoadAgents(dir))
+
+	agent := model.Agents["test-preserve"]
+	require.NotNil(t, agent)
+	require.Len(t, agent.Models, 1)
+
+	// Create cache with different models
+	cacheDir := filepath.Join(t.TempDir(), "model-cache")
+	cachedModels := []model.AgentModel{
+		{ID: "discovered-model", Name: "Discovered", Default: true},
+	}
+	require.NoError(t, model.WriteModelCache(cacheDir, "codebuddy", cachedModels))
+
+	model.MergeDiscoveredData(cacheDir)
+
+	// User models preserved
+	assert.Len(t, agent.Models, 1)
+	assert.Equal(t, "my-custom-model", agent.Models[0].ID)
+
+	// ThinkingEffortLevels from Registry (codebuddy)
+	assert.Equal(t, []string{"low", "medium", "high", "xhigh"}, agent.ThinkingEffortLevels)
+}
+
+func TestMergeDiscoveredData_SoftRemoveMissingCLI(t *testing.T) {
+	t.Cleanup(func() {
+		model.Agents = nil
+		model.AgentList = nil
+	})
+
+	dir := filepath.Join(t.TempDir(), "agents")
+	require.NoError(t, os.MkdirAll(dir, 0755))
+
+	// Create YAML for a backend whose CLI is NOT installed
+	yamlContent := `id: test-missing
+name: Test Missing
+backend: nonexistent_backend_type
+models:
+  - id: some-model
+    name: Some Model
+    default: true
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "test-missing.yaml"), []byte(yamlContent), 0644))
+	require.NoError(t, model.LoadAgents(dir))
+	require.Len(t, model.AgentList, 1)
+
+	// Merge with present map that does NOT include "nonexistent_backend_type"
+	present := map[string]bool{"claude": true, "codebuddy": true}
+	cacheDir := filepath.Join(t.TempDir(), "model-cache")
+	model.MergeDiscoveredData(cacheDir, present)
+
+	// Agent should be removed from runtime (but YAML still exists)
+	assert.Empty(t, model.Agents)
+	assert.Empty(t, model.AgentList)
+
+	// YAML file still exists on disk
+	_, err := os.Stat(filepath.Join(dir, "test-missing.yaml"))
+	assert.NoError(t, err)
+}
+
+func TestMergeDiscoveredData_KeepsAgentWithPresentCLI(t *testing.T) {
+	t.Cleanup(func() {
+		model.Agents = nil
+		model.AgentList = nil
+	})
+
+	dir := filepath.Join(t.TempDir(), "agents")
+	require.NoError(t, os.MkdirAll(dir, 0755))
+
+	// Create YAML with backend that IS present
+	yamlContent := `id: test-present
+name: Test Present
+backend: codebuddy
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "test-present.yaml"), []byte(yamlContent), 0644))
+	require.NoError(t, model.LoadAgents(dir))
+	require.Len(t, model.AgentList, 1)
+
+	present := map[string]bool{"codebuddy": true}
+	cacheDir := filepath.Join(t.TempDir(), "model-cache")
+	model.MergeDiscoveredData(cacheDir, present)
+
+	// Agent should still be there
+	assert.Len(t, model.AgentList, 1)
+	assert.NotNil(t, model.Agents["test-present"])
+	// ThinkingEffortLevels filled from Registry
+	assert.Equal(t, []string{"low", "medium", "high", "xhigh"}, model.Agents["test-present"].ThinkingEffortLevels)
+}
+
+func TestMergeDiscoveredData_IgnoresYAMLThinkingEffortLevels(t *testing.T) {
+	t.Cleanup(func() {
+		model.Agents = nil
+		model.AgentList = nil
+	})
+
+	dir := filepath.Join(t.TempDir(), "agents")
+	require.NoError(t, os.MkdirAll(dir, 0755))
+
+	// Create YAML with user-defined thinking_effort_levels (should be overwritten by Registry)
+	yamlContent := `id: test-levels
+name: Test Levels
+backend: codebuddy
+thinking_effort_levels:
+  - custom1
+  - custom2
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "test-levels.yaml"), []byte(yamlContent), 0644))
+	require.NoError(t, model.LoadAgents(dir))
+
+	agent := model.Agents["test-levels"]
+	require.NotNil(t, agent)
+	// Before merge: YAML values are loaded
+	assert.Equal(t, []string{"custom1", "custom2"}, agent.ThinkingEffortLevels)
+
+	cacheDir := filepath.Join(t.TempDir(), "model-cache")
+	model.MergeDiscoveredData(cacheDir)
+
+	// After merge: Registry values replace YAML values
+	assert.Equal(t, []string{"low", "medium", "high", "xhigh"}, agent.ThinkingEffortLevels)
+}
