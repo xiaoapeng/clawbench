@@ -521,9 +521,20 @@ func serveProjectsCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	newDir := filepath.Join(absPath, req.Name)
-	if err := os.Mkdir(newDir, 0755); err != nil {
+	// Validate that the resolved new directory stays under WatchDir
+	// (req.Name could contain ".." path traversal components)
+	newDirAbs, err := filepath.Abs(newDir)
+	if err != nil {
+		model.WriteError(w, model.Internal(fmt.Errorf("resolve path failed: %w", err)))
+		return
+	}
+	if !isPathUnderBase(newDirAbs, basePath) {
+		writeLocalizedError(w, r, model.Forbidden(nil, "AccessDenied"))
+		return
+	}
+	if err := os.Mkdir(newDirAbs, 0755); err != nil {
 		model.WriteError(w, model.Internal(fmt.Errorf("create directory failed: %w", err)))
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "path": newDir})
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "path": newDirAbs})
 }

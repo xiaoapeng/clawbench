@@ -698,6 +698,15 @@ function formatDate(modified) {
 }
 
 function showCtx(e, entry) {
+    if (!entry) {
+        // Empty-area context menu: no specific entry selected
+        ctxMenu.x = e.clientX
+        ctxMenu.y = e.clientY
+        ctxMenu.entry = null
+        ctxMenu.visible = true
+        nextTick(() => clampCtxMenu())
+        return
+    }
     const path = itemPath(entry.name)
     ctxMenu.x = e.clientX
     ctxMenu.y = e.clientY
