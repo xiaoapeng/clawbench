@@ -879,7 +879,11 @@ func TestServeGitWorktrees_SingleWorktree(t *testing.T) {
 
 	wt := worktrees[0].(map[string]interface{})
 	assert.Equal(t, true, wt["isCurrent"])
-	assert.Equal(t, env.ProjectDir, wt["path"])
+	// Resolve symlinks before comparing — macOS /var is a symlink to /private/var,
+	// so os.Getwd() returns /private/var/... while t.TempDir() returns /var/...
+	actualPath, _ := filepath.EvalSymlinks(wt["path"].(string))
+	expectedPath, _ := filepath.EvalSymlinks(env.ProjectDir)
+	assert.Equal(t, expectedPath, actualPath)
 }
 
 func TestServeGitWorktrees_WrongMethod(t *testing.T) {
