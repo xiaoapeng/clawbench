@@ -691,7 +691,7 @@ public class MainActivity extends AppCompatActivity {
                 if (jpushEnabled && !jpushAppKey.isEmpty()) {
                     Log.i(TAG, "JPush enabled on server, initializing with AppKey: " + jpushAppKey.substring(0, 4) + "...");
                     runOnUiThread(() -> {
-                        JPushInterface.setDebugMode(BuildConfig.DEBUG);
+                        JPushInterface.setDebugMode(false);
                         JPushConfig config = new JPushConfig();
                         config.setjAppKey(jpushAppKey);
                         JPushInterface.init(this, config);
