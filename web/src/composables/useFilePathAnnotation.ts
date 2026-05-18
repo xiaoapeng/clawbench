@@ -426,21 +426,22 @@ export async function verifyFilePaths(paths: string[], containerEl: HTMLElement)
     }
 }
 
-// Cache of verified commit SHAs: sha -> true (is commit) | false (not a commit)
-const verifiedCommitCache = new Map<string, boolean>()
+// Cache of verified commit SHAs: sha -> commit info object (or null if not a commit)
+const verifiedCommitCache = new Map<string, any>()
 // In-flight verification requests to avoid duplicates
 const commitInFlight = new Map<string, Promise<boolean>>()
 
 /**
  * Check which commit SHAs are valid git commit objects,
  * and hide buttons/annotations for SHAs that aren't.
+ * Also caches commit info for later use by navigateToCommit.
  */
 export async function verifyCommitHashes(shas: string[], containerEl: HTMLElement): Promise<void> {
     const unique = [...new Set(shas)]
     if (unique.length === 0) return
 
     // Batch verify: send all SHAs in one request
-    let results: Map<string, boolean>
+    let results: Map<string, any>
     try {
         const resp = await fetch('/api/git/verify-commits', {
             method: 'POST',
@@ -449,17 +450,17 @@ export async function verifyCommitHashes(shas: string[], containerEl: HTMLElemen
         })
         if (!resp.ok) return
         const data = await resp.json()
-        results = new Map(Object.entries(data.results || {}).map(([sha, type]) => [sha, type === 'commit']))
-        // Update cache
-        for (const [sha, isCommit] of results) {
-            verifiedCommitCache.set(sha, isCommit)
+        results = new Map(Object.entries(data.results || {}))
+        // Update cache — value is commit info object or null
+        for (const [sha, info] of results) {
+            verifiedCommitCache.set(sha, info)
         }
     } catch {
         return // Network error — leave buttons as-is
     }
 
-    for (const [sha, isCommit] of results) {
-        if (!isCommit) {
+    for (const [sha, info] of results) {
+        if (!info) {
             containerEl.querySelectorAll(`.chat-commit-open-btn[data-commit-sha="${CSS.escape(sha)}"]`).forEach(btn => {
                 btn.remove()
             })
@@ -468,6 +469,14 @@ export async function verifyCommitHashes(shas: string[], containerEl: HTMLElemen
             })
         }
     }
+}
+
+/**
+ * Get cached commit info for a SHA (populated by verifyCommitHashes).
+ * Returns null if not cached or not a valid commit.
+ */
+export function getCachedCommitInfo(sha: string): any | null {
+    return verifiedCommitCache.get(sha) || null
 }
 
 /**
@@ -491,6 +500,7 @@ export function useFilePathAnnotation() {
         verifyFilePaths,
         annotateCommitHashes,
         verifyCommitHashes,
+        getCachedCommitInfo,
         resolveRelativePath,
         openFilePath,
         clearVerifiedCache,

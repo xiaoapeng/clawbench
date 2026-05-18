@@ -133,6 +133,7 @@ import GitDiffView from './GitDiffView.vue'
 import GitBreadcrumb from './GitBreadcrumb.vue'
 import { renderDiff } from '@/utils/diff.ts'
 import { store } from '@/stores/app.ts'
+import { getCachedCommitInfo } from '@/composables/useFilePathAnnotation.ts'
 const { t } = useI18n()
 
 const props = defineProps({
@@ -406,11 +407,47 @@ function onCommitSelect(c) {
 }
 
 // Navigate directly to a specific commit's files view
-// Used when clicking a commit hash link from chat
+// Used when clicking a commit hash link from chat.
+// Ensures the commit info is in the commits array so breadcrumbs work.
 function navigateToCommit(sha) {
   selectedSHA.value = sha
   currentView.value = 'files'
+
+  // Ensure the commit exists in the commits array for selectedCommit computed
+  const existing = commits.value.find(c => c.sha === sha)
+  if (!existing) {
+    const info = getCachedCommitInfo(sha)
+    if (info && info.sha) {
+      commits.value.unshift(info)
+    } else {
+      // Fallback: fetch commit info via git log
+      fetchCommitInfo(sha)
+    }
+  }
+
   loadCommitFiles(sha).catch(() => {})
+}
+
+// Fetch a single commit's info via git log (fallback when cache is empty)
+async function fetchCommitInfo(sha) {
+  try {
+    const resp = await fetch(`/api/git/project-history?skip=0`)
+    // This returns recent commits, unlikely to contain our SHA.
+    // Better: use verify-commits to get info on demand.
+    const resp2 = await fetch('/api/git/verify-commits', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ shas: [sha] }),
+    })
+    if (!resp2.ok) return
+    const data = await resp2.json()
+    const info = data.results?.[sha]
+    if (info && info.sha && !commits.value.find(c => c.sha === sha)) {
+      commits.value.unshift(info)
+    }
+  } catch {
+    // ignore
+  }
 }
 
 // Watch for commit navigation requests from chat (commit hash links)
@@ -426,6 +463,11 @@ function drillBack(view) {
     files.value = []
     selectedFilePath.value = null
     diffState.value = { loading: false, empty: false, html: '' }
+    // If we navigated here from a commit hash link, commits may only contain
+    // that one commit. Load the full project history for proper navigation.
+    if (commits.value.length <= 1 && isGit.value) {
+      loadProjectHistory()
+    }
   } else if (view === 'files') {
     selectedFilePath.value = null
     diffState.value = { loading: false, empty: false, html: '' }
