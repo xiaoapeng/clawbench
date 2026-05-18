@@ -48,7 +48,9 @@ func IsSessionRunning(sessionID string) bool {
 }
 
 // SetSessionRunning sets the running state for a session.
-func SetSessionRunning(sessionID string, running bool) {
+// If skipEvent is true, the session_update event is suppressed (used by CancelSession
+// which emits its own "cancelled" event and should not also emit "completed").
+func SetSessionRunning(sessionID string, running bool, skipEvent ...bool) {
 	activeMu.Lock()
 	if running {
 		activeSessions[sessionID] = true
@@ -57,11 +59,13 @@ func SetSessionRunning(sessionID string, running bool) {
 	}
 	activeMu.Unlock()
 
-	// Emit event
-	if !running {
-		emitSessionEvent(sessionID, "completed", true)
-	} else {
-		emitSessionEvent(sessionID, "running", false)
+	// Emit event unless caller explicitly skips (e.g. CancelSession sends its own event)
+	if len(skipEvent) == 0 || !skipEvent[0] {
+		if !running {
+			emitSessionEvent(sessionID, "completed", true)
+		} else {
+			emitSessionEvent(sessionID, "running", false)
+		}
 	}
 }
 
@@ -135,8 +139,8 @@ func CancelSession(sessionID string) bool {
 		}
 	}
 
-	// Mark session as not running
-	SetSessionRunning(sessionID, false)
+	// Mark session as not running (skip completed event — we already sent "cancelled")
+	SetSessionRunning(sessionID, false, true)
 
 	return true
 }

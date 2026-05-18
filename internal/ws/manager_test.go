@@ -80,7 +80,7 @@ func TestManager_Unsubscribe(t *testing.T) {
 	var writeMu sync.Mutex
 
 	mgr.Subscribe(nil, &writeMu, "client-1")
-	mgr.Unsubscribe("client-1")
+	mgr.DisconnectClient("client-1")
 
 	mgr.mu.Lock()
 	sub, ok := mgr.subscriptions["client-1"]
@@ -159,7 +159,7 @@ func TestManager_BroadcastEvent_Disconnected(t *testing.T) {
 	var writeMu sync.Mutex
 
 	mgr.Subscribe(nil, &writeMu, "client-1")
-	mgr.Unsubscribe("client-1")
+	mgr.DisconnectClient("client-1")
 
 	// Broadcast while disconnected — should buffer
 	msg := ServerMessage{Type: "event", ID: "evt_1", Event: "session_update", Data: &SessionUpdateData{SessionID: "s1", Status: "completed"}}
@@ -196,7 +196,7 @@ func TestManager_BroadcastEvent_JPushWhenDisconnected(t *testing.T) {
 
 	mgr.Subscribe(nil, &writeMu, "client-1")
 	mgr.RegisterPushID("reg-123", "client-1")
-	mgr.Unsubscribe("client-1")
+	mgr.DisconnectClient("client-1")
 
 	// Broadcast while disconnected — should send JPush
 	msg := ServerMessage{Type: "event", ID: "evt_1", Event: "session_update", Data: &SessionUpdateData{SessionID: "s1", Status: "completed"}}
@@ -210,7 +210,7 @@ func TestManager_BroadcastEvent_JPushDisabled(t *testing.T) {
 
 	mgr.Subscribe(nil, &writeMu, "client-1")
 	mgr.RegisterPushID("reg-123", "client-1")
-	mgr.Unsubscribe("client-1")
+	mgr.DisconnectClient("client-1")
 
 	// Should not panic with nil jpush
 	msg := ServerMessage{Type: "event", ID: "evt_1", Event: "task_update", Data: &TaskUpdateData{TaskID: "t1", Status: "completed"}}
@@ -226,8 +226,8 @@ func TestManager_BroadcastEvent_MultipleClients(t *testing.T) {
 	mgr.Subscribe(nil, &writeMu2, "client-2")
 
 	// Disconnect both
-	mgr.Unsubscribe("client-1")
-	mgr.Unsubscribe("client-2")
+	mgr.DisconnectClient("client-1")
+	mgr.DisconnectClient("client-2")
 
 	// Broadcast — both should buffer the event
 	msg := ServerMessage{Type: "event", ID: "evt_1", Event: "session_update", Data: &SessionUpdateData{SessionID: "s1", Status: "completed"}}
@@ -286,7 +286,7 @@ func TestCleanupStale_NoPushRegID(t *testing.T) {
 	var writeMu sync.Mutex
 
 	mgr.Subscribe(nil, &writeMu, "client-1")
-	mgr.Unsubscribe("client-1")
+	mgr.DisconnectClient("client-1")
 
 	// Set bufferStart to 121 seconds ago — should be cleaned up (no pushRegID, >120s)
 	mgr.mu.Lock()
@@ -311,7 +311,7 @@ func TestCleanupStale_NoPushRegID_RecentNotCleaned(t *testing.T) {
 	var writeMu sync.Mutex
 
 	mgr.Subscribe(nil, &writeMu, "client-1")
-	mgr.Unsubscribe("client-1")
+	mgr.DisconnectClient("client-1")
 
 	// Set bufferStart to 60 seconds ago — should NOT be cleaned up (no pushRegID, <120s)
 	mgr.mu.Lock()
@@ -337,7 +337,7 @@ func TestCleanupStale_WithPushRegID(t *testing.T) {
 
 	mgr.Subscribe(nil, &writeMu, "client-1")
 	mgr.RegisterPushID("reg-123", "client-1")
-	mgr.Unsubscribe("client-1")
+	mgr.DisconnectClient("client-1")
 
 	// Set bufferStart to 31 minutes ago, lastActive to 31 minutes ago
 	// Should NOT be cleaned up (has pushRegID, lastActive < 10 days)
@@ -403,7 +403,7 @@ func TestBroadcastEvent_BufferWindow(t *testing.T) {
 	var writeMu sync.Mutex
 
 	mgr.Subscribe(nil, &writeMu, "client-1")
-	mgr.Unsubscribe("client-1")
+	mgr.DisconnectClient("client-1")
 
 	// Within buffer window (10s) — should buffer
 	msg := ServerMessage{Type: "event", ID: "evt_1", Event: "session_update", Data: &SessionUpdateData{SessionID: "s1", Status: "completed"}}

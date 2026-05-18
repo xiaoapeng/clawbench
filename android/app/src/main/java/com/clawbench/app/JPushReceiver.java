@@ -27,12 +27,21 @@ public class JPushReceiver extends JPushMessageReceiver {
             }
         }
         if (sessionId == null) return;
-        final String sid = sessionId;
+        // Build safe JSON parameter to prevent XSS injection via sessionId
+        final String jsArg;
+        try {
+            org.json.JSONObject detail = new org.json.JSONObject();
+            detail.put("sessionId", sessionId);
+            jsArg = detail.toString();
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to build JSON for open-session event", e);
+            return;
+        }
         if (MainActivity.instance != null) {
             MainActivity.instance.runOnUiThread(() -> {
                 if (MainActivity.instance.webView != null) {
                     MainActivity.instance.webView.evaluateJavascript(
-                        "window.dispatchEvent(new CustomEvent('clawbench-open-session', { detail: { sessionId: '" + sid + "' } }))",
+                        "window.dispatchEvent(new CustomEvent('clawbench-open-session', { detail: " + jsArg + " }))",
                         null
                     );
                 }
@@ -61,6 +70,16 @@ public class JPushReceiver extends JPushMessageReceiver {
      */
     private void notifyWebView(String registrationId) {
         if (MainActivity.instance == null) return;
+        // Build safe JSON parameter to prevent XSS injection via registrationId
+        final String jsArg;
+        try {
+            org.json.JSONObject detail = new org.json.JSONObject();
+            detail.put("registrationId", registrationId);
+            jsArg = detail.toString();
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to build JSON for push-registered event", e);
+            return;
+        }
         MainActivity.instance.runOnUiThread(() -> {
             // Update pushAvailable if not already set
             if (!MainActivity.instance.pushAvailable) {
@@ -69,7 +88,7 @@ public class JPushReceiver extends JPushMessageReceiver {
             // Dispatch a custom event to the WebView so useGlobalEvents can register via WS
             if (MainActivity.instance.webView != null) {
                 MainActivity.instance.webView.evaluateJavascript(
-                    "window.dispatchEvent(new CustomEvent('clawbench-push-registered', { detail: { registrationId: '" + registrationId + "' } }))",
+                    "window.dispatchEvent(new CustomEvent('clawbench-push-registered', { detail: " + jsArg + " }))",
                     null
                 );
             }

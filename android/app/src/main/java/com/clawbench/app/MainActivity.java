@@ -393,13 +393,14 @@ public class MainActivity extends AppCompatActivity {
                     request.addRequestHeader("Cookie", cookies);
                 }
                 request.setMimeType(mimetype);
-                request.setTitle(getFileNameFromUrl(url));
+                String fileName = getDownloadFileName(url, contentDisposition);
+                request.setTitle(fileName);
                 request.setDescription(getString(R.string.download_description));
                 request.allowScanningByMediaScanner();
                 request.setNotificationVisibility(
                         DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
                 request.setDestinationInExternalPublicDir(
-                        Environment.DIRECTORY_DOWNLOADS, "ClawBench/" + getFileNameFromUrl(url));
+                        Environment.DIRECTORY_DOWNLOADS, "ClawBench/" + fileName);
 
                 DownloadManager dm = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
                 dm.enqueue(request);
@@ -412,16 +413,52 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * Extract a file name from a /api/local-file/ URL.
-     * Falls back to "download" if parsing fails.
+     * Determine the download file name.
+     * Priority: Content-Disposition header > URL path (without query params) > "download".
      */
-    private String getFileNameFromUrl(String url) {
+    private String getDownloadFileName(String url, String contentDisposition) {
+        // 1. Try Content-Disposition header (sent by server with attachment; filename="...")
+        if (contentDisposition != null && !contentDisposition.isEmpty()) {
+            // Parse filename*= (RFC 5987) first, then filename=
+            String name = parseContentDispositionFilename(contentDisposition);
+            if (name != null && !name.isEmpty()) return name;
+        }
+        // 2. Fallback: extract from URL path, stripping query parameters
         String decoded = Uri.decode(url);
+        // Remove query string and fragment
+        int queryIdx = decoded.indexOf('?');
+        if (queryIdx >= 0) decoded = decoded.substring(0, queryIdx);
+        int fragmentIdx = decoded.indexOf('#');
+        if (fragmentIdx >= 0) decoded = decoded.substring(0, fragmentIdx);
         int lastSlash = decoded.lastIndexOf('/');
         if (lastSlash >= 0 && lastSlash < decoded.length() - 1) {
             return decoded.substring(lastSlash + 1);
         }
         return "download";
+    }
+
+    /**
+     * Parse filename from Content-Disposition header.
+     * Supports: filename="..." and filename*=UTF-8''... (RFC 5987)
+     */
+    private String parseContentDispositionFilename(String contentDisposition) {
+        // Try filename*= (RFC 5987 encoded) first
+        java.util.regex.Matcher extMatcher = java.util.regex.Pattern.compile(
+                "filename\\*\\s*=\\s*(?:UTF-8|utf-8)''(.+?)(?:\\s*;|$)")
+                .matcher(contentDisposition);
+        if (extMatcher.find()) {
+            try {
+                return java.net.URLDecoder.decode(extMatcher.group(1), "UTF-8");
+            } catch (Exception ignored) {}
+        }
+        // Then try filename="..."
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile(
+                "filename\\s*=\\s*\"?([^\";]+)\"?")
+                .matcher(contentDisposition);
+        if (matcher.find()) {
+            return matcher.group(1).trim();
+        }
+        return null;
     }
 
     /**
@@ -477,6 +514,12 @@ public class MainActivity extends AppCompatActivity {
         prefs.edit().putString(KEY_SERVER_URL, url).apply();
         if (password != null && !password.isEmpty()) {
             PortForwardService.setPassword(this, password);
+        }
+
+        // Fetch JPush config now that we have a server URL.
+        // On first launch, onCreate's fetchPushConfig() skips because URL is empty.
+        if (!pushAvailable) {
+            fetchPushConfig();
         }
 
         if (isNetworkAvailable()) {
@@ -571,6 +614,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onDestroy() {
         // Do NOT stop PortForwardService here — it should survive Activity lifecycle
         // so the SSH tunnel continues running when the app is in background.
+        instance = null; // Clear static reference to prevent memory leak / stale access
         super.onDestroy();
     }
 
@@ -647,7 +691,7 @@ public class MainActivity extends AppCompatActivity {
                 if (jpushEnabled && !jpushAppKey.isEmpty()) {
                     Log.i(TAG, "JPush enabled on server, initializing with AppKey: " + jpushAppKey.substring(0, 4) + "...");
                     runOnUiThread(() -> {
-                        JPushInterface.setDebugMode(true);
+                        JPushInterface.setDebugMode(BuildConfig.DEBUG);
                         JPushConfig config = new JPushConfig();
                         config.setjAppKey(jpushAppKey);
                         JPushInterface.init(this, config);

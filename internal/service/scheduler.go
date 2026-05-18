@@ -578,7 +578,7 @@ func (s *Scheduler) executeTask(task *model.ScheduledTask, projectPath string, t
 			slog.String("session_id", sessionID),
 		)
 		UpdateExecutionStatus(sessionID, "cancelled")
-		emitTaskEvent(fmt.Sprintf("%d", task.ID), "failed", fmt.Sprintf("%d", executionID))
+		emitTaskEvent(fmt.Sprintf("%d", task.ID), "cancelled", fmt.Sprintf("%d", executionID))
 		newStatus := task.Status
 		UpdateTaskStats(task, newStatus)
 		return

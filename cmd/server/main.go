@@ -545,6 +545,17 @@ func main() {
 	defer scheduler.Stop()
 	service.GlobalScheduler = scheduler
 
+	// Start periodic cleanup of stale WS subscriptions (every 60s)
+	go func() {
+		ticker := time.NewTicker(60 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			if mgr := ws.GetManager(); mgr != nil {
+				mgr.CleanupStale()
+			}
+		}
+	}()
+
 	host := cfg.Host
 	addr := fmt.Sprintf("%s:%d", host, port)
 	slog.Info("server ready",

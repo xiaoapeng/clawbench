@@ -5,11 +5,15 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"sync"
 	"time"
 
 	"github.com/coder/websocket"
 )
+
+// clientIDPattern validates client_id query parameter.
+var clientIDPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)
 
 // EventsHandler handles the /api/ai/events/ws WebSocket endpoint.
 // Auth is handled by middleware.Auth before this function is called.
@@ -36,22 +40,30 @@ func EventsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract client_id from query parameter; fallback to "default" for backward compat
+	// Extract and validate client_id from query parameter
 	clientID := r.URL.Query().Get("client_id")
-	if clientID == "" {
+	if clientID == "" || !clientIDPattern.MatchString(clientID) {
 		clientID = "default"
 	}
 
 	var writeMu sync.Mutex
 	sub := mgr.Subscribe(conn, &writeMu, clientID)
-	defer mgr.Unsubscribe(clientID)
+	if sub == nil {
+		// Subscription rejected (e.g. limit reached) — conn already closed by Subscribe
+		return
+	}
+	defer mgr.DisconnectClient(clientID)
 
 	// Replay buffered events on reconnect
 	buffered := sub.GetBufferedEvents()
 	if len(buffered) > 0 {
 		slog.Debug("ws: replaying buffered events", "count", len(buffered), "client_id", clientID)
 		for _, msg := range buffered {
-			data, _ := json.Marshal(msg)
+			data, err := json.Marshal(msg)
+			if err != nil {
+				slog.Warn("ws: failed to marshal buffered event for replay", "error", err, "client_id", clientID)
+				continue
+			}
 			writeMu.Lock()
 			ctx2, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			conn.Write(ctx2, websocket.MessageText, data)
@@ -79,14 +91,22 @@ func EventsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	// Read client messages (blocks until disconnect)
-	ctx := context.Background()
+	// Read client messages (blocks until disconnect).
+	// Use the request context so the connection is closed when the client
+	// disconnects or the server shuts down. Add an idle timeout to prevent
+	// dead connections from lingering indefinitely (no client messages for 5min).
+	readCtx, readCancel := context.WithTimeout(r.Context(), 5*time.Minute)
+	defer readCancel()
+
 	for {
-		_, data, err := conn.Read(ctx)
+		_, data, err := conn.Read(readCtx)
 		if err != nil {
 			slog.Debug("ws: client disconnected", "error", err, "client_id", clientID)
 			break
 		}
+		// Reset idle timeout on each message
+		readCancel()
+		readCtx, readCancel = context.WithTimeout(r.Context(), 5*time.Minute)
 
 		var msg ClientMessage
 		if err := json.Unmarshal(data, &msg); err != nil {

@@ -620,8 +620,10 @@ onUnmounted(() => {
     justify-content: center;
 }
 
-.status-toggle:hover {
-    background: var(--bg-tertiary);
+@media (hover: hover) {
+    .status-toggle:hover {
+        background: var(--bg-tertiary);
+    }
 }
 
 .status-dot {
@@ -647,10 +649,6 @@ onUnmounted(() => {
 @keyframes status-pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.4; }
-}
-
-.settings-toggle:hover {
-    background: var(--bg-tertiary);
 }
 
 .settings-toggle svg {

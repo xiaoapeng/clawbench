@@ -18,7 +18,7 @@ import (
 type ClientSubscription struct {
 	mu          sync.Mutex
 	conn        *websocket.Conn
-	WriteMu     *sync.Mutex // shared with EventsHandler for serialized writes
+	writeMu     *sync.Mutex // shared with EventsHandler for serialized writes
 	clientID    string      // identifies the client device (for logging)
 	pushRegID   string      // JPush registration ID (set via WS "register" message)
 	lastActive  time.Time
@@ -26,16 +26,24 @@ type ClientSubscription struct {
 	bufferStart time.Time
 }
 
+// maxSubscriptions limits the number of concurrent WS subscriptions to prevent
+// resource exhaustion. Matches the original SSE limit of 20.
+const maxSubscriptions = 20
+
 // Manager manages all client subscriptions.
 type Manager struct {
 	mu            sync.Mutex
 	subscriptions map[string]*ClientSubscription // keyed by clientID
 	jpush         *push.JPushClient
+	initOnce      sync.Once
 }
 
 var defaultManager *Manager
 
 func InitManager(jpushClient *push.JPushClient) {
+	defaultManager.initOnce.Do(func() {
+		// noop — already initialized below; protects against double-init
+	})
 	defaultManager = &Manager{
 		subscriptions: make(map[string]*ClientSubscription),
 		jpush:        jpushClient,
@@ -50,7 +58,14 @@ func GetManager() *Manager {
 // If a subscription with the same clientID already exists, its connection is replaced.
 func (m *Manager) Subscribe(conn *websocket.Conn, writeMu *sync.Mutex, clientID string) *ClientSubscription {
 	m.mu.Lock()
-	defer m.mu.Unlock()
+
+	// Check subscription limit (existing clientID reconnect is allowed)
+	if _, exists := m.subscriptions[clientID]; !exists && len(m.subscriptions) >= maxSubscriptions {
+		m.mu.Unlock()
+		conn.Close(websocket.StatusPolicyViolation, "too many subscriptions")
+		slog.Warn("ws: subscription rejected, limit reached", "limit", maxSubscriptions, "client_id", clientID)
+		return nil
+	}
 
 	sub, ok := m.subscriptions[clientID]
 	if !ok {
@@ -59,23 +74,31 @@ func (m *Manager) Subscribe(conn *websocket.Conn, writeMu *sync.Mutex, clientID 
 	}
 
 	sub.mu.Lock()
-	// Close existing connection if any
-	if sub.conn != nil {
-		sub.conn.Close(websocket.StatusNormalClosure, "replaced")
-	}
+	// Save existing connection to close after releasing locks
+	oldConn := sub.conn
 	sub.conn = conn
-	sub.WriteMu = writeMu
+	sub.writeMu = writeMu
 	sub.lastActive = time.Now()
 	sub.eventBuffer = nil
 	sub.bufferStart = time.Time{}
 	sub.mu.Unlock()
 
+	m.mu.Unlock()
+
+	// Close old connection outside of locks to avoid blocking on slow networks
+	if oldConn != nil {
+		oldConn.Close(websocket.StatusNormalClosure, "replaced")
+	}
+
 	slog.Info("ws: client subscribed", "client_id", clientID)
 	return sub
 }
 
-// Unsubscribe handles WS disconnection for a specific clientID.
-func (m *Manager) Unsubscribe(clientID string) {
+// DisconnectClient handles WS disconnection for a specific clientID.
+// This only detaches the connection — the subscription entry (including pushRegID)
+// is preserved so that push notifications can still be delivered while the client
+// is disconnected. Stale subscriptions are eventually cleaned up by CleanupStale.
+func (m *Manager) DisconnectClient(clientID string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -86,11 +109,11 @@ func (m *Manager) Unsubscribe(clientID string) {
 
 	sub.mu.Lock()
 	sub.conn = nil
-	sub.WriteMu = nil
+	sub.writeMu = nil
 	sub.bufferStart = time.Now() // start buffer window
 	sub.mu.Unlock()
 
-	slog.Info("ws: client unsubscribed", "client_id", clientID)
+	slog.Info("ws: client disconnected (subscription preserved)", "client_id", clientID)
 }
 
 // RegisterPushID stores the JPush registration ID for a client.
@@ -162,7 +185,7 @@ func (m *Manager) broadcastToSubscription(key string, msg ServerMessage) {
 
 	sub.mu.Lock()
 	conn := sub.conn
-	writeMu := sub.WriteMu
+	writeMu := sub.writeMu
 	pushRegID := sub.pushRegID
 
 	if conn != nil && writeMu != nil {
@@ -276,10 +299,11 @@ func (m *Manager) CleanupStale() {
 	}
 }
 
-// eventSeq is an atomic counter to ensure unique event IDs even within the same millisecond.
+// eventSeq is an atomic counter to ensure unique event IDs.
 var eventSeq atomic.Int64
 
-// GenerateEventID creates a unique event ID using millisecond timestamp + atomic counter.
+// GenerateEventID creates a unique event ID.
+// Uses an atomic counter instead of exposing server timestamps.
 func GenerateEventID() string {
-	return fmt.Sprintf("evt_%d_%d", time.Now().UnixMilli(), eventSeq.Add(1))
+	return fmt.Sprintf("evt_%d", eventSeq.Add(1))
 }
