@@ -29,11 +29,13 @@ public class JPushReceiver extends JPushMessageReceiver {
                 Log.w(TAG, "Failed to parse notification extras", e);
             }
         }
-        if (sessionId != null && MainActivity.instance != null) {
+        if (sessionId == null) return;
+        final String sid = sessionId;
+        if (MainActivity.instance != null) {
             MainActivity.instance.runOnUiThread(() -> {
                 if (MainActivity.instance.webView != null) {
                     MainActivity.instance.webView.evaluateJavascript(
-                        "window.dispatchEvent(new CustomEvent('clawbench-open-session', { detail: { sessionId: '" + sessionId + "' } }))",
+                        "window.dispatchEvent(new CustomEvent('clawbench-open-session', { detail: { sessionId: '" + sid + "' } }))",
                         null
                     );
                 }
