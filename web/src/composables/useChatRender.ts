@@ -27,7 +27,7 @@ import {
 
 export function useChatRender(options) {
   const { messages, theme, currentSessionId } = options
-  const { annotateFilePaths, verifyFilePaths } = useFilePathAnnotation()
+  const { annotateFilePaths, verifyFilePaths, annotateCommitHashes, verifyCommitHashes } = useFilePathAnnotation()
   const { annotateLocalhostUrls } = useLocalhostAnnotation()
 
   const blockTasks = reactive({})
@@ -130,7 +130,7 @@ export function useChatRender(options) {
       html = renderKatexInString(html)
     }
 
-    html = DOMPurify.sanitize(html, { ADD_TAGS: ['math', 'button'], ADD_ATTR: ['data-file-path', 'data-url', 'data-port', 'data-protocol', 'title'] })
+    html = DOMPurify.sanitize(html, { ADD_TAGS: ['math', 'button'], ADD_ATTR: ['data-file-path', 'data-commit-sha', 'data-url', 'data-port', 'data-protocol', 'title'] })
     html = html.replace(/<table>/g, '<div class="table-wrap"><table>').replace(/<\/table>/g, '</table></div>')
 
     if (!skipEnhancements) {
@@ -174,6 +174,16 @@ export function useChatRender(options) {
         nextTick(() => {
           const el = document.getElementById('aiChatMessages')
           if (el) verifyFilePaths(uniquePaths, el)
+        })
+      }
+      // Annotate commit hashes (7-40 hex chars with at least one a-f letter)
+      const { html: commitAnnotatedHtml, detectedSHAs } = annotateCommitHashes(html)
+      html = commitAnnotatedHtml
+      if (detectedSHAs.length > 0) {
+        const uniqueSHAs = [...new Set(detectedSHAs)]
+        nextTick(() => {
+          const el = document.getElementById('aiChatMessages')
+          if (el) verifyCommitHashes(uniqueSHAs, el)
         })
       }
       // Annotate localhost URLs (e.g. http://localhost:30080) with clickable tags

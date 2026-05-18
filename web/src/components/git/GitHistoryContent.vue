@@ -115,7 +115,7 @@
 
 <script setup>
 import { GitBranch, Plus, Minus, FileText } from 'lucide-vue-next'
-import { ref, computed, inject, onMounted } from 'vue'
+import { ref, computed, inject, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import GitCommitList from './GitCommitList.vue'
 import GitCommitMeta from './GitCommitMeta.vue'
@@ -393,6 +393,20 @@ function onCommitSelect(c) {
     loadDiff()
   }
 }
+
+// Navigate directly to a specific commit's files view
+function navigateToCommit(sha) {
+  selectedSHA.value = sha
+  currentView.value = 'files'
+  loadCommitFiles(sha).catch(() => {})
+}
+
+// Watch for commit navigation requests from chat (commit hash links)
+watch(() => store.state.commitNavigateSha, (sha) => {
+  if (!sha) return
+  store.state.commitNavigateSha = null // consume
+  navigateToCommit(sha)
+})
 
 function drillBack(view) {
   if (view === 'commits') {

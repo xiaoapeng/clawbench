@@ -224,6 +224,20 @@ function handleChatClick(event) {
     }
     return
   }
+
+  // 4. Commit hash open button
+  const commitBtn = (event.target).closest('.chat-commit-open-btn')
+  if (commitBtn) {
+    event.preventDefault()
+    event.stopPropagation()
+    const sha = commitBtn.getAttribute('data-commit-sha')
+    if (sha) {
+      window.dispatchEvent(new CustomEvent('navigate-to-commit', { detail: { sha } }))
+      chatUI.closeSheet?.()
+    }
+    return
+  }
+
   handleDblClick(event, (href) => {
     openFilePath(href)
     chatUI.closeSheet?.()

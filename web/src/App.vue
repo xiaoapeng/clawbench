@@ -572,6 +572,14 @@ function handleOpenFileManager() {
     activeTab.value = 'browse'
 }
 
+function handleNavigateToCommit(e) {
+    const sha = e?.detail?.sha
+    if (sha) {
+        store.setCommitNavigate(sha)
+    }
+    activeTab.value = 'history'
+}
+
 function playQuoteEmitAnimation(e) {
   const { from, to } = e?.detail ?? {}
   if (!from || !to) return
@@ -613,6 +621,7 @@ function playQuoteEmitAnimation(e) {
 onMounted(async () => {
     startTaskPolling()
     window.addEventListener('open-file-manager', handleOpenFileManager)
+    window.addEventListener('navigate-to-commit', handleNavigateToCommit)
     window.addEventListener('quote-sent', playQuoteEmitAnimation)
     document.addEventListener('click', handleOverflowOutsideClick)
     applyTheme(theme.value)
@@ -681,6 +690,7 @@ onMounted(async () => {
 onUnmounted(() => {
     stopTaskPolling()
     window.removeEventListener('open-file-manager', handleOpenFileManager)
+    window.removeEventListener('navigate-to-commit', handleNavigateToCommit)
     window.removeEventListener('quote-sent', playQuoteEmitAnimation)
     document.removeEventListener('click', handleOverflowOutsideClick)
 })

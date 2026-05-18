@@ -114,6 +114,7 @@ export default {
       dropToUpload: '松开上传文件',
       uploading: '上传中...',
       openFile: '打开文件',
+      openCommit: '打开 Commit 详情',
     },
     quickSend: {
       title: '快捷发送',
@@ -588,6 +589,7 @@ export default {
       commitList: '提交列表',
       workingTree: '工作区',
       openFile: '打开文件',
+      openCommit: '打开 Commit 详情',
     },
     graph: {
       workingTree: '工作区',

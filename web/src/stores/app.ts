@@ -83,6 +83,9 @@ interface AppState {
     gitBranch: string
     isGitRepo: boolean
 
+    // Git navigation (commit hash links from chat)
+    commitNavigateSha: string | null
+
 }
 
 const state = reactive<AppState>({
@@ -127,6 +130,7 @@ const state = reactive<AppState>({
     // Git
     gitBranch: '',
     isGitRepo: false,
+    commitNavigateSha: null,
 
 })
 
@@ -178,6 +182,10 @@ async function loadGitBranch(): Promise<void> {
         state.isGitRepo = false
         state.gitBranch = ''
     }
+}
+
+function setCommitNavigate(sha: string): void {
+    state.commitNavigateSha = sha
 }
 
 // =============================================
@@ -436,6 +444,7 @@ export const store = {
     loadProject,
     setProject,
     loadGitBranch,
+    setCommitNavigate,
     loadFiles,
     selectFile,
     deleteFile,

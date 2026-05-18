@@ -405,6 +405,21 @@ function onCommitSelect(c) {
   }
 }
 
+// Navigate directly to a specific commit's files view
+// Used when clicking a commit hash link from chat
+function navigateToCommit(sha) {
+  selectedSHA.value = sha
+  currentView.value = 'files'
+  loadCommitFiles(sha).catch(() => {})
+}
+
+// Watch for commit navigation requests from chat (commit hash links)
+watch(() => store.state.commitNavigateSha, (sha) => {
+  if (!sha) return
+  store.state.commitNavigateSha = null // consume
+  navigateToCommit(sha)
+})
+
 function drillBack(view) {
   if (view === 'commits') {
     selectedSHA.value = null

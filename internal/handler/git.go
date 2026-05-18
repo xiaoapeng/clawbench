@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os/exec"
@@ -495,6 +496,51 @@ func parseGitStatusPorcelain(output string) []wtFileInfo {
 		}
 	}
 	return files
+}
+
+// ServeGitVerifyCommits checks which SHAs are valid git commit objects.
+// Accepts POST with JSON body {"shas": ["abc1234", ...]}.
+// Returns {"results": {"abc1234": "commit", "def5678": null}} where null means
+// the SHA is not a valid commit (could be blob/tree/tag or not found).
+func ServeGitVerifyCommits(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, http.MethodPost) {
+		return
+	}
+	projectPath, ok := requireProject(w, r)
+	if !ok {
+		return
+	}
+	if !isGitRepo(projectPath) {
+		writeJSON(w, http.StatusOK, map[string]interface{}{"results": map[string]interface{}{}})
+		return
+	}
+
+	var body struct {
+		SHAs []string `json:"shas"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || len(body.SHAs) == 0 {
+		writeJSON(w, http.StatusOK, map[string]interface{}{"results": map[string]interface{}{}})
+		return
+	}
+
+	results := make(map[string]interface{}, len(body.SHAs))
+	for _, sha := range body.SHAs {
+		cmd := exec.Command("git", "cat-file", "-t", sha)
+		cmd.Dir = projectPath
+		output, err := cmd.Output()
+		if err != nil {
+			results[sha] = nil
+		} else {
+			objType := strings.TrimSpace(string(output))
+			if objType == "commit" {
+				results[sha] = "commit"
+			} else {
+				results[sha] = nil
+			}
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{"results": results})
 }
 
 // ServeGitWorkingTreeFiles returns uncommitted file changes for the project or a specific file.

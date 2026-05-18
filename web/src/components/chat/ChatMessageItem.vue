@@ -753,6 +753,19 @@ const { getAgentIcon, getAgentName } = chatSession
     background: rgba(255, 255, 255, 0.15);
 }
 
+.chat-message.user .chat-commit-hash {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.chat-message.user .chat-commit-open-btn {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.chat-message.user .chat-commit-open-btn:hover {
+    color: white;
+    background: rgba(255, 255, 255, 0.15);
+}
+
 .chat-message.assistant pre {
     padding: 10px;
     margin: 6px 0;
