@@ -30,6 +30,12 @@ export function hasPendingCommitNavigation(): boolean {
 }
 
 /**
+ * The reactive pending SHA ref. GitHistory components can watch this
+ * to handle navigation even when already mounted and active.
+ */
+export { pendingSha }
+
+/**
  * Shared commit navigation logic for GitHistory components.
  * Takes the component's reactive state and functions as parameters.
  */
@@ -63,29 +69,37 @@ export function useCommitNavigation(options: {
 
     /**
      * Navigate directly to a specific commit's files view.
+     * Accepts short or full SHA. Resolves to full SHA for consistent state.
      * Ensures the commit info is in the commits array so breadcrumbs work.
      */
     async function navigateToCommit(sha: string) {
-        selectedSHA.value = sha
         currentView.value = 'files'
 
-        // Ensure the commit exists in the commits array for selectedCommit computed
-        const existing = commits.value.find(c => c.sha === sha)
-        if (!existing) {
+        // Resolve short SHA to full SHA and get commit info
+        let commitInfo = commits.value.find(c => c.sha === sha || c.sha.startsWith(sha))
+        if (!commitInfo) {
             // Try annotation cache first
-            const info = getCachedCommitInfo(sha)
-            if (info && info.sha) {
-                commits.value.unshift(info)
+            const cached = getCachedCommitInfo(sha)
+            if (cached && cached.sha) {
+                commitInfo = cached
+                commits.value.unshift(cached)
             } else {
-                // Fallback: fetch commit info via API
+                // Fetch commit info via API (returns full SHA)
                 const fetched = await fetchCommitInfo(sha)
-                if (fetched && !commits.value.find(c => c.sha === sha)) {
-                    commits.value.unshift(fetched)
+                if (fetched && fetched.sha) {
+                    commitInfo = fetched
+                    if (!commits.value.find(c => c.sha === fetched.sha)) {
+                        commits.value.unshift(fetched)
+                    }
                 }
             }
         }
 
-        loadCommitFiles(sha).catch(() => {})
+        // Use the full SHA from commit info for consistent state
+        const fullSha = commitInfo?.sha || sha
+        selectedSHA.value = fullSha
+
+        loadCommitFiles(fullSha).catch(() => {})
     }
 
     /**

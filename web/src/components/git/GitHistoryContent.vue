@@ -124,7 +124,7 @@ import GitDiffView from './GitDiffView.vue'
 import GitBreadcrumb from './GitBreadcrumb.vue'
 import { renderDiff } from '@/utils/diff.ts'
 import { store } from '@/stores/app.ts'
-import { useCommitNavigation, consumePendingCommitNavigation } from '@/composables/useCommitNavigation.ts'
+import { useCommitNavigation, consumePendingCommitNavigation, pendingSha as pendingCommitSha } from '@/composables/useCommitNavigation.ts'
 const { t } = useI18n()
 
 const switchTab = inject('switchTab', () => {})
@@ -397,6 +397,16 @@ const { navigateToCommit, handleDrillBackToCommits } = useCommitNavigation({
     loadProjectHistory,
 })
 
+// Watch for commit navigation requests from chat (handles the case where
+// the history tab is already active and a commit hash link is clicked)
+watch(pendingCommitSha, async (sha) => {
+  if (!sha || !props.active) return
+  const consumed = consumePendingCommitNavigation()
+  if (consumed) {
+    await navigateToCommit(consumed)
+  }
+})
+
 // ─── Drill-down navigation ──────────────────────────────────────────────────
 
 function onCommitSelect(c) {
@@ -501,9 +511,17 @@ const refreshHint = ref(false)
 // Whether the user has loadMore'd beyond the first page
 const hasLoadedMore = ref(false)
 
-// When tab becomes active, check if git state changed
+// When tab becomes active, check if git state changed or pending navigation
 watch(() => props.active, async (nowActive) => {
   if (!nowActive || props.mode !== 'project') return
+
+  // Check for pending commit navigation (from chat hash links)
+  const pendingSha = consumePendingCommitNavigation()
+  if (pendingSha) {
+    await navigateToCommit(pendingSha)
+    return
+  }
+
   await store.loadGitBranch()
   const cur = { branch: store.state.gitBranch, head: store.state.gitHead, dirty: store.state.gitDirty }
   const changed = lastGitState.value.branch &&
