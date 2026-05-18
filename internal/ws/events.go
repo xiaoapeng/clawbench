@@ -95,24 +95,36 @@ func EventsHandler(w http.ResponseWriter, r *http.Request) {
 	// Use the request context so the connection is closed when the client
 	// disconnects or the server shuts down. Add an idle timeout to prevent
 	// dead connections from lingering indefinitely (no client messages for 5min).
-	readCtx, readCancel := context.WithTimeout(r.Context(), 5*time.Minute)
-	defer readCancel()
+	readClientMessages(conn, mgr, clientID)
 
+	conn.Close(websocket.StatusNormalClosure, "handler exiting")
+}
+
+// readClientMessages reads messages from the WebSocket connection, resetting
+// an idle timeout on each message. Extracted into a helper for clarity.
+func readClientMessages(conn *websocket.Conn, mgr *Manager, clientID string) {
 	for {
+		// Create a fresh idle-timeout context for each read attempt.
+		// Each cancel is called explicitly — no deferred cancel needed since
+		// the loop re-creates the context on every iteration and calls
+		// the previous cancel before creating a new one.
+		readCtx, readCancel := context.WithTimeout(context.Background(), 5*time.Minute)
+
 		_, data, err := conn.Read(readCtx)
 		if err != nil {
+			readCancel()
 			slog.Debug("ws: client disconnected", "error", err, "client_id", clientID)
-			break
+			return
 		}
-		// Reset idle timeout on each message
-		readCancel()
-		readCtx, readCancel = context.WithTimeout(r.Context(), 5*time.Minute)
 
 		var msg ClientMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
+			readCancel()
 			slog.Warn("ws: invalid client message", "error", err, "client_id", clientID)
 			continue
 		}
+
+		readCancel()
 
 		switch msg.Type {
 		case "ack":
@@ -128,6 +140,4 @@ func EventsHandler(w http.ResponseWriter, r *http.Request) {
 			slog.Warn("ws: unknown client message type", "type", msg.Type, "client_id", clientID)
 		}
 	}
-
-	conn.Close(websocket.StatusNormalClosure, "handler exiting")
 }
