@@ -26,6 +26,14 @@ go test ./...                        # All Go tests
 go test ./internal/ai/...            # Package-specific
 npm test                             # Vitest (all frontend tests)
 
+# Coverage gate (CI 合入门槛)
+./scripts/check-go-coverage.sh              # Go: run tests + check per-package coverage
+./scripts/check-go-coverage.sh --skip-test   # Go: reuse existing coverage.out
+./scripts/check-go-coverage.sh --update      # Go: auto-update baseline after coverage improvement
+./scripts/check-frontend-coverage.sh              # Frontend: run tests + check per-dir coverage
+./scripts/check-frontend-coverage.sh --skip-test   # Frontend: reuse existing coverage data
+./scripts/check-frontend-coverage.sh --update      # Frontend: auto-update baseline after improvement
+
 # Android APK (requires JDK 17)
 cd android && JAVA_HOME=/usr/lib/jvm/jdk-17.0.12 ./gradlew assembleDebug    # Debug APK
 cd android && JAVA_HOME=/usr/lib/jvm/jdk-17.0.12 ./gradlew assembleRelease  # Release APK
@@ -102,6 +110,7 @@ cd android && JAVA_HOME=/usr/lib/jvm/jdk-17.0.12 ./gradlew assembleRelease  # Re
 - **Push-aware background strategy:** `useGlobalEvents.pushAvailable` ref tracks JPush availability. On `visibilitychange` to hidden: if `pushAvailable=true` → disconnect WebSocket (JPush delivers events); if `pushAvailable=false` → keep WebSocket alive in background. Same logic in `useChatStream` for SSE connections.
 - **Runtime JPush AppKey:** JPush AppKey is NOT baked into APK. Android fetches it from `GET /api/push/config` at startup and initializes JPush via `JPushConfig.setjAppKey()` + `JPushInterface.init(context, config)`. Unauthenticated endpoint — only exposes `jpush_enabled` and `jpush_app_key`, no secrets.
 - **Login-level push registration:** JPush Registration ID is reported via `POST /api/push/register` (authenticated, cookie-based) — not via WS `register` message. The Registration ID is a login-level lifecycle event persisted in `ws.Manager`, surviving WS disconnects/reconnects. WS authentication uses only Cookie (HTTP Upgrade carries cookies), no `?token=` fallback needed.
+- **Coverage gate (CI 合入门槛):** Per-package (Go) / per-directory (frontend) test coverage must not regress. Rule: `current >= min(baseline, 80%)`. Baseline values stored in `coverage-baseline.json`. If baseline < 80%, coverage cannot drop below baseline (只升不降); if baseline >= 80%, 80% is the floor. New code must include tests; run `./scripts/check-go-coverage.sh --update` or `./scripts/check-frontend-coverage.sh --update` after improving coverage to raise the baseline. CI jobs `coverage-go` and `coverage-frontend` enforce this gate on every PR and push to main.
 
 ## Configuration
 
