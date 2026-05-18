@@ -879,3 +879,136 @@ func TestServeGitWorktrees_WrongMethod(t *testing.T) {
 	w := callHandler(ServeGitWorktrees, req)
 	assertStatus(t, w, http.StatusMethodNotAllowed)
 }
+
+// --- parseTrackInfo ---
+
+func TestParseTrackInfo_AheadAndBehind(t *testing.T) {
+	ahead, behind := parseTrackInfo("[ahead 3, behind 2]")
+	assert.Equal(t, 3, ahead)
+	assert.Equal(t, 2, behind)
+}
+
+func TestParseTrackInfo_AheadOnly(t *testing.T) {
+	ahead, behind := parseTrackInfo("[ahead 5]")
+	assert.Equal(t, 5, ahead)
+	assert.Equal(t, 0, behind)
+}
+
+func TestParseTrackInfo_BehindOnly(t *testing.T) {
+	ahead, behind := parseTrackInfo("[behind 7]")
+	assert.Equal(t, 0, ahead)
+	assert.Equal(t, 7, behind)
+}
+
+func TestParseTrackInfo_Empty(t *testing.T) {
+	ahead, behind := parseTrackInfo("")
+	assert.Equal(t, 0, ahead)
+	assert.Equal(t, 0, behind)
+}
+
+func TestParseTrackInfo_Gone(t *testing.T) {
+	// git outputs [gone] when remote branch is deleted
+	ahead, behind := parseTrackInfo("[gone]")
+	assert.Equal(t, 0, ahead)
+	assert.Equal(t, 0, behind)
+}
+
+// --- parseBranchForEachRef ---
+
+func TestParseBranchForEachRef_Basic(t *testing.T) {
+	output := "main|origin/main|[ahead 1]\nfeature-x||\ndevelop|origin/develop|[ahead 2, behind 3]"
+	branches := parseBranchForEachRef(output)
+	assert.Len(t, branches, 3)
+
+	assert.Equal(t, "main", branches[0].Name)
+	assert.Equal(t, "origin/main", branches[0].RemoteTracking)
+	assert.Equal(t, 1, branches[0].Ahead)
+	assert.Equal(t, 0, branches[0].Behind)
+
+	assert.Equal(t, "feature-x", branches[1].Name)
+	assert.Equal(t, "", branches[1].RemoteTracking)
+	assert.Equal(t, 0, branches[1].Ahead)
+	assert.Equal(t, 0, branches[1].Behind)
+
+	assert.Equal(t, "develop", branches[2].Name)
+	assert.Equal(t, "origin/develop", branches[2].RemoteTracking)
+	assert.Equal(t, 2, branches[2].Ahead)
+	assert.Equal(t, 3, branches[2].Behind)
+}
+
+func TestParseBranchForEachRef_NoTrackInfo(t *testing.T) {
+	output := "main|origin/main|\nfeature-x||"
+	branches := parseBranchForEachRef(output)
+	assert.Len(t, branches, 2)
+	assert.Equal(t, "main", branches[0].Name)
+	assert.Equal(t, "origin/main", branches[0].RemoteTracking)
+	assert.Equal(t, 0, branches[0].Ahead)
+	assert.Equal(t, 0, branches[0].Behind)
+}
+
+func TestParseBranchForEachRef_Empty(t *testing.T) {
+	branches := parseBranchForEachRef("")
+	assert.Len(t, branches, 0)
+}
+
+func TestParseBranchForEachRef_WhitespaceOnly(t *testing.T) {
+	branches := parseBranchForEachRef("  \n  \n")
+	assert.Len(t, branches, 0)
+}
+
+// --- ServeGitBranches ---
+
+func TestServeGitBranches_NotGitRepo(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	req := newRequest(t, http.MethodGet, "/api/git/branches", nil)
+	withProjectCookie(req, env.ProjectDir)
+
+	w := callHandler(ServeGitBranches, req)
+	assertOK(t, w)
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	assert.Equal(t, false, resp["isGit"])
+	assert.Equal(t, "", resp["defaultBranch"])
+	assert.Equal(t, "", resp["currentBranch"])
+	branches, ok := resp["branches"].([]interface{})
+	assert.True(t, ok)
+	assert.Equal(t, 0, len(branches))
+}
+
+func TestServeGitBranches_SingleBranch(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	initGitRepo(t, env.ProjectDir)
+
+	req := newRequest(t, http.MethodGet, "/api/git/branches", nil)
+	withProjectCookie(req, env.ProjectDir)
+
+	w := callHandler(ServeGitBranches, req)
+	assertOK(t, w)
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	assert.Equal(t, true, resp["isGit"])
+	branches, ok := resp["branches"].([]interface{})
+	assert.True(t, ok)
+	assert.Equal(t, 1, len(branches))
+
+	b := branches[0].(map[string]interface{})
+	assert.Equal(t, true, b["isCurrent"])
+	assert.Equal(t, true, b["isDefault"])
+}
+
+func TestServeGitBranches_WrongMethod(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	req := newRequest(t, http.MethodPost, "/api/git/branches", nil)
+	withProjectCookie(req, env.ProjectDir)
+
+	w := callHandler(ServeGitBranches, req)
+	assertStatus(t, w, http.StatusMethodNotAllowed)
+}

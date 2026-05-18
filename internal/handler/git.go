@@ -688,6 +688,153 @@ func parseWorktreePorcelain(output, projectPath string) []worktreeInfo {
 	return trees
 }
 
+// branchInfo represents a git branch in API responses.
+type branchInfo struct {
+	Name           string `json:"name"`
+	IsCurrent      bool   `json:"isCurrent"`
+	IsDefault      bool   `json:"isDefault"`
+	Ahead          int    `json:"ahead"`
+	Behind         int    `json:"behind"`
+	RemoteTracking string `json:"remoteTracking"`
+}
+
+// parseTrackInfo parses git tracking info like "[ahead 3, behind 2]" into ahead/behind counts.
+func parseTrackInfo(s string) (ahead, behind int) {
+	s = strings.TrimSpace(s)
+	if len(s) < 2 || s[0] != '[' || s[len(s)-1] != ']' {
+		return 0, 0
+	}
+	s = s[1 : len(s)-1] // strip brackets
+	for _, part := range strings.Split(s, ", ") {
+		part = strings.TrimSpace(part)
+		if strings.HasPrefix(part, "ahead ") {
+			fmt.Sscanf(part, "ahead %d", &ahead)
+		} else if strings.HasPrefix(part, "behind ") {
+			fmt.Sscanf(part, "behind %d", &behind)
+		}
+	}
+	return ahead, behind
+}
+
+// parseBranchForEachRef parses `git for-each-ref --format='%(refname:short)|%(upstream:short)|%(upstream:track)' refs/heads/`
+// output into branchInfo slice.
+// Each line: branchName|upstreamShort|[ahead N, behind M]
+func parseBranchForEachRef(output string) []branchInfo {
+	var branches []branchInfo
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "|", 3)
+		if len(parts) < 1 {
+			continue
+		}
+		info := branchInfo{Name: parts[0]}
+		if len(parts) > 1 {
+			info.RemoteTracking = parts[1]
+		}
+		if len(parts) > 2 {
+			info.Ahead, info.Behind = parseTrackInfo(parts[2])
+		}
+		branches = append(branches, info)
+	}
+	return branches
+}
+
+// detectDefaultBranch determines the default branch using a fallback chain:
+// 1. git symbolic-ref refs/remotes/origin/HEAD → strip prefix
+// 2. Check if "main" branch exists
+// 3. Check if "master" branch exists
+// 4. Empty string if none found
+func detectDefaultBranch(projectPath string) string {
+	// Try symbolic-ref for origin/HEAD
+	cmd := exec.Command("git", "symbolic-ref", "refs/remotes/origin/HEAD")
+	cmd.Dir = projectPath
+	out, err := cmd.Output()
+	if err == nil {
+		ref := strings.TrimSpace(string(out))
+		// ref is like refs/remotes/origin/main
+		if strings.HasPrefix(ref, "refs/remotes/origin/") {
+			name := strings.TrimPrefix(ref, "refs/remotes/origin/")
+			if name != "" {
+				return name
+			}
+		}
+	}
+
+	// Fallback: check if "main" exists
+	cmd = exec.Command("git", "rev-parse", "--verify", "main")
+	cmd.Dir = projectPath
+	if err := cmd.Run(); err == nil {
+		return "main"
+	}
+
+	// Fallback: check if "master" exists
+	cmd = exec.Command("git", "rev-parse", "--verify", "master")
+	cmd.Dir = projectPath
+	if err := cmd.Run(); err == nil {
+		return "master"
+	}
+
+	return ""
+}
+
+// ServeGitBranches returns all local branches for the project.
+func ServeGitBranches(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, http.MethodGet) {
+		return
+	}
+	projectPath, ok := requireProject(w, r)
+	if !ok {
+		return
+	}
+
+	if !isGitRepo(projectPath) {
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"isGit":        false,
+			"branches":     []interface{}{},
+			"defaultBranch": "",
+			"currentBranch": "",
+		})
+		return
+	}
+
+	// Get all branches with tracking info
+	cmd := exec.Command("git", "for-each-ref", "--format=%(refname:short)|%(upstream:short)|%(upstream:track)", "refs/heads/")
+	cmd.Dir = projectPath
+	output, _ := cmd.CombinedOutput()
+	branches := parseBranchForEachRef(string(output))
+
+	// Get current branch
+	cmd = exec.Command("git", "symbolic-ref", "--short", "HEAD")
+	cmd.Dir = projectPath
+	curOut, curErr := cmd.Output()
+	currentBranch := ""
+	if curErr == nil {
+		currentBranch = strings.TrimSpace(string(curOut))
+	}
+
+	// Detect default branch
+	defaultBranch := detectDefaultBranch(projectPath)
+
+	// Set IsCurrent and IsDefault on each branch
+	for i := range branches {
+		branches[i].IsCurrent = branches[i].Name == currentBranch
+		branches[i].IsDefault = branches[i].Name == defaultBranch
+	}
+
+	if branches == nil {
+		branches = []branchInfo{}
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"isGit":        true,
+		"branches":     branches,
+		"defaultBranch": defaultBranch,
+		"currentBranch": currentBranch,
+	})
+}
+
 // ServeGitWorktrees returns all git worktrees for the project.
 func ServeGitWorktrees(w http.ResponseWriter, r *http.Request) {
 	if !requireMethod(w, r, http.MethodGet) {
