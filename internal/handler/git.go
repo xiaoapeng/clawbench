@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
 	"clawbench/internal/model"
@@ -901,5 +902,131 @@ func ServeGitWorktrees(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"isGit":    true,
 		"worktrees": trees,
+	})
+}
+
+// checkoutMu serializes git checkout operations to prevent concurrent branch switches.
+var checkoutMu sync.Mutex
+
+// ServeGitCheckout switches the current branch. Supports stash and force options.
+// POST /api/git/checkout  { "branch": string, "stash": bool, "force": bool }
+func ServeGitCheckout(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, http.MethodPost) {
+		return
+	}
+	projectPath, ok := requireProject(w, r)
+	if !ok {
+		return
+	}
+
+	if !isGitRepo(projectPath) {
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "NotAGitRepoShort")
+		return
+	}
+
+	var body struct {
+		Branch string `json:"branch"`
+		Stash  bool   `json:"stash"`
+		Force  bool   `json:"force"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "InvalidRequestBody")
+		return
+	}
+	if strings.TrimSpace(body.Branch) == "" {
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "InvalidRequestBody")
+		return
+	}
+
+	// Acquire checkout mutex (non-blocking)
+	if !checkoutMu.TryLock() {
+		writeJSON(w, http.StatusConflict, map[string]interface{}{
+			"success": false,
+			"error":   "checkout_in_progress",
+		})
+		return
+	}
+	defer checkoutMu.Unlock()
+
+	// Check dirty status
+	statusCmd := exec.Command("git", "status", "--porcelain")
+	statusCmd.Dir = projectPath
+	statusOut, _ := statusCmd.CombinedOutput()
+	dirtyLines := 0
+	for _, line := range strings.Split(strings.TrimSpace(string(statusOut)), "\n") {
+		if len(line) >= 2 {
+			dirtyLines++
+		}
+	}
+	isDirty := dirtyLines > 0
+
+	if isDirty && !body.Stash && !body.Force {
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"success":        false,
+			"error":          "dirty_worktree",
+			"untrackedCount": dirtyLines,
+		})
+		return
+	}
+
+	// Stash if requested and dirty
+	stashed := false
+	if body.Stash && isDirty {
+		stashCmd := exec.Command("git", "stash")
+		stashCmd.Dir = projectPath
+		stashOut, stashErr := stashCmd.CombinedOutput()
+		if stashErr != nil {
+			writeJSON(w, http.StatusOK, map[string]interface{}{
+				"success": false,
+				"error":   "stash_failed",
+			})
+			return
+		}
+		_ = stashOut
+		stashed = true
+	}
+
+	// Switch branch
+	switchArgs := []string{"switch"}
+	if body.Force {
+		switchArgs = append(switchArgs, "-f")
+	}
+	switchArgs = append(switchArgs, body.Branch)
+	switchCmd := exec.Command("git", switchArgs...)
+	switchCmd.Dir = projectPath
+	switchOut, switchErr := switchCmd.CombinedOutput()
+
+	if switchErr != nil {
+		errMsg := strings.TrimSpace(string(switchOut))
+		errorCode := "checkout_failed"
+		if strings.Contains(errMsg, "conflict") {
+			errorCode = "checkout_conflict"
+		} else if strings.Contains(errMsg, "hook") {
+			errorCode = "hook_rejected"
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"success":     false,
+			"error":       errorCode,
+			"errorDetail": errMsg,
+		})
+		return
+	}
+
+	// Get stash count
+	stashListCmd := exec.Command("git", "stash", "list")
+	stashListCmd.Dir = projectPath
+	stashListOut, _ := stashListCmd.Output()
+	stashCount := 0
+	for _, line := range strings.Split(strings.TrimSpace(string(stashListOut)), "\n") {
+		if line != "" {
+			stashCount++
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success":   true,
+		"branch":    body.Branch,
+		"stashed":   stashed,
+		"stashCount": stashCount,
 	})
 }

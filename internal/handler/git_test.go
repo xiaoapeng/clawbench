@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"clawbench/internal/model"
@@ -34,6 +35,18 @@ func initGitRepo(t *testing.T, dir string) {
 	}
 	run("git", "add", ".")
 	run("git", "commit", "-m", "initial commit")
+
+	// Ensure branch is named "main" for test consistency
+	cmd := exec.Command("git", "symbolic-ref", "--short", "HEAD")
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("failed to get current branch: %v", err)
+	}
+	currentBranch := strings.TrimSpace(string(out))
+	if currentBranch != "main" {
+		run("git", "branch", "-m", currentBranch, "main")
+	}
 }
 
 // gitCommitAll stages all changes and commits with the given message.
@@ -1011,4 +1024,258 @@ func TestServeGitBranches_WrongMethod(t *testing.T) {
 
 	w := callHandler(ServeGitBranches, req)
 	assertStatus(t, w, http.StatusMethodNotAllowed)
+}
+
+// --- ServeGitCheckout ---
+
+func TestServeGitCheckout_WrongMethod(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	initGitRepo(t, env.ProjectDir)
+
+	req := newRequest(t, http.MethodGet, "/api/git/checkout", nil)
+	withProjectCookie(req, env.ProjectDir)
+
+	w := callHandler(ServeGitCheckout, req)
+	assertStatus(t, w, http.StatusMethodNotAllowed)
+}
+
+func TestServeGitCheckout_NotGitRepo(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	req := newRequest(t, http.MethodPost, "/api/git/checkout", map[string]interface{}{
+		"branch": "main",
+	})
+	withProjectCookie(req, env.ProjectDir)
+
+	w := callHandler(ServeGitCheckout, req)
+	assertStatus(t, w, http.StatusBadRequest)
+}
+
+func TestServeGitCheckout_EmptyBranch(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	initGitRepo(t, env.ProjectDir)
+
+	req := newRequest(t, http.MethodPost, "/api/git/checkout", map[string]interface{}{
+		"branch": "",
+	})
+	withProjectCookie(req, env.ProjectDir)
+
+	w := callHandler(ServeGitCheckout, req)
+	assertStatus(t, w, http.StatusBadRequest)
+}
+
+func TestServeGitCheckout_DirtyWorktree(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	initGitRepo(t, env.ProjectDir)
+
+	// Create and switch to a second branch so we can try to switch back
+	run := func(name string, args ...string) {
+		cmd := exec.Command(name, args...)
+		cmd.Dir = env.ProjectDir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("command %s %v failed: %v\n%s", name, args, err, out)
+		}
+	}
+	run("git", "checkout", "-b", "feature-x")
+	run("git", "checkout", "main")
+
+	// Make working tree dirty
+	createTestFile(t, env.ProjectDir, "dirty.txt", "dirty content")
+
+	req := newRequest(t, http.MethodPost, "/api/git/checkout", map[string]interface{}{
+		"branch": "feature-x",
+	})
+	withProjectCookie(req, env.ProjectDir)
+
+	w := callHandler(ServeGitCheckout, req)
+	assertOK(t, w)
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	assert.Equal(t, false, resp["success"])
+	assert.Equal(t, "dirty_worktree", resp["error"])
+	assert.NotNil(t, resp["untrackedCount"])
+}
+
+func TestServeGitCheckout_DirtyWithStash(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	initGitRepo(t, env.ProjectDir)
+
+	// Create and switch to a second branch
+	run := func(name string, args ...string) {
+		cmd := exec.Command(name, args...)
+		cmd.Dir = env.ProjectDir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("command %s %v failed: %v\n%s", name, args, err, out)
+		}
+	}
+	run("git", "checkout", "-b", "feature-x")
+	run("git", "checkout", "main")
+
+	// Make working tree dirty
+	createTestFile(t, env.ProjectDir, "dirty.txt", "dirty content")
+
+	req := newRequest(t, http.MethodPost, "/api/git/checkout", map[string]interface{}{
+		"branch": "feature-x",
+		"stash":  true,
+	})
+	withProjectCookie(req, env.ProjectDir)
+
+	w := callHandler(ServeGitCheckout, req)
+	assertOK(t, w)
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	assert.Equal(t, true, resp["success"])
+	assert.Equal(t, "feature-x", resp["branch"])
+	assert.Equal(t, true, resp["stashed"])
+}
+
+func TestServeGitCheckout_Success(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	initGitRepo(t, env.ProjectDir)
+
+	// Create a second branch to switch to
+	run := func(name string, args ...string) {
+		cmd := exec.Command(name, args...)
+		cmd.Dir = env.ProjectDir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("command %s %v failed: %v\n%s", name, args, err, out)
+		}
+	}
+	run("git", "checkout", "-b", "feature-y")
+
+	// Switch back to main first
+	run("git", "checkout", "main")
+
+	req := newRequest(t, http.MethodPost, "/api/git/checkout", map[string]interface{}{
+		"branch": "feature-y",
+	})
+	withProjectCookie(req, env.ProjectDir)
+
+	w := callHandler(ServeGitCheckout, req)
+	assertOK(t, w)
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	assert.Equal(t, true, resp["success"])
+	assert.Equal(t, "feature-y", resp["branch"])
+	assert.Equal(t, false, resp["stashed"])
+
+	// Verify we actually switched
+	cmd := exec.Command("git", "symbolic-ref", "--short", "HEAD")
+	cmd.Dir = env.ProjectDir
+	out, err := cmd.Output()
+	assert.NoError(t, err)
+	assert.Equal(t, "feature-y", strings.TrimSpace(string(out)))
+}
+
+func TestServeGitCheckout_Conflict(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	initGitRepo(t, env.ProjectDir)
+
+	run := func(name string, args ...string) {
+		cmd := exec.Command(name, args...)
+		cmd.Dir = env.ProjectDir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("command %s %v failed: %v\n%s", name, args, err, out)
+		}
+	}
+
+	// Create diverging branches with conflicting changes
+	run("git", "checkout", "-b", "feature-conflict")
+	createTestFile(t, env.ProjectDir, "README.md", "conflict content")
+	gitCommitAll(t, env.ProjectDir, "conflict change")
+
+	run("git", "checkout", "main")
+	createTestFile(t, env.ProjectDir, "README.md", "main content")
+	gitCommitAll(t, env.ProjectDir, "main change")
+
+	// Try to switch with force — git switch -f won't resolve merge conflicts,
+	// but git switch to a branch that has diverged will fail with local changes.
+	// For a cleaner test, use a non-existent branch to get checkout_failed.
+	req := newRequest(t, http.MethodPost, "/api/git/checkout", map[string]interface{}{
+		"branch": "nonexistent-branch-xyz",
+	})
+	withProjectCookie(req, env.ProjectDir)
+
+	w := callHandler(ServeGitCheckout, req)
+	assertOK(t, w)
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	assert.Equal(t, false, resp["success"])
+	assert.Equal(t, "checkout_failed", resp["error"])
+	assert.NotNil(t, resp["errorDetail"])
+}
+
+func TestServeGitCheckout_MutexConcurrency(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	initGitRepo(t, env.ProjectDir)
+
+	// Lock the mutex manually to simulate a concurrent checkout
+	checkoutMu.Lock()
+
+	req := newRequest(t, http.MethodPost, "/api/git/checkout", map[string]interface{}{
+		"branch": "main",
+	})
+	withProjectCookie(req, env.ProjectDir)
+
+	w := callHandler(ServeGitCheckout, req)
+	assertStatus(t, w, http.StatusConflict)
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	assert.Equal(t, false, resp["success"])
+	assert.Equal(t, "checkout_in_progress", resp["error"])
+
+	// Unlock so other tests aren't affected
+	checkoutMu.Unlock()
+}
+
+func TestServeGitCheckout_ForceFlag(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	initGitRepo(t, env.ProjectDir)
+
+	// Create a second branch
+	run := func(name string, args ...string) {
+		cmd := exec.Command(name, args...)
+		cmd.Dir = env.ProjectDir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("command %s %v failed: %v\n%s", name, args, err, out)
+		}
+	}
+	run("git", "checkout", "-b", "feature-force")
+	run("git", "checkout", "main")
+
+	req := newRequest(t, http.MethodPost, "/api/git/checkout", map[string]interface{}{
+		"branch": "feature-force",
+		"force":  true,
+	})
+	withProjectCookie(req, env.ProjectDir)
+
+	w := callHandler(ServeGitCheckout, req)
+	assertOK(t, w)
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	assert.Equal(t, true, resp["success"])
+	assert.Equal(t, "feature-force", resp["branch"])
 }
