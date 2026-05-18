@@ -25,6 +25,14 @@
       >
         <RefreshCw :size="14" />
       </button>
+      <button
+        v-if="isGit"
+        class="drilldown-refresh-btn"
+        :title="t('git.manage.title')"
+        @click.stop="$emit('manage')"
+      >
+        <GitBranch :size="14" />
+      </button>
     </div>
     <div class="drilldown-body" ref="bodyRef">
       <div v-if="loading" class="git-history-loading">
@@ -99,7 +107,7 @@
 </template>
 
 <script setup>
-import { CirclePlus, FileText, Info, ChevronRight, RefreshCw } from 'lucide-vue-next'
+import { CirclePlus, FileText, Info, ChevronRight, RefreshCw, GitBranch } from 'lucide-vue-next'
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import GitGraph from './GitGraph.vue'
@@ -124,7 +132,7 @@ const props = defineProps({
   refreshHint: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['select', 'search', 'load-more', 'init-git', 'refresh'])
+const emit = defineEmits(['select', 'search', 'load-more', 'init-git', 'refresh', 'manage'])
 
 const commitSearch = ref('')
 const listRef = ref(null)

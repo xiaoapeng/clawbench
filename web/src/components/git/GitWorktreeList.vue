@@ -2,7 +2,7 @@
   <div class="git-worktree-list" :class="{ collapsed }">
     <div class="section-header" @click="toggleCollapse">
       <div class="section-left">
-        <span class="section-title">Worktree</span>
+        <span class="section-title">{{ t('git.manage.worktrees') }}</span>
         <span v-if="worktrees.length > 0" class="section-count">{{ worktrees.length }}</span>
       </div>
       <ChevronDown v-if="!collapsed" :size="16" class="section-chevron" />
@@ -16,7 +16,7 @@
         <span>{{ t('git.manage.loadError') }}</span>
         <button class="retry-btn" @click="$emit('retry')">{{ t('git.manage.retry') }}</button>
       </div>
-      <div v-else-if="worktrees.length === 0" class="section-empty">无 Worktree</div>
+      <div v-else-if="worktrees.length === 0" class="section-empty">{{ t('git.manage.noWorktrees') }}</div>
       <div v-else class="wt-card-grid">
         <GitWorktreeCard
           v-for="wt in worktrees"
@@ -37,11 +37,16 @@ import GitWorktreeCard from './GitWorktreeCard.vue'
 
 const { t } = useI18n()
 
-const props = defineProps({
-  worktrees: { type: Array, default: () => [] },
-  loading: { type: Boolean, default: false },
-  error: { type: Boolean, default: false },
-  initialCollapsed: { type: Boolean, default: false },
+const props = withDefaults(defineProps<{
+  worktrees: Record<string, any>[]
+  loading?: boolean
+  error?: boolean
+  initialCollapsed?: boolean
+}>(), {
+  worktrees: () => [],
+  loading: false,
+  error: false,
+  initialCollapsed: false,
 })
 
 defineEmits(['switch-worktree', 'retry'])

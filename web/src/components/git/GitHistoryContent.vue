@@ -31,6 +31,7 @@
       @load-more="loadMoreCommits"
       @init-git="initGitRepo"
       @refresh="onRefresh"
+      @manage="navigateToManage"
     />
 
     <!-- View: file list for selected commit (project mode only) -->
@@ -111,6 +112,14 @@
         />
       </div>
     </div>
+
+    <!-- View: worktree & branch management -->
+    <div v-else-if="currentView === 'manage'" class="drilldown-page">
+      <div class="drilldown-header">
+        <GitBreadcrumb mode="project" current-view="manage" @navigate="drillBack" />
+      </div>
+      <GitManageContent />
+    </div>
   </div>
 </template>
 
@@ -122,6 +131,7 @@ import GitCommitList from './GitCommitList.vue'
 import GitCommitMeta from './GitCommitMeta.vue'
 import GitDiffView from './GitDiffView.vue'
 import GitBreadcrumb from './GitBreadcrumb.vue'
+import GitManageContent from './GitManageContent.vue'
 import { renderDiff } from '@/utils/diff.ts'
 import { store } from '@/stores/app.ts'
 import { useCommitNavigation, consumePendingCommitNavigation, pendingSha as pendingCommitSha } from '@/composables/useCommitNavigation.ts'
@@ -160,7 +170,7 @@ const isGit = ref(false)
 const initLoading = ref(false)
 const untracked = ref(false)
 
-const currentView = ref('commits') // 'commits' | 'files' | 'diff'
+const currentView = ref('commits') // 'commits' | 'files' | 'diff' | 'manage'
 const selectedSHA = ref(null)
 
 // Files view (project mode only)
@@ -408,6 +418,10 @@ watch(pendingCommitSha, async (sha) => {
 })
 
 // ─── Drill-down navigation ──────────────────────────────────────────────────
+
+function navigateToManage() {
+  currentView.value = 'manage'
+}
 
 function onCommitSelect(c) {
   selectedSHA.value = c.sha

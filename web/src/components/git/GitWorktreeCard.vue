@@ -12,17 +12,20 @@
       </div>
     </div>
     <div class="wt-card-status">
-      <span v-if="worktree.isCurrent" class="wt-badge wt-badge-current">当前</span>
-      <span v-else-if="worktree.dirty" class="wt-badge wt-badge-dirty">有 {{ worktree.dirty }} 个未提交更改</span>
-      <span v-else class="wt-badge wt-badge-clean">干净</span>
-      <span v-if="worktree.locked" class="wt-badge wt-badge-locked">已锁定</span>
-      <span v-if="worktree.missing" class="wt-badge wt-badge-missing">路径不存在</span>
+      <span v-if="worktree.isCurrent" class="wt-badge wt-badge-current">{{ t('git.manage.current') }}</span>
+      <span v-else-if="worktree.dirty" class="wt-badge wt-badge-dirty">{{ t('git.manage.dirty', { count: worktree.untrackedCount }) }}</span>
+      <span v-else class="wt-badge wt-badge-clean">{{ t('git.manage.clean') }}</span>
+      <span v-if="worktree.locked" class="wt-badge wt-badge-locked">{{ t('git.manage.locked') }}</span>
+      <span v-if="worktree.missing" class="wt-badge wt-badge-missing">{{ t('git.manage.pathMissing') }}</span>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { GitBranch } from 'lucide-vue-next'
+
+const { t } = useI18n()
 
 defineProps({
   worktree: { type: Object, required: true },

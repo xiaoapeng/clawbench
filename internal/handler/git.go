@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -636,6 +637,7 @@ type worktreeInfo struct {
 	Dirty        bool   `json:"dirty"`
 	UntrackedCnt int    `json:"untrackedCount"`
 	Locked       bool   `json:"locked"`
+	Missing      bool   `json:"missing"`
 }
 
 // parseWorktreePorcelain parses `git worktree list --porcelain` output into worktreeInfo slice.
@@ -825,14 +827,29 @@ func ServeGitBranches(w http.ResponseWriter, r *http.Request) {
 		branches[i].IsDefault = branches[i].Name == defaultBranch
 	}
 
+	// Get stash count
+	stashCount := 0
+	stashListCmd := exec.Command("git", "stash", "list")
+	stashListCmd.Dir = projectPath
+	stashListOut, _ := stashListCmd.Output()
+	for _, ch := range string(stashListOut) {
+		if ch == '\n' {
+			stashCount++
+		}
+	}
+	if len(strings.TrimSpace(string(stashListOut))) > 0 {
+		stashCount++ // last entry has no trailing newline
+	}
+
 	if branches == nil {
 		branches = []branchInfo{}
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"isGit":        true,
-		"branches":     branches,
-		"defaultBranch": defaultBranch,
+		"isGit":         true,
+		"branches":      branches,
+		"defaultBranch":  defaultBranch,
 		"currentBranch": currentBranch,
+		"stashCount":    stashCount,
 	})
 }
 
@@ -859,6 +876,13 @@ func ServeGitWorktrees(w http.ResponseWriter, r *http.Request) {
 	output, _ := cmd.CombinedOutput()
 
 	trees := parseWorktreePorcelain(string(output), projectPath)
+
+	// Check if worktree paths still exist
+	for i := range trees {
+		if _, err := os.Stat(trees[i].Path); os.IsNotExist(err) {
+			trees[i].Missing = true
+		}
+	}
 
 	// Check dirty status for each worktree in parallel
 	type dirtyResult struct {
@@ -1003,6 +1027,8 @@ func ServeGitCheckout(w http.ResponseWriter, r *http.Request) {
 			errorCode = "checkout_conflict"
 		} else if strings.Contains(errMsg, "hook") {
 			errorCode = "hook_rejected"
+		} else if strings.Contains(errMsg, "did not match") || strings.Contains(errMsg, "not found") {
+			errorCode = "branch_not_found"
 		}
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"success":     false,

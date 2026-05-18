@@ -39,13 +39,20 @@ import GitBranchRow from './GitBranchRow.vue'
 
 const { t } = useI18n()
 
-const props = defineProps({
-  branches: { type: Array, default: () => [] },
-  stashCount: { type: Number, default: 0 },
-  loading: { type: Boolean, default: false },
-  error: { type: Boolean, default: false },
-  checkoutInProgress: { type: Boolean, default: false },
-  initialCollapsed: { type: Boolean, default: false },
+const props = withDefaults(defineProps<{
+  branches: Record<string, any>[]
+  stashCount?: number
+  loading?: boolean
+  error?: boolean
+  checkoutInProgress?: boolean
+  initialCollapsed?: boolean
+}>(), {
+  branches: () => [],
+  stashCount: 0,
+  loading: false,
+  error: false,
+  checkoutInProgress: false,
+  initialCollapsed: false,
 })
 
 defineEmits(['switch-branch', 'retry'])
