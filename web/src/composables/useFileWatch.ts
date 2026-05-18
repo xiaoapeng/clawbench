@@ -51,6 +51,7 @@ export function useFileWatch(options: UseFileWatchOptions) {
 
     eventSource.addEventListener('dir_change', () => {
       store.loadFiles(currentDir.value || '')
+      store.loadGitBranch()
     })
 
     eventSource.addEventListener('file_change', () => {

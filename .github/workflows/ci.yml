@@ -12,33 +12,22 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
-          cache: true
+          go-version: '1.21'
 
       - name: Go vet
         run: go vet ./...
 
-      - name: Go test (non-CGO packages)
-        run: go test $(go list ./... | grep -v 'internal/rag')
+      - name: Go test
+        run: go test ./...
 
-      - name: Go test (CGO packages — rag with duckdb)
-        run: go test ./internal/rag/...
-        continue-on-error: true
-
-      - name: Cross-compile Windows
-        run: CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o /dev/null ./cmd/server
-        continue-on-error: true
-
-      - name: Cross-compile macOS
-        if: runner.os == 'Linux'
-        run: CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o /dev/null ./cmd/server
-        continue-on-error: true
+      - name: Go build
+        run: go build ./cmd/server
 
   build-frontend:
     name: Build Frontend

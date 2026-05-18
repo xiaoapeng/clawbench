@@ -236,6 +236,7 @@ func RegisterRoutes(mux *http.ServeMux) {
 	register("/api/files", middleware.Auth(ListFiles))
 	register("/api/file/thumb", middleware.Auth(FileThumb))
 	register("/api/file/", middleware.Auth(GetFile))
+	register("/api/git/branch", middleware.Auth(ServeGitBranch))
 	register("/api/git/project-history", middleware.Auth(ServeGitProjectHistory))
 	register("/api/git/init", middleware.Auth(ServeGitInit))
 	register("/api/git/file-diff", middleware.Auth(ServeGitFileDiff))
@@ -244,6 +245,7 @@ func RegisterRoutes(mux *http.ServeMux) {
 	register("/api/git/diff", middleware.Auth(ServeGitDiff))
 	register("/api/git/status", middleware.Auth(ServeGitStatus))
 	register("/api/git/working-tree", middleware.Auth(ServeGitWorkingTreeFiles))
+	register("/api/git/verify-commits", middleware.Auth(ServeGitVerifyCommits))
 	register("/api/file/rename", middleware.Auth(ServeFileRename))
 	register("/api/file/edit-line", middleware.Auth(ServeFileEditLine))
 	register("/api/file/delete", middleware.Auth(ServeFileDelete))
@@ -263,6 +265,12 @@ func RegisterRoutes(mux *http.ServeMux) {
 	register("/api/rag/search", middleware.Auth(ServeRAGSearch))
 	register("/api/rag/message", middleware.Auth(ServeRAGMessage))
 	register("/api/rag/session", middleware.Auth(ServeRAGSession))
+
+	// Android log collection — intentionally unauthenticated:
+	// Android AppLog sends logs via native HttpURLConnection (no WebView cookies).
+	// This endpoint only accepts log entries (write-only, no read); the data is
+	// non-sensitive debug logs. Auth is unnecessary and would block the feature.
+	register("/api/android-log", ServeAndroidLog)
 
 	// File watch SSE (auto-refresh on file changes)
 	register("/api/file/watch", middleware.Auth(FileWatchSSE))

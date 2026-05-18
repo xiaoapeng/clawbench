@@ -75,6 +75,7 @@ export default {
     pushNotEnabled: '未启用',
     websocket: 'WebSocket',
     jpush: '极光推送',
+    debugLog: '调试日志',
   },
   chat: {
     title: 'AI 对话',
@@ -121,6 +122,7 @@ export default {
       dropToUpload: '松开上传文件',
       uploading: '上传中...',
       openFile: '打开文件',
+      openCommit: '打开 Commit 详情',
     },
     quickSend: {
       title: '快捷发送',
@@ -595,6 +597,7 @@ export default {
       commitList: '提交列表',
       workingTree: '工作区',
       openFile: '打开文件',
+      openCommit: '打开 Commit 详情',
     },
     graph: {
       workingTree: '工作区',

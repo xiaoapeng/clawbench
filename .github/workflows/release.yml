@@ -170,7 +170,7 @@ jobs:
   build-macos-amd64:
     name: Build macOS amd64
     needs: build-frontend
-    runs-on: macos-latest
+    runs-on: macos-13
     permissions:
       contents: write
     steps:
@@ -188,7 +188,6 @@ jobs:
       - name: Build macOS amd64 binary
         env:
           CGO_ENABLED: 1
-          GOARCH: amd64
         run: go build -ldflags="-s -w" -o clawbench-darwin-amd64 ./cmd/server
 
       - name: Package macOS amd64
