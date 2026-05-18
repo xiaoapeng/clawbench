@@ -35,6 +35,11 @@
       </Transition>
     </div>
 
+    <div v-if="gitBranch" class="branch-badge" :title="gitBranch" @click="openHistory">
+      <GitBranch :size="12" class="branch-icon" />
+      <span class="branch-name">{{ gitBranch }}</span>
+    </div>
+
     <button ref="statusBtnRef" class="status-toggle" @click="toggleStatusMenu" :title="t('appHeader.connectionStatus')">
       <span class="status-dot" :class="statusDotClass"></span>
     </button>
@@ -52,10 +57,6 @@
         <span class="status-value">{{ pushStatusLabel }}</span>
       </div>
     </PopupMenu>
-    <div v-if="gitBranch" class="branch-badge" :title="gitBranch" @click="openHistory">
-      <GitBranch :size="12" class="branch-icon" />
-      <span class="branch-name">{{ gitBranch }}</span>
-    </div>
 
     <button ref="settingsBtnRef" class="settings-toggle" @click="toggleSettingsMenu" :title="t('appHeader.settings')">
       <Settings :size="20" />
@@ -603,7 +604,6 @@ onUnmounted(() => {
     border-radius: var(--radius-sm);
     transition: background 0.15s;
     flex-shrink: 0;
-    margin-left: auto;
 }
 
 /* Connection status button */
@@ -618,6 +618,7 @@ onUnmounted(() => {
     display: flex;
     align-items: center;
     justify-content: center;
+    margin-left: auto;
 }
 
 @media (hover: hover) {

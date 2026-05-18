@@ -54,10 +54,17 @@ import org.json.JSONArray;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.HttpURLConnection;
+import java.security.cert.X509Certificate;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 import java.util.Set;
+
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 
 /**
  * Main Activity: hosts a fullscreen WebView that connects to the ClawBench server.
@@ -716,7 +723,22 @@ public class MainActivity extends AppCompatActivity {
         new Thread(() -> {
             try {
                 java.net.URL url = new java.net.URL(serverUrl + "/api/push/config");
-                java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+
+                // Trust self-signed certs for localhost connections (SSH tunnel / dev)
+                // Same logic as WebViewClient.onReceivedSslError — cert hostname won't match localhost
+                if (conn instanceof HttpsURLConnection && isLocalhostUrl(serverUrl)) {
+                    TrustManager[] trustAll = { new X509TrustManager() {
+                        public void checkClientTrusted(X509Certificate[] c, String a) {}
+                        public void checkServerTrusted(X509Certificate[] c, String a) {}
+                        public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
+                    }};
+                    SSLContext sc = SSLContext.getInstance("TLS");
+                    sc.init(null, trustAll, new java.security.SecureRandom());
+                    ((HttpsURLConnection) conn).setSSLSocketFactory(sc.getSocketFactory());
+                    ((HttpsURLConnection) conn).setHostnameVerifier((hostname, session) -> true);
+                }
+
                 conn.setRequestMethod("GET");
                 conn.setConnectTimeout(5000);
                 conn.setReadTimeout(5000);
@@ -761,6 +783,11 @@ public class MainActivity extends AppCompatActivity {
                 Log.w(TAG, "Failed to fetch push config: " + e.getMessage());
             }
         }).start();
+    }
+
+    /** Check if a URL points to localhost (SSH tunnel / local dev). */
+    private boolean isLocalhostUrl(String url) {
+        return url != null && (url.contains("//localhost:") || url.contains("//127.0.0.1:"));
     }
 
     // --- WebView Client ---
