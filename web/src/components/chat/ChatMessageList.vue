@@ -214,9 +214,8 @@ function handleChatClick(event) {
 
   // 3. Commit hash click (span or button) — check before file-path to prevent
   //    7-char hex hashes from being misinterpreted as file paths.
-  //    Note: do NOT call closeSheet() here — handleNavigateToCommit in App.vue
-  //    switches to the history tab which hides the chat panel.
-  //    closeSheet() would switchTab('viewer') and overwrite our tab switch.
+  //    Note: do NOT call navigateToFileViewer() here — handleNavigateToCommit
+  //    in App.vue switches to the history tab which hides the chat panel.
   const commitEl = (event.target).closest('.chat-commit-hash, .chat-commit-open-btn')
   if (commitEl) {
     event.preventDefault()
@@ -236,14 +235,14 @@ function handleChatClick(event) {
     const filePath = btn.getAttribute('data-file-path')
     if (filePath) {
       openFilePath(filePath)
-      chatUI.closeSheet?.()
+      chatUI.navigateToFileViewer?.()
     }
     return
   }
 
   handleDblClick(event, (href) => {
     openFilePath(href)
-    chatUI.closeSheet?.()
+    chatUI.navigateToFileViewer?.()
   })
 }
 
