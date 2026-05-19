@@ -221,6 +221,9 @@ func (m *Manager) broadcastToSubscription(key string, msg ServerMessage) {
 		switch d := msg.Data.(type) {
 		case *SessionUpdateData:
 			extras["session_id"] = d.SessionID
+			if d.ResponsePreview != "" {
+				extras["response_preview"] = d.ResponsePreview
+			}
 		case *TaskUpdateData:
 			extras["task_id"] = d.TaskID
 		}
