@@ -37,15 +37,13 @@ func ServeSessions(w http.ResponseWriter, r *http.Request) {
 		}
 
 		var sessions []model.ChatSession
-		var total int
 		var hasMore bool
 		var err error
 
 		if limit > 0 {
-			sessions, total, hasMore, err = service.GetSessionsPaged(projectPath, "", limit, cursor, cursorID)
+			sessions, hasMore, err = service.GetSessionsPaged(projectPath, "", limit, cursor, cursorID)
 		} else {
 			sessions, err = service.GetSessions(projectPath, "")
-			total = len(sessions)
 			hasMore = false
 		}
 		if err != nil {
@@ -57,7 +55,6 @@ func ServeSessions(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"sessions": sessions,
-			"total":    total,
 			"hasMore":  hasMore,
 		})
 
@@ -80,11 +77,10 @@ func ServeSessions(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		backend := req.Backend
-		agentModel := ""
 		agentID := req.AgentID
 		resolvedAgentID := agentID
 		agentSource := "default"
-		backend2, model2, _, _, ok := resolveAgentConfig(agentID)
+		backend2, _, _, _, ok := resolveAgentConfig(agentID)
 		if !ok {
 		writeLocalizedErrorf(w, r, http.StatusServiceUnavailable, "NoAgentsAvailable")
 			return
@@ -92,7 +88,11 @@ func ServeSessions(w http.ResponseWriter, r *http.Request) {
 		if backend2 != "" {
 			backend = backend2
 		}
-		agentModel = model2
+		// Don't pre-fill agent default model into session — leave model empty so
+		// the frontend falls back to the global localStorage preference, making the
+		// user's model choice persist across projects. The model will be persisted
+		// to the session only when the user explicitly sends a message with a modelId.
+		agentModel := ""
 		if resolvedAgentID == "" {
 			resolvedAgentID = model.GetDefaultAgentID()
 		}
