@@ -9,7 +9,7 @@
     </div>
     <!-- History content -->
     <div class="task-history-tab">
-    <div v-if="loading" class="history-empty">
+    <div v-if="loading && allExecutions.length === 0" class="history-empty">
       <Loader2 class="spin-icon" :size="20" />
       <span>{{ t('common.loading') }}</span>
     </div>
