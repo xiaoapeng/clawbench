@@ -527,21 +527,11 @@ const renderedPrompt = computed(() => {
 
 /* Flash animation for history button when task has unread messages */
 .action-btn.has-unread-flash {
-  animation: overview-history-flash 1.2s ease-in-out infinite;
-  background: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
+  animation: overview-history-flash 0.8s ease-in-out infinite;
 }
 
 @keyframes overview-history-flash {
-  0%, 100% {
-    background: rgba(239, 68, 68, 0.1);
-    color: #ef4444;
-    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
-  }
-  50% {
-    background: rgba(239, 68, 68, 0.2);
-    color: #dc2626;
-    box-shadow: 0 0 10px 3px rgba(239, 68, 68, 0.25);
-  }
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-color, #0066cc) 0%, transparent); }
+  50% { box-shadow: 0 0 8px 3px color-mix(in srgb, var(--accent-color, #0066cc) 40%, transparent); }
 }
 </style>
