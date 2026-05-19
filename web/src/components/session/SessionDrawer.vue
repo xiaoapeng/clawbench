@@ -8,38 +8,43 @@
       </button>
     </template>
 
-    <div class="session-list">
+    <div class="session-list" ref="listRef">
       <div v-if="loading" class="session-loading">{{ t('common.loading') }}</div>
       <div v-else-if="sessions.length === 0" class="session-empty">{{ t('session.noSessions') }}</div>
-      <div
-        v-for="session in sessionsWithStatus"
-        :key="session.id"
-        class="session-item"
-        :class="{ active: session.id === currentSessionId, running: session.running }"
-        @click="selectSession(session.id, session.backend)"
-      >
-        <div class="session-item-main">
-          <div class="session-item-info">
-            <div class="session-item-header">
-              <span class="session-item-title">{{ session.title }}</span>
-              <span v-if="session.unreadCount > 0" class="session-item-unread">{{ session.unreadCount }}</span>
-              <span v-if="session.running" class="session-item-status running">
-                <span class="status-dot"></span>
-                {{ t('session.running') }}
-              </span>
+      <template v-else>
+        <div
+          v-for="session in sessionsWithStatus"
+          :key="session.id"
+          class="session-item"
+          :class="{ active: session.id === currentSessionId, running: session.running }"
+          @click="selectSession(session.id, session.backend)"
+        >
+          <div class="session-item-main">
+            <div class="session-item-info">
+              <div class="session-item-header">
+                <span class="session-item-title">{{ session.title }}</span>
+                <span v-if="session.unreadCount > 0" class="session-item-unread">{{ session.unreadCount }}</span>
+                <span v-if="session.running" class="session-item-status running">
+                  <span class="status-dot"></span>
+                  {{ t('session.running') }}
+                </span>
+              </div>
+              <div class="session-item-meta">
+                <span class="session-item-time">{{ formatRelativeTime(session.updatedAt) }}</span>
+                <span class="session-item-agent">{{ getAgentIcon(session.agentId) }} {{ getAgentName(session.agentId) }}</span>
+                <span class="session-item-backend">{{ session.backend }}</span>
+                <span v-if="session.model" class="session-item-model">{{ session.model }}</span>
+              </div>
             </div>
-            <div class="session-item-meta">
-              <span class="session-item-time">{{ formatRelativeTime(session.updatedAt) }}</span>
-              <span class="session-item-agent">{{ getAgentIcon(session.agentId) }} {{ getAgentName(session.agentId) }}</span>
-              <span class="session-item-backend">{{ session.backend }}</span>
-              <span v-if="session.model" class="session-item-model">{{ session.model }}</span>
-            </div>
+            <button class="session-item-delete" @click.stop="deleteSession(session.id)" :title="t('common.delete')">
+              <Trash2 :size="14" />
+            </button>
           </div>
-          <button class="session-item-delete" @click.stop="deleteSession(session.id)" :title="t('common.delete')">
-            <Trash2 :size="14" />
-          </button>
         </div>
-      </div>
+        <div ref="sentinelRef" class="session-list-sentinel"></div>
+        <div v-if="loadingMore" class="session-loading-more">{{ t('common.loading') }}</div>
+        <div v-else-if="!hasMore && sessions.length > 0" class="session-list-end"></div>
+      </template>
     </div>
   </BottomSheet>
 
@@ -79,13 +84,14 @@
 <script setup>
 import { useI18n } from 'vue-i18n'
 import { Bot, Plus, Trash2 } from 'lucide-vue-next'
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, onUnmounted, nextTick } from 'vue'
 import BottomSheet from '@/components/common/BottomSheet.vue'
 import ModalDialog from '@/components/common/ModalDialog.vue'
 import { useAgents } from '@/composables/useAgents.ts'
 import { useDialog } from '@/composables/useDialog.ts'
 import { useSessionIdentity } from '@/composables/useSessionIdentity.ts'
 import { formatRelativeTime } from '@/utils/format.ts'
+import { store } from '@/stores/app.ts'
 
 const { t } = useI18n()
 const props = defineProps({
@@ -99,6 +105,13 @@ const emit = defineEmits(['close', 'select', 'create', 'delete'])
 const bottomSheetRef = ref(null)
 const sessions = ref([])
 const loading = ref(false)
+const loadingMore = ref(false)
+const hasMore = ref(false)
+const totalCount = ref(0)
+const listRef = ref(null)
+const sentinelRef = ref(null)
+let observer = null
+const pageSize = computed(() => store.state.chatSessionPageSize || 10)
 const { agents, loadAgents, getAgentIcon, getAgentName, isDefaultAgent, getAgentDefaultModelName } = useAgents()
 const dialog = useDialog()
 const { runningSessionsVersion } = useSessionIdentity()
@@ -152,24 +165,60 @@ async function handleCreateClick() {
 }
 
 async function loadSessions() {
-  const isInitialLoad = sessions.value.length === 0
-  if (isInitialLoad) {
-    loading.value = true
-  }
+  loading.value = true
+  hasMore.value = false
+  totalCount.value = 0
   try {
-    const resp = await fetch('/api/ai/sessions')
+    const resp = await fetch(`/api/ai/sessions?limit=${pageSize.value}`)
     const data = await resp.json()
     sessions.value = data.sessions || []
+    totalCount.value = data.total || 0
+    hasMore.value = !!data.hasMore
   } catch (err) {
     console.error('Failed to load sessions:', err)
-    if (isInitialLoad) {
-      sessions.value = []
-    }
+    sessions.value = []
   } finally {
-    if (isInitialLoad) {
-      loading.value = false
-    }
+    loading.value = false
+    await nextTick()
+    setupObserver()
   }
+}
+
+async function loadMoreSessions() {
+  if (loadingMore.value || !hasMore.value) return
+  loadingMore.value = true
+  try {
+    const last = sessions.value[sessions.value.length - 1]
+    if (!last) return
+    const cursor = last.updatedAt
+    const cursorId = last.id
+    const resp = await fetch(`/api/ai/sessions?limit=${pageSize.value}&cursor=${encodeURIComponent(cursor)}&cursor_id=${encodeURIComponent(cursorId)}`)
+    const data = await resp.json()
+    const more = data.sessions || []
+    if (more.length > 0) {
+      sessions.value = [...sessions.value, ...more]
+    }
+    totalCount.value = data.total || 0
+    hasMore.value = !!data.hasMore
+  } catch (err) {
+    console.error('Failed to load more sessions:', err)
+  } finally {
+    loadingMore.value = false
+  }
+}
+
+function setupObserver() {
+  if (observer) {
+    observer.disconnect()
+    observer = null
+  }
+  if (!sentinelRef.value || !listRef.value) return
+  observer = new IntersectionObserver((entries) => {
+    if (entries[0].isIntersecting && hasMore.value && !loadingMore.value) {
+      loadMoreSessions()
+    }
+  }, { threshold: 0.1, rootMargin: '100px', root: listRef.value })
+  observer.observe(sentinelRef.value)
 }
 
 function selectSession(sessionId, backend) {
@@ -190,13 +239,20 @@ async function deleteSession(sessionId) {
   if (!await dialog.confirm(t('session.confirmDelete'), { dangerous: true })) return
   const session = sessions.value.find(s => s.id === sessionId)
   emit('delete', sessionId, session?.backend)
-  // Reload list after a short delay to let the delete API complete
+  // Reload list after a short delay to let the delete API complete (resets pagination)
   setTimeout(() => loadSessions(), 300)
 }
 
 watch(() => props.open, async (val) => {
   if (val) {
     await Promise.all([loadSessions(), loadAgents()])
+  }
+})
+
+onUnmounted(() => {
+  if (observer) {
+    observer.disconnect()
+    observer = null
   }
 })
 </script>
@@ -520,4 +576,19 @@ watch(() => props.open, async (val) => {
 }
 
 .btn-secondary:hover { background: #e0e0e0; }
+
+.session-list-sentinel {
+  height: 1px;
+}
+
+.session-loading-more {
+  padding: 12px;
+  text-align: center;
+  color: var(--text-muted, #999);
+  font-size: 12px;
+}
+
+.session-list-end {
+  height: 0;
+}
 </style>

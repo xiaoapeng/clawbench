@@ -258,7 +258,7 @@ func GetSessions(projectPath, backend string) ([]model.ChatSession, error) {
 		query += " AND s.backend = ?"
 		args = append(args, backend)
 	}
-	query += " ORDER BY s.updated_at DESC"
+	query += " ORDER BY s.updated_at DESC, s.id DESC"
 
 	rows, err := DB.Query(query, args...)
 	if err != nil {
@@ -278,6 +278,81 @@ func GetSessions(projectPath, backend string) ([]model.ChatSession, error) {
 		sessions = append(sessions, s)
 	}
 	return sessions, rows.Err()
+}
+
+// GetSessionsPaged retrieves chat sessions with cursor-based pagination.
+// limit=0 means no limit (returns all sessions, backward compatible).
+// cursor and cursorID: when non-empty, only return sessions with
+//   (updated_at < cursor) OR (updated_at = cursor AND id < cursorID)
+// Returns sessions, total count, hasMore flag.
+func GetSessionsPaged(projectPath, backend string, limit int, cursor string, cursorID string) ([]model.ChatSession, int, bool, error) {
+	// No limit: return all sessions (backward compatible)
+	if limit <= 0 {
+		sessions, err := GetSessions(projectPath, backend)
+		if err != nil {
+			return nil, 0, false, err
+		}
+		return sessions, len(sessions), false, nil
+	}
+
+	// Get total count
+	total := 0
+	countQuery := `SELECT COUNT(*) FROM chat_sessions s WHERE s.project_path = ? AND s.deleted = 0 AND s.session_type = 'chat'`
+	countArgs := []interface{}{projectPath}
+	if backend != "" {
+		countQuery += " AND s.backend = ?"
+		countArgs = append(countArgs, backend)
+	}
+	err := DB.QueryRow(countQuery, countArgs...).Scan(&total)
+	if err != nil {
+		return nil, 0, false, err
+	}
+
+	// Build main query with cursor and limit+1
+	query := `SELECT s.id, s.title, s.backend, s.agent_id, s.agent_source, s.model, s.session_type, s.created_at, s.updated_at, s.last_read_at,
+		(SELECT COUNT(*) FROM chat_history h WHERE h.session_id = s.id AND h.role = 'assistant' AND h.streaming = 0 AND h.deleted = 0
+		 AND (s.last_read_at IS NULL OR h.created_at > s.last_read_at)) AS unread_count
+		FROM chat_sessions s WHERE s.project_path = ? AND s.deleted = 0 AND s.session_type = 'chat'`
+	args := []interface{}{projectPath}
+	if backend != "" {
+		query += " AND s.backend = ?"
+		args = append(args, backend)
+	}
+	if cursor != "" && cursorID != "" {
+		query += " AND (s.updated_at < ? OR (s.updated_at = ? AND s.id < ?))"
+		args = append(args, cursor, cursor, cursorID)
+	}
+	query += " ORDER BY s.updated_at DESC, s.id DESC LIMIT ?"
+	args = append(args, limit+1)
+
+	rows, err := DB.Query(query, args...)
+	if err != nil {
+		return nil, 0, false, err
+	}
+	defer rows.Close()
+
+	var sessions []model.ChatSession
+	for rows.Next() {
+		var s model.ChatSession
+		var lastRead sql.NullTime
+		if err := rows.Scan(&s.ID, &s.Title, &s.Backend, &s.AgentID, &s.AgentSource, &s.Model, &s.SessionType, &s.CreatedAt, &s.UpdatedAt, &lastRead, &s.UnreadCount); err != nil {
+			return nil, 0, false, err
+		}
+		if lastRead.Valid {
+			s.LastReadAt = &lastRead.Time
+		}
+		sessions = append(sessions, s)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, false, err
+	}
+
+	hasMore := len(sessions) > limit
+	if hasMore {
+		sessions = sessions[:limit]
+	}
+
+	return sessions, total, hasMore, nil
 }
 
 // UpdateLastRead sets the last_read_at timestamp for a session to now.

@@ -118,6 +118,9 @@ func ApplyDefaults(cfg *Config, presence map[string]bool) string {
 	if cfg.Chat.PageSize <= 0 {
 		cfg.Chat.PageSize = 20
 	}
+	if cfg.Chat.SessionPageSize <= 0 {
+		cfg.Chat.SessionPageSize = 10
+	}
 	if cfg.Chat.CollapsedHeight <= 0 {
 		cfg.Chat.CollapsedHeight = 150
 	}

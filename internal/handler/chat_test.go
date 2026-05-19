@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -1989,4 +1990,148 @@ func TestBuildChatRequest_CodebuddyResumeNoExternalID(t *testing.T) {
 	assert.True(t, req.Resume)
 	assert.Equal(t, sessionID, req.SessionID,
 		"Codebuddy should get the ClawBench UUID directly, no external ID resolution")
+}
+
+// ---------- ServeSessions pagination ----------
+
+func TestServeSessions_Pagination_NoLimit(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	// Create sessions
+	for i := 0; i < 5; i++ {
+		_, err := service.CreateSession(env.ProjectDir, "codebuddy", fmt.Sprintf("session %d", i), "", "", "default", "chat")
+		assert.NoError(t, err)
+	}
+
+	// No limit param = return all
+	req := newRequest(t, http.MethodGet, "/api/ai/sessions", nil)
+	withProjectCookie(req, env.ProjectDir)
+
+	w := callHandler(ServeSessions, req)
+	assertOK(t, w)
+
+	var result map[string]interface{}
+	assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &result))
+	sessions := result["sessions"].([]interface{})
+	assert.Len(t, sessions, 5)
+	assert.Equal(t, float64(5), result["total"])
+	assert.Equal(t, false, result["hasMore"])
+}
+
+func TestServeSessions_Pagination_WithLimit(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	// Create 5 sessions
+	for i := 0; i < 5; i++ {
+		_, err := service.CreateSession(env.ProjectDir, "codebuddy", fmt.Sprintf("session %d", i), "", "", "default", "chat")
+		assert.NoError(t, err)
+	}
+
+	// Request with limit=3
+	req := newRequest(t, http.MethodGet, "/api/ai/sessions?limit=3", nil)
+	withProjectCookie(req, env.ProjectDir)
+
+	w := callHandler(ServeSessions, req)
+	assertOK(t, w)
+
+	var result map[string]interface{}
+	assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &result))
+	sessions := result["sessions"].([]interface{})
+	assert.Len(t, sessions, 3)
+	assert.Equal(t, float64(5), result["total"])
+	assert.Equal(t, true, result["hasMore"])
+}
+
+func TestServeSessions_Pagination_LimitExceedsTotal(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	_, err := service.CreateSession(env.ProjectDir, "codebuddy", "only session", "", "", "default", "chat")
+	assert.NoError(t, err)
+
+	// Limit=10 but only 1 session exists
+	req := newRequest(t, http.MethodGet, "/api/ai/sessions?limit=10", nil)
+	withProjectCookie(req, env.ProjectDir)
+
+	w := callHandler(ServeSessions, req)
+	assertOK(t, w)
+
+	var result map[string]interface{}
+	assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &result))
+	sessions := result["sessions"].([]interface{})
+	assert.Len(t, sessions, 1)
+	assert.Equal(t, float64(1), result["total"])
+	assert.Equal(t, false, result["hasMore"])
+}
+
+func TestServeSessions_Pagination_InvalidLimit(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	_, err := service.CreateSession(env.ProjectDir, "codebuddy", "session", "", "", "default", "chat")
+	assert.NoError(t, err)
+
+	// Invalid limit should be treated as 0 (no limit, return all)
+	req := newRequest(t, http.MethodGet, "/api/ai/sessions?limit=abc", nil)
+	withProjectCookie(req, env.ProjectDir)
+
+	w := callHandler(ServeSessions, req)
+	assertOK(t, w)
+
+	var result map[string]interface{}
+	assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &result))
+	sessions := result["sessions"].([]interface{})
+	assert.Len(t, sessions, 1)
+	assert.Equal(t, false, result["hasMore"])
+}
+
+func TestServeSessions_Pagination_ZeroLimit(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	for i := 0; i < 3; i++ {
+		_, err := service.CreateSession(env.ProjectDir, "codebuddy", fmt.Sprintf("s%d", i), "", "", "default", "chat")
+		assert.NoError(t, err)
+	}
+
+	// limit=0 should return all (backward compatible)
+	req := newRequest(t, http.MethodGet, "/api/ai/sessions?limit=0", nil)
+	withProjectCookie(req, env.ProjectDir)
+
+	w := callHandler(ServeSessions, req)
+	assertOK(t, w)
+
+	var result map[string]interface{}
+	assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &result))
+	sessions := result["sessions"].([]interface{})
+	assert.Len(t, sessions, 3)
+	assert.Equal(t, float64(3), result["total"])
+	assert.Equal(t, false, result["hasMore"])
+}
+
+func TestServeSessions_Pagination_EmptyProject(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	// No sessions created
+	req := newRequest(t, http.MethodGet, "/api/ai/sessions?limit=10", nil)
+	withProjectCookie(req, env.ProjectDir)
+
+	w := callHandler(ServeSessions, req)
+	assertOK(t, w)
+
+	var result map[string]interface{}
+	assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &result))
+	// sessions may be null (nil slice) when empty
+	sessionsRaw := result["sessions"]
+	if sessionsRaw == nil {
+		// null is acceptable for empty
+	} else {
+		sessions := sessionsRaw.([]interface{})
+		assert.Empty(t, sessions)
+	}
+	assert.Equal(t, float64(0), result["total"])
+	assert.Equal(t, false, result["hasMore"])
 }

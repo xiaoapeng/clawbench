@@ -172,6 +172,7 @@ func ServeWatchDir(w http.ResponseWriter, r *http.Request) {
 		"uploadMaxFiles":        model.UploadMaxFiles,
 		"chatInitialMessages":   model.ChatInitialMessages,
 		"chatPageSize":          model.ChatPageSize,
+		"chatSessionPageSize":   model.ChatSessionPageSize,
 		"chatCollapsedHeight":   model.ChatCollapsedHeight,
 		"sessionMaxCount":       model.SessionMaxCount,
 	})

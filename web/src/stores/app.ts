@@ -41,6 +41,7 @@ interface AppState {
     // Chat UI config
     chatInitialMessages: number
     chatPageSize: number
+    chatSessionPageSize: number
     chatCollapsedHeight: number
     sessionMaxCount: number
 
@@ -100,6 +101,7 @@ const state = reactive<AppState>({
     // Chat UI config
     chatInitialMessages: 20,
     chatPageSize: 20,
+    chatSessionPageSize: 10,
     chatCollapsedHeight: 150,
     sessionMaxCount: 10,
     chatUnread: false,
@@ -141,12 +143,13 @@ const state = reactive<AppState>({
 async function loadProject(): Promise<void> {
     try {
         try {
-            const wd = await apiGet<{ watchDir: string; uploadMaxSizeMB: number; uploadMaxFiles: number; chatInitialMessages?: number; chatPageSize?: number; chatCollapsedHeight?: number; sessionMaxCount?: number }>('/api/watch-dir')
+            const wd = await apiGet<{ watchDir: string; uploadMaxSizeMB: number; uploadMaxFiles: number; chatInitialMessages?: number; chatPageSize?: number; chatSessionPageSize?: number; chatCollapsedHeight?: number; sessionMaxCount?: number }>('/api/watch-dir')
             state.watchDir = wd.watchDir || ''
             if (wd.uploadMaxSizeMB > 0) state.uploadMaxSizeMB = wd.uploadMaxSizeMB
             if (wd.uploadMaxFiles > 0) state.uploadMaxFiles = wd.uploadMaxFiles
             if (wd.chatInitialMessages > 0) state.chatInitialMessages = wd.chatInitialMessages
             if (wd.chatPageSize > 0) state.chatPageSize = wd.chatPageSize
+            if (wd.chatSessionPageSize > 0) state.chatSessionPageSize = wd.chatSessionPageSize
             if (wd.chatCollapsedHeight > 0) state.chatCollapsedHeight = wd.chatCollapsedHeight
             if (wd.sessionMaxCount > 0) state.sessionMaxCount = wd.sessionMaxCount
         } catch (error) {

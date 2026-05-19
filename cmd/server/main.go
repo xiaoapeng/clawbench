@@ -156,6 +156,7 @@ func main() {
 	model.UploadMaxFiles = cfg.Upload.MaxFiles
 	model.ChatInitialMessages = cfg.Chat.InitialMessages
 	model.ChatPageSize = cfg.Chat.PageSize
+	model.ChatSessionPageSize = cfg.Chat.SessionPageSize
 	model.ChatCollapsedHeight = cfg.Chat.CollapsedHeight
 	model.ChatSystemPromptInterval = cfg.Chat.SystemPromptInterval
 	model.SessionMaxCount = cfg.Session.MaxCount

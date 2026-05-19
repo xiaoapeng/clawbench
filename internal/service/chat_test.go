@@ -795,20 +795,23 @@ func TestAddChatMessage_WithFilePath(t *testing.T) {
 func TestGetSessions_OrderedByUpdatedDesc(t *testing.T) {
 	setupDB(t)
 
-	// Create sessions - their updated_at will be set on creation
 	sid1 := helperCreateSession(t, "/project", "claude", "First")
 	sid2 := helperCreateSession(t, "/project", "claude", "Second")
 
-	// Add a message to sid1 to bump its updated_at
-	_, _ = service.AddChatMessage("/project", "claude", sid1, "user", "bump", nil, false, "NewSession")
+	// Set explicit timestamps to guarantee ordering (SQLite time precision is seconds,
+	// AddChatMessage may land in the same second as creation making order nondeterministic)
+	_, err := service.DB.Exec("UPDATE chat_sessions SET updated_at = datetime('now', '-60 seconds') WHERE id = ?", sid1)
+	assert.NoError(t, err)
+	_, err = service.DB.Exec("UPDATE chat_sessions SET updated_at = datetime('now') WHERE id = ?", sid2)
+	assert.NoError(t, err)
 
 	sessions, err := service.GetSessions("/project", "claude")
 	assert.NoError(t, err)
 	assert.Len(t, sessions, 2)
 
-	// sid1 should be first since it was updated most recently
-	assert.Equal(t, sid1, sessions[0].ID)
-	assert.Equal(t, sid2, sessions[1].ID)
+	// sid2 should be first since it was updated most recently
+	assert.Equal(t, sid2, sessions[0].ID)
+	assert.Equal(t, sid1, sessions[1].ID)
 }
 
 func TestDeleteSession_NonExistentDoesNotError(t *testing.T) {
@@ -1483,4 +1486,300 @@ func TestGetSessionThinkingEffort_DeletedSession(t *testing.T) {
 
 	// Deleted session should return empty (query filters deleted=0)
 	assert.Equal(t, "", service.GetSessionThinkingEffort(sid))
+}
+
+// ---------- GetSessionsPaged ----------
+
+func TestGetSessionsPaged_NoLimit_ReturnsAll(t *testing.T) {
+	setupDB(t)
+
+	helperCreateSession(t, "/project", "claude", "S1")
+	helperCreateSession(t, "/project", "claude", "S2")
+	helperCreateSession(t, "/project", "claude", "S3")
+
+	sessions, total, hasMore, err := service.GetSessionsPaged("/project", "", 0, "", "")
+	assert.NoError(t, err)
+	assert.Len(t, sessions, 3)
+	assert.Equal(t, 3, total)
+	assert.False(t, hasMore)
+}
+
+func TestGetSessionsPaged_LimitGreaterThanTotal(t *testing.T) {
+	setupDB(t)
+
+	helperCreateSession(t, "/project", "claude", "S1")
+	helperCreateSession(t, "/project", "claude", "S2")
+
+	sessions, total, hasMore, err := service.GetSessionsPaged("/project", "", 10, "", "")
+	assert.NoError(t, err)
+	assert.Len(t, sessions, 2)
+	assert.Equal(t, 2, total)
+	assert.False(t, hasMore)
+}
+
+func TestGetSessionsPaged_LimitEqualsTotal(t *testing.T) {
+	setupDB(t)
+
+	helperCreateSession(t, "/project", "claude", "S1")
+	helperCreateSession(t, "/project", "claude", "S2")
+	helperCreateSession(t, "/project", "claude", "S3")
+
+	sessions, total, hasMore, err := service.GetSessionsPaged("/project", "", 3, "", "")
+	assert.NoError(t, err)
+	assert.Len(t, sessions, 3)
+	assert.Equal(t, 3, total)
+	assert.False(t, hasMore) // limit+1=4, only 3 exist, so no more
+}
+
+func TestGetSessionsPaged_LimitLessThanTotal_HasMore(t *testing.T) {
+	setupDB(t)
+
+	for i := 0; i < 5; i++ {
+		helperCreateSession(t, "/project", "claude", fmt.Sprintf("S%d", i))
+	}
+
+	sessions, total, hasMore, err := service.GetSessionsPaged("/project", "", 3, "", "")
+	assert.NoError(t, err)
+	assert.Len(t, sessions, 3)
+	assert.Equal(t, 5, total)
+	assert.True(t, hasMore)
+}
+
+func TestGetSessionsPaged_CursorSecondPage(t *testing.T) {
+	setupDB(t)
+
+	// Create 5 sessions with staggered updated_at times
+	var ids []string
+	for i := 0; i < 5; i++ {
+		sid := helperCreateSession(t, "/project", "claude", fmt.Sprintf("S%d", i))
+		ids = append(ids, sid)
+		// Stagger updated_at so ordering is deterministic
+		_, err := service.DB.Exec("UPDATE chat_sessions SET updated_at = datetime('now', ? || ' seconds') WHERE id = ?", fmt.Sprintf("-%d", (4-i)*60), sid)
+		assert.NoError(t, err)
+	}
+
+	// First page: limit=2, no cursor
+	sessions, total, hasMore, err := service.GetSessionsPaged("/project", "", 2, "", "")
+	assert.NoError(t, err)
+	assert.Len(t, sessions, 2)
+	assert.Equal(t, 5, total)
+	assert.True(t, hasMore)
+
+	// Use last session as cursor
+	lastSession := sessions[len(sessions)-1]
+	cursor := lastSession.UpdatedAt.Format("2006-01-02 15:04:05")
+	cursorID := lastSession.ID
+
+	// Second page: cursor from last session of first page
+	sessions2, total2, hasMore2, err := service.GetSessionsPaged("/project", "", 2, cursor, cursorID)
+	assert.NoError(t, err)
+	assert.Len(t, sessions2, 2)
+	assert.Equal(t, 5, total2)
+	assert.True(t, hasMore2)
+
+	// Verify no overlap between page 1 and page 2
+	page1IDs := make(map[string]bool)
+	for _, s := range sessions {
+		page1IDs[s.ID] = true
+	}
+	for _, s := range sessions2 {
+		assert.False(t, page1IDs[s.ID], "session %s should not appear in both pages", s.ID)
+	}
+}
+
+func TestGetSessionsPaged_CursorLastPage(t *testing.T) {
+	setupDB(t)
+
+	for i := 0; i < 5; i++ {
+		sid := helperCreateSession(t, "/project", "claude", fmt.Sprintf("S%d", i))
+		_, err := service.DB.Exec("UPDATE chat_sessions SET updated_at = datetime('now', ? || ' seconds') WHERE id = ?", fmt.Sprintf("-%d", (4-i)*60), sid)
+		assert.NoError(t, err)
+	}
+
+	// First page: limit=3
+	sessions, _, hasMore, err := service.GetSessionsPaged("/project", "", 3, "", "")
+	assert.NoError(t, err)
+	assert.True(t, hasMore)
+
+	// Second page: cursor from last session
+	lastSession := sessions[len(sessions)-1]
+	cursor := lastSession.UpdatedAt.Format("2006-01-02 15:04:05")
+	cursorID := lastSession.ID
+
+	sessions2, _, hasMore2, err := service.GetSessionsPaged("/project", "", 3, cursor, cursorID)
+	assert.NoError(t, err)
+	assert.Len(t, sessions2, 2) // only 2 remaining
+	assert.False(t, hasMore2)
+}
+
+func TestGetSessionsPaged_EmptyProject(t *testing.T) {
+	setupDB(t)
+
+	sessions, total, hasMore, err := service.GetSessionsPaged("/project", "", 10, "", "")
+	assert.NoError(t, err)
+	assert.Empty(t, sessions)
+	assert.Equal(t, 0, total)
+	assert.False(t, hasMore)
+}
+
+func TestGetSessionsPaged_FiltersByProject(t *testing.T) {
+	setupDB(t)
+
+	helperCreateSession(t, "/proj1", "claude", "P1-S1")
+	helperCreateSession(t, "/proj1", "claude", "P1-S2")
+	helperCreateSession(t, "/proj2", "claude", "P2-S1")
+
+	sessions, total, hasMore, err := service.GetSessionsPaged("/proj1", "", 10, "", "")
+	assert.NoError(t, err)
+	assert.Len(t, sessions, 2)
+	assert.Equal(t, 2, total)
+	assert.False(t, hasMore)
+}
+
+func TestGetSessionsPaged_ExcludesDeletedSessions(t *testing.T) {
+	setupDB(t)
+
+	helperCreateSession(t, "/project", "claude", "Active")
+	deletedSID := helperCreateSession(t, "/project", "claude", "Deleted")
+	err := service.DeleteSession("/project", "claude", deletedSID)
+	assert.NoError(t, err)
+
+	sessions, total, hasMore, err := service.GetSessionsPaged("/project", "", 10, "", "")
+	assert.NoError(t, err)
+	assert.Len(t, sessions, 1)
+	assert.Equal(t, 1, total)
+	assert.False(t, hasMore)
+	assert.Equal(t, "Active", sessions[0].Title)
+}
+
+func TestGetSessionsPaged_ExcludesScheduledSessions(t *testing.T) {
+	setupDB(t)
+
+	helperCreateSession(t, "/project", "claude", "Chat")
+	helperCreateScheduledSession(t, "/project", "claude", "Scheduled")
+
+	sessions, total, _, err := service.GetSessionsPaged("/project", "", 10, "", "")
+	assert.NoError(t, err)
+	assert.Len(t, sessions, 1)
+	assert.Equal(t, 1, total)
+	assert.Equal(t, "Chat", sessions[0].Title)
+}
+
+func TestGetSessionsPaged_OrderedByUpdatedDesc(t *testing.T) {
+	setupDB(t)
+
+	sid1 := helperCreateSession(t, "/project", "claude", "Old")
+	sid2 := helperCreateSession(t, "/project", "claude", "New")
+
+	// Set explicit timestamps to guarantee ordering (SQLite time precision is seconds)
+	_, err := service.DB.Exec("UPDATE chat_sessions SET updated_at = datetime('now', '-60 seconds') WHERE id = ?", sid1)
+	assert.NoError(t, err)
+	_, err = service.DB.Exec("UPDATE chat_sessions SET updated_at = datetime('now') WHERE id = ?", sid2)
+	assert.NoError(t, err)
+
+	sessions, _, _, err := service.GetSessionsPaged("/project", "", 10, "", "")
+	assert.NoError(t, err)
+	assert.Len(t, sessions, 2)
+	assert.Equal(t, sid2, sessions[0].ID) // most recently updated first
+	assert.Equal(t, sid1, sessions[1].ID)
+}
+
+func TestGetSessionsPaged_AllPagesCoverAllSessions(t *testing.T) {
+	setupDB(t)
+
+	// Create 7 sessions with staggered times
+	var allIDs []string
+	for i := 0; i < 7; i++ {
+		sid := helperCreateSession(t, "/project", "claude", fmt.Sprintf("S%d", i))
+		allIDs = append(allIDs, sid)
+		_, err := service.DB.Exec("UPDATE chat_sessions SET updated_at = datetime('now', ? || ' seconds') WHERE id = ?", fmt.Sprintf("-%d", (6-i)*60), sid)
+		assert.NoError(t, err)
+	}
+
+	// Paginate through all sessions: limit=3
+	var collectedIDs []string
+	cursor := ""
+	cursorID := ""
+	limit := 3
+	page := 0
+
+	for {
+		sessions, _, hasMore, err := service.GetSessionsPaged("/project", "", limit, cursor, cursorID)
+		assert.NoError(t, err)
+		assert.NotEmpty(t, sessions, "page %d should not be empty", page)
+
+		for _, s := range sessions {
+			collectedIDs = append(collectedIDs, s.ID)
+		}
+
+		if !hasMore {
+			break
+		}
+
+		lastSession := sessions[len(sessions)-1]
+		cursor = lastSession.UpdatedAt.Format("2006-01-02 15:04:05")
+		cursorID = lastSession.ID
+		page++
+
+		if page > 10 {
+			t.Fatal("too many pages, infinite loop?")
+		}
+	}
+
+	// All sessions should be collected without duplicates
+	assert.Len(t, collectedIDs, 7)
+	uniqueIDs := make(map[string]bool)
+	for _, id := range collectedIDs {
+		assert.False(t, uniqueIDs[id], "duplicate session ID: %s", id)
+		uniqueIDs[id] = true
+	}
+	// All original IDs should be present
+	for _, id := range allIDs {
+		assert.True(t, uniqueIDs[id], "missing session ID: %s", id)
+	}
+}
+
+func TestGetSessionsPaged_SameTimestampTiebreaker(t *testing.T) {
+	setupDB(t)
+
+	// Create 3 sessions: 2 with same timestamp, 1 with a later timestamp
+	// to test the (updated_at = cursor AND id < cursorID) tiebreaker
+	sid1 := helperCreateSession(t, "/project", "claude", "Tie1")
+	sid2 := helperCreateSession(t, "/project", "claude", "Tie2")
+	sid3 := helperCreateSession(t, "/project", "claude", "Newer")
+
+	// Set sid1 and sid2 to the same timestamp, sid3 slightly newer
+	baseTime := "2026-01-15 12:00:00"
+	_, err := service.DB.Exec("UPDATE chat_sessions SET updated_at = ? WHERE id = ?", baseTime, sid1)
+	assert.NoError(t, err)
+	_, err = service.DB.Exec("UPDATE chat_sessions SET updated_at = ? WHERE id = ?", baseTime, sid2)
+	assert.NoError(t, err)
+	_, err = service.DB.Exec("UPDATE chat_sessions SET updated_at = '2026-01-15 12:01:00' WHERE id = ?", sid3)
+	assert.NoError(t, err)
+
+	// First page: limit=2 — should get sid3 (newest) and one of sid1/sid2
+	sessions, total, hasMore, err := service.GetSessionsPaged("/project", "", 2, "", "")
+	assert.NoError(t, err)
+	assert.Len(t, sessions, 2)
+	assert.Equal(t, 3, total)
+	assert.True(t, hasMore)
+
+	// Second page: cursor from last session of page 1
+	lastSession := sessions[len(sessions)-1]
+	cursor := lastSession.UpdatedAt.Format("2006-01-02 15:04:05")
+	cursorID := lastSession.ID
+
+	sessions2, _, hasMore2, err := service.GetSessionsPaged("/project", "", 2, cursor, cursorID)
+	assert.NoError(t, err)
+	assert.Len(t, sessions2, 1) // only 1 remaining
+	assert.False(t, hasMore2)
+
+	// Verify no overlap
+	page1IDs := make(map[string]bool)
+	for _, s := range sessions {
+		page1IDs[s.ID] = true
+	}
+	for _, s := range sessions2 {
+		assert.False(t, page1IDs[s.ID], "session %s should not appear in both pages", s.ID)
+	}
 }

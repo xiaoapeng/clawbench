@@ -3,6 +3,8 @@ package handler
 import (
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"clawbench/internal/model"
 	"clawbench/internal/service"
@@ -17,7 +19,35 @@ func ServeSessions(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
-		sessions, err := service.GetSessions(projectPath, "")
+		// Parse optional pagination parameters
+		limit := 0
+		if l := r.URL.Query().Get("limit"); l != "" {
+			if v, err := strconv.Atoi(l); err == nil && v > 0 {
+				limit = v
+			}
+		}
+		cursor := r.URL.Query().Get("cursor")
+		cursorID := r.URL.Query().Get("cursor_id")
+		// Normalize cursor timestamp: frontend sends ISO 8601 (2026-05-16T15:25:50Z)
+		// but SQLite stores as "2026-05-16 15:25:50". Convert T→space and strip Z/+00:00.
+		if cursor != "" {
+			cursor = strings.ReplaceAll(cursor, "T", " ")
+			cursor = strings.TrimSuffix(cursor, "Z")
+			cursor = strings.TrimSuffix(cursor, "+00:00")
+		}
+
+		var sessions []model.ChatSession
+		var total int
+		var hasMore bool
+		var err error
+
+		if limit > 0 {
+			sessions, total, hasMore, err = service.GetSessionsPaged(projectPath, "", limit, cursor, cursorID)
+		} else {
+			sessions, err = service.GetSessions(projectPath, "")
+			total = len(sessions)
+			hasMore = false
+		}
 		if err != nil {
 			model.WriteError(w, model.Internal(fmt.Errorf("failed to load sessions")))
 			return
@@ -25,7 +55,11 @@ func ServeSessions(w http.ResponseWriter, r *http.Request) {
 		for i := range sessions {
 			sessions[i].Running = service.IsSessionRunning(sessions[i].ID)
 		}
-		writeJSON(w, http.StatusOK, map[string]interface{}{"sessions": sessions})
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"sessions": sessions,
+			"total":    total,
+			"hasMore":  hasMore,
+		})
 
 	case http.MethodPost:
 		// Check session count limit before creating (0 = unlimited)
