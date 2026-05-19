@@ -395,6 +395,13 @@ func (s *Scheduler) registerTaskLocked(task *model.ScheduledTask) error {
 		if err != nil || current.Status != "active" {
 			return
 		}
+		// Skip if a previous execution of this task is still running
+		if s.HasRunningExecutions(taskID) {
+			slog.Info("skipping cron trigger: task already running",
+				slog.Int64("task_id", taskID),
+			)
+			return
+		}
 		s.executeTask(current, projectPath, "auto")
 	}))
 
