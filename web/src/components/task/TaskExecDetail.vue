@@ -1,8 +1,11 @@
 <template>
   <div class="exec-detail-page">
-    <!-- Header: breadcrumb -->
+    <!-- Header: breadcrumb + refresh -->
     <div class="exec-detail-header">
       <TaskBreadcrumb />
+      <button class="header-btn refresh-btn" :class="{ spinning: refreshing }" :disabled="refreshing" @click="onRefresh" :title="t('common.refresh')">
+        <RefreshCw :size="14" />
+      </button>
     </div>
 
     <!-- Scrollable message content -->
@@ -61,6 +64,7 @@
 <script setup>
 import { ref, computed, watch, nextTick, provide, onUnmounted, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { RefreshCw } from 'lucide-vue-next'
 import TaskBreadcrumb from '@/components/task/TaskBreadcrumb.vue'
 import ChatMessageItem from '@/components/chat/ChatMessageItem.vue'
 import ToolDetailOverlay from '@/components/chat/ToolDetailOverlay.vue'
@@ -79,9 +83,22 @@ const props = defineProps({
 const emit = defineEmits(['close', 'open-file'])
 
 const { t } = useI18n()
+const { refreshExecDetail } = useTaskTab()
 const theme = inject('theme', ref('light'))
 const { openFilePath, verifyFilePaths } = useFilePathAnnotation()
 const switchTab = inject('switchTab', () => {})
+
+// ── Refresh logic ──
+const refreshing = ref(false)
+
+async function onRefresh() {
+  refreshing.value = true
+  try {
+    await refreshExecDetail()
+  } finally {
+    refreshing.value = false
+  }
+}
 
 // ── Agents (for getAgentIcon/getAgentName) ──
 const { agents: agentsList, getAgentIcon, getAgentName } = useAgents()
@@ -283,6 +300,45 @@ onUnmounted(() => {
   padding: 4px 8px;
   border-bottom: 1px solid var(--border-color, #e5e5e5);
   flex-shrink: 0;
+}
+
+.header-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 14px;
+  background: var(--bg-secondary, #f1f3f5);
+  color: var(--text-secondary, #666);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.header-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (hover: hover) {
+  .header-btn:hover:not(:disabled) {
+    background: var(--bg-tertiary, #eef1f4);
+    color: var(--accent-color, #0066cc);
+  }
+}
+
+.header-btn:active:not(:disabled) {
+  transform: scale(0.9);
+}
+
+.header-btn.spinning svg {
+  animation: exec-spin 1s linear infinite;
+}
+
+@keyframes exec-spin {
+  100% { transform: rotate(360deg); }
 }
 
 .exec-detail-content {

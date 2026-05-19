@@ -1,8 +1,11 @@
 <template>
   <div class="task-list-page">
-    <!-- Compact header: breadcrumb + create button -->
+    <!-- Compact header: breadcrumb + refresh + create button -->
     <div class="list-header">
       <TaskBreadcrumb />
+      <button class="header-btn refresh-btn" :class="{ spinning: loading }" :disabled="loading" @click="refresh" :title="t('common.refresh')">
+        <RefreshCw :size="14" />
+      </button>
       <button class="create-btn" @click="$emit('create')" :title="t('task.form.createTitle')">
         <Plus :size="16" />
       </button>
@@ -65,7 +68,7 @@
 </template>
 
 <script setup lang="ts">
-import { Plus, Loader2, CalendarX, Clock, Repeat, CalendarClock, History } from 'lucide-vue-next'
+import { Plus, Loader2, CalendarX, Clock, Repeat, CalendarClock, History, RefreshCw } from 'lucide-vue-next'
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useTaskTab } from '@/composables/useTaskTab'
@@ -134,6 +137,42 @@ onMounted(refresh)
   justify-content: center;
   flex-shrink: 0;
   transition: all 0.2s ease;
+}
+
+/* Header icon button (refresh, etc.) */
+.header-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 14px;
+  background: var(--bg-secondary, #f1f3f5);
+  color: var(--text-secondary, #666);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.header-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (hover: hover) {
+  .header-btn:hover:not(:disabled) {
+    background: var(--bg-tertiary, #eef1f4);
+    color: var(--accent-color, #0066cc);
+  }
+}
+
+.header-btn:active:not(:disabled) {
+  transform: scale(0.9);
+}
+
+.header-btn.spinning svg {
+  animation: spin 1s linear infinite;
 }
 
 @media (hover: hover) {

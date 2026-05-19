@@ -263,6 +263,22 @@ export function useTaskTab() {
         selectedExecData.value = null
     }
 
+    /** Refresh the currently-viewed execution detail by re-fetching from API */
+    async function refreshExecDetail() {
+        if (!selectedTaskId.value || !selectedExecId.value) return
+        try {
+            const resp = await fetch(`/api/tasks/${selectedTaskId.value}/executions`)
+            if (!resp.ok) return
+            const data = await resp.json()
+            const exec = (data.executions || []).find((e: any) => String(e.id) === String(selectedExecId.value) || String(e.sessionId) === String(selectedExecId.value))
+            if (exec) {
+                selectedExecData.value = { ...selectedExecData.value, ...exec }
+            }
+        } catch {
+            // Silently ignore
+        }
+    }
+
     function openCreateForm() {
         formMode.value = 'create'
         formViewOpen.value = true
@@ -309,6 +325,7 @@ export function useTaskTab() {
         goBack,
         openExecDetail,
         closeExecDetail,
+        refreshExecDetail,
         openCreateForm,
         openEditForm,
         closeForm,

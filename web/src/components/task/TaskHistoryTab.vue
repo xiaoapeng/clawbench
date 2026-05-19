@@ -1,8 +1,11 @@
 <template>
   <div class="task-history-page">
-    <!-- Header with breadcrumb -->
+    <!-- Header with breadcrumb + refresh -->
     <div class="history-header">
       <TaskBreadcrumb />
+      <button class="header-btn refresh-btn" :class="{ spinning: refreshing }" :disabled="refreshing || loading" @click="onRefresh" :title="t('common.refresh')">
+        <RefreshCw :size="14" />
+      </button>
     </div>
     <!-- History content -->
     <div class="task-history-tab">
@@ -71,7 +74,7 @@
 <script setup>
 import { ref, watch, onUnmounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Square, Loader2, History, Trash2 } from 'lucide-vue-next'
+import { Square, Loader2, History, Trash2, RefreshCw } from 'lucide-vue-next'
 import TaskBreadcrumb from '@/components/task/TaskBreadcrumb.vue'
 import { useTaskHistory } from '@/composables/useTaskHistory.ts'
 import { formatDuration, formatRelativeTime } from '@/utils/format.ts'
@@ -83,6 +86,17 @@ const props = defineProps({
 const emit = defineEmits(['open-file'])
 
 const { t } = useI18n()
+
+const refreshing = ref(false)
+
+async function onRefresh() {
+  refreshing.value = true
+  try {
+    await Promise.all([loadExecutions(), loadRunningStatus()])
+  } finally {
+    refreshing.value = false
+  }
+}
 
 // Task history composable (ISS-011 + ISS-015 + ISS-016)
 const {
@@ -171,6 +185,42 @@ onUnmounted(() => {
   padding: 4px 8px;
   flex-shrink: 0;
   border-bottom: 1px solid var(--border-color, #e5e5e5);
+  gap: 6px;
+}
+
+.header-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 14px;
+  background: var(--bg-secondary, #f1f3f5);
+  color: var(--text-secondary, #666);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.header-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (hover: hover) {
+  .header-btn:hover:not(:disabled) {
+    background: var(--bg-tertiary, #eef1f4);
+    color: var(--accent-color, #0066cc);
+  }
+}
+
+.header-btn:active:not(:disabled) {
+  transform: scale(0.9);
+}
+
+.header-btn.spinning svg {
+  animation: spin 1s linear infinite;
 }
 
 .task-history-tab {
