@@ -91,7 +91,7 @@ describe('useTaskHistory', () => {
 
       await history.loadExecutions()
 
-      expect(mockApiGet).toHaveBeenCalledWith('/api/tasks/task-1/executions', expect.objectContaining({}))
+      expect(mockApiGet).toHaveBeenCalledWith('/api/tasks/task-1/executions?limit=10', expect.objectContaining({}))
     })
 
     it('populates executions with parsed data', async () => {
@@ -106,6 +106,25 @@ describe('useTaskHistory', () => {
 
       expect(history.executions.value.length).toBe(1)
       expect(history.executions.value[0].id).toBe('e1')
+    })
+
+    it('deduplicates concurrent loadExecutions calls', async () => {
+      const { history } = createHistory()
+      let resolveApi: any
+      mockApiGet.mockImplementation(() => new Promise(r => { resolveApi = r }))
+
+      // Start two concurrent calls
+      const p1 = history.loadExecutions()
+      const p2 = history.loadExecutions()
+
+      // Only the first call should have triggered apiGet
+      expect(mockApiGet).toHaveBeenCalledTimes(1)
+
+      resolveApi({ executions: [] })
+      await Promise.all([p1, p2])
+
+      // Second call was deduped — still only 1 API call
+      expect(mockApiGet).toHaveBeenCalledTimes(1)
     })
   })
 
