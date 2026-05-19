@@ -5,8 +5,7 @@
 # 用法:
 #   ./server.sh              # 后台启动
 #   ./server.sh --fg         # 前台启动
-#   ./server.sh --port 8080  # 指定端口
-#   ./server.sh --stop       # 停止后台进程
+#   ./server.sh --stop       # 停止所有运行实例
 #   ./server.sh --restart    # 重启
 #
 
@@ -73,9 +72,9 @@ _stop_servers() {
     if [[ -n "$port" ]]; then
         local pids=""
         if command -v ss >/dev/null 2>&1; then
-            pids=$(ss -tlnp 2>/dev/null | grep ":$port" | grep -oP 'pid=\K[0-9]+' | sort -u | tr '\n' ' ')
+            pids=$(ss -tlnp 2>/dev/null | grep ":$port " | grep -oP 'pid=\K[0-9]+' | sort -u | tr '\n' ' ')
         elif command -v netstat >/dev/null 2>&1; then
-            pids=$(netstat -tlnp 2>/dev/null | grep ":$port" | grep -oP '\s[0-9]+/' | grep -oP '[0-9]+' | sort -u | tr '\n' ' ')
+            pids=$(netstat -tlnp 2>/dev/null | grep ":$port " | grep -oP '\s[0-9]+/' | grep -oP '[0-9]+' | sort -u | tr '\n' ' ')
         fi
         if [[ -n "$pids" ]]; then
             echo "Killing orphan process on port $port (PIDs: $pids)..."
@@ -83,7 +82,7 @@ _stop_servers() {
             sleep 1
             if command -v ss >/dev/null 2>&1; then
                 local remaining
-                remaining=$(ss -tlnp 2>/dev/null | grep ":$port" | grep -oP 'pid=\K[0-9]+' | sort -u | tr '\n' ' ')
+                remaining=$(ss -tlnp 2>/dev/null | grep ":$port " | grep -oP 'pid=\K[0-9]+' | sort -u | tr '\n' ' ')
                 if [[ -n "$remaining" ]]; then
                     echo "$remaining" | xargs kill -9 2>/dev/null || true
                     sleep 1
@@ -95,7 +94,7 @@ _stop_servers() {
         while [[ $waited -lt 5 ]]; do
             local bound=""
             if command -v ss >/dev/null 2>&1; then
-                bound=$(ss -tlnp 2>/dev/null | grep ":$port") || true
+                bound=$(ss -tlnp 2>/dev/null | grep ":$port ") || true
             fi
             if [[ -z "$bound" ]]; then
                 break
@@ -108,30 +107,40 @@ _stop_servers() {
 
 # --- End inline utilities ---
 
-# Resolve effective port (needed before parsing args for --stop/--restart)
-# Pre-scan --port from args so we can compute PID/LOG paths early
-_RESOLVED_PORT="$RELEASE_PORT"
-for ((i=1; i<=$#; i++)); do
-    if [[ "${!i}" == "--port" && $((i+1)) -le $# ]]; then
-        _NEXT=$((i+1))
-        _RESOLVED_PORT="${!_NEXT}"
-    fi
-done
-
-# PID and LOG files are port-specific to avoid cross-instance conflicts.
-# e.g. /tmp/clawbench-20000.pid, /tmp/clawbench-25000.pid
-# Default port (20000) uses the legacy path /tmp/clawbench.pid for backward compat.
-if [[ "$_RESOLVED_PORT" == "$RELEASE_PORT" ]]; then
+# PID and LOG files — default port uses legacy paths for backward compat.
+if [[ -n "$PORT" && "$PORT" != "$RELEASE_PORT" ]]; then
+    PID_FILE="/tmp/${NAME}-${PORT}.pid"
+    LOG_FILE="/tmp/${NAME}-${PORT}.log"
+else
     PID_FILE="/tmp/${NAME}.pid"
     LOG_FILE="/tmp/${NAME}-release.log"
-else
-    PID_FILE="/tmp/${NAME}-${_RESOLVED_PORT}.pid"
-    LOG_FILE="/tmp/${NAME}-${_RESOLVED_PORT}.log"
 fi
 
-# Stop release backend (calls shared _stop_servers then cleans up DuckDB lock)
+# Stop ALL running clawbench instances by scanning PID files.
 _stop_release() {
-    _stop_servers "$PID_FILE" "${PORT:-$RELEASE_PORT}" "release backend"
+    local found=0
+    for pf in /tmp/${NAME}.pid /tmp/${NAME}-*.pid; do
+        [[ -f "$pf" ]] || continue
+        local pid
+        pid=$(cat "$pf")
+        if kill -0 "$pid" 2>/dev/null; then
+            local port
+            if [[ "$pf" == "/tmp/${NAME}.pid" ]]; then
+                port=$RELEASE_PORT
+            else
+                port=$(basename "$pf" | sed "s/${NAME}-//;s/\.pid//")
+            fi
+            echo "Stopping $NAME on port $port (PID $pid)..."
+            _stop_servers "$pf" "$port" "release backend"
+            found=1
+        else
+            rm -f "$pf"
+        fi
+    done
+
+    if [[ $found -eq 0 ]]; then
+        echo "No running $NAME instances found."
+    fi
 
     # Clear stale DuckDB lock files to resolve RAG lock conflicts
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -192,15 +201,10 @@ start_release() {
 # Parse arguments
 ACTION="start"
 FOREGROUND=""
-PORT=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --fg)
             FOREGROUND=1
-            ;;
-        --port)
-            PORT="$2"
-            shift
             ;;
         --stop)
             ACTION=stop
@@ -218,12 +222,10 @@ done
 
 case "$ACTION" in
     stop)
-        echo "Stopping release (port ${PORT:-$RELEASE_PORT})..."
         _stop_release
         echo "Done."
         ;;
     restart)
-        echo "Restarting release (port ${PORT:-$RELEASE_PORT})..."
         _stop_release
         sleep 1
         start_release
