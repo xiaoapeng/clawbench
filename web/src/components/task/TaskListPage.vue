@@ -30,7 +30,6 @@
               <span class="task-item-name">{{ task.name }}</span>
               <span v-if="task.runningCount > 0" class="task-item-running-dot" :title="t('task.exec.running')"></span>
               <span v-if="task.unreadCount > 0" class="task-item-unread">{{ task.unreadCount }}</span>
-              <span class="task-item-status" :class="task.status">{{ statusLabel(task.status) }}</span>
             </div>
             <div class="task-item-meta">
               <div class="meta-item cron" :title="task.cronExpr">
@@ -48,14 +47,17 @@
               <span>{{ t('task.nextRun', { time: formatDateTime(task.nextRunAt) }) }}</span>
             </div>
           </div>
-          <button
-            v-if="task.runCount > 0 || task.runningCount > 0"
-            class="task-item-history-btn"
-            @click.stop="$emit('history', task.id)"
-            :title="t('task.history')"
-          >
-            <History :size="14" />
-          </button>
+          <div class="task-item-right">
+            <span class="task-item-status" :class="task.status">{{ statusLabel(task.status) }}</span>
+            <button
+              v-if="task.runCount > 0 || task.runningCount > 0"
+              class="task-item-history-btn"
+              @click.stop="$emit('history', task.id)"
+              :title="t('task.history')"
+            >
+              <History :size="14" />
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -364,6 +366,16 @@ onMounted(refresh)
   width: fit-content;
 }
 
+.task-item-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: 2px;
+}
+
 .task-item-history-btn {
   width: 28px;
   height: 28px;
@@ -377,7 +389,6 @@ onMounted(refresh)
   justify-content: center;
   flex-shrink: 0;
   transition: all 0.2s ease;
-  align-self: center;
 }
 
 @media (hover: hover) {
