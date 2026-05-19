@@ -177,16 +177,6 @@ describe('useTaskHistory', () => {
   })
 
   describe('loadMoreExecutions', () => {
-      mockApiGet.mockRejectedValue(new Error('Network error'))
-
-      await history.loadExecutions()
-
-      expect(consoleSpy).toHaveBeenCalled()
-      consoleSpy.mockRestore()
-    })
-  })
-
-  describe('loadMoreExecutions', () => {
     it('does nothing when hasMore is false', async () => {
       const { history } = createHistory()
       // Load initial page
