@@ -69,7 +69,7 @@
         <Pencil :size="14" />
         <span class="action-text">{{ t('common.edit') }}</span>
       </button>
-      <button v-if="task.runCount > 0 || task.runningCount > 0" class="action-btn" @click="$emit('history')" :title="t('task.history')">
+      <button v-if="task.runCount > 0 || task.runningCount > 0" class="action-btn" :class="{ 'has-unread-flash': task.unreadCount > 0 }" @click="$emit('history')" :title="t('task.history')">
         <History :size="14" />
         <span class="action-text">{{ t('task.history') }}</span>
       </button>
@@ -522,6 +522,26 @@ const renderedPrompt = computed(() => {
 @media (hover: hover) {
   .action-btn.danger:hover:not(:disabled) {
     background: rgba(239, 68, 68, 0.2);
+  }
+}
+
+/* Flash animation for history button when task has unread messages */
+.action-btn.has-unread-flash {
+  animation: overview-history-flash 1.2s ease-in-out infinite;
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+@keyframes overview-history-flash {
+  0%, 100% {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+  50% {
+    background: rgba(239, 68, 68, 0.2);
+    color: #dc2626;
+    box-shadow: 0 0 10px 3px rgba(239, 68, 68, 0.25);
   }
 }
 </style>
