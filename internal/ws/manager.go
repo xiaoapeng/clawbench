@@ -181,13 +181,21 @@ func (m *Manager) BroadcastEvent(msg ServerMessage) {
 	}
 	m.mu.Unlock()
 
+	// Track which pushRegIDs have already been notified for this event
+	// via any channel (WS or JPush). This prevents duplicate notifications
+	// when the same device has multiple subscriptions (e.g., frontend WS + native WS).
+	deliveredRegIDs := make(map[string]bool)
+
 	for _, key := range keys {
-		m.broadcastToSubscription(key, msg)
+		m.broadcastToSubscription(key, msg, deliveredRegIDs)
 	}
 }
 
 // broadcastToSubscription handles event delivery for a single subscription.
-func (m *Manager) broadcastToSubscription(key string, msg ServerMessage) {
+// deliveredRegIDs tracks which pushRegIDs have already been notified for this event
+// (via WS or JPush), preventing duplicate notifications when the same device has
+// multiple subscriptions (e.g., frontend WS + native WS).
+func (m *Manager) broadcastToSubscription(key string, msg ServerMessage, deliveredRegIDs map[string]bool) {
 	m.mu.Lock()
 	sub, ok := m.subscriptions[key]
 	m.mu.Unlock()
@@ -210,13 +218,16 @@ func (m *Manager) broadcastToSubscription(key string, msg ServerMessage) {
 		}
 		writeMu.Lock()
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		if err := conn.Write(ctx, websocket.MessageText, data); err != nil {
-			slog.Warn("ws: failed to send event, client may be disconnected", "error", err, "client_id", key)
-		}
+		writeErr := conn.Write(ctx, websocket.MessageText, data)
 		cancel()
 		writeMu.Unlock()
 		// Buffer event for reconnect replay
 		sub.bufferEvent(msg)
+		// If WS send succeeded and this subscription has a pushRegID,
+		// mark it as delivered so we don't also send JPush to the same device
+		if writeErr == nil && pushRegID != "" {
+			deliveredRegIDs[pushRegID] = true
+		}
 		sub.mu.Unlock()
 		return
 	}
@@ -239,6 +250,14 @@ func (m *Manager) broadcastToSubscription(key string, msg ServerMessage) {
 	}
 
 	if pushRegID != "" && m.jpush != nil && m.jpush.Enabled() && shouldPush {
+		// Dedup: skip if this regID was already notified for this event
+		// (e.g., another subscription for the same device already delivered via WS)
+		if deliveredRegIDs[pushRegID] {
+			slog.Debug("ws: skipping jpush, event already delivered to device", "reg_id", pushRegID, "client_id", key)
+			sub.mu.Unlock()
+			return
+		}
+		deliveredRegIDs[pushRegID] = true
 		sub.mu.Unlock() // unlock before potentially slow network call
 		extras := map[string]string{"event_type": msg.Event}
 		// Extract session_id or task_id from data

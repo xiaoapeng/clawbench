@@ -1201,8 +1201,14 @@ public class PortForwardService extends Service {
 
                 // If JPush is available, native WS is no longer needed —
                 // disconnect and let JPush handle notifications going forward.
-                if (MainActivity.instance != null && MainActivity.instance.pushAvailable) {
-                    AppLog.i(TAG, "NativeWS: JPush available, disconnecting native WS");
+                // Also check jpushEnabledOnServer: even if JPush SDK hasn't finished
+                // initializing (pushAvailable=false), the server will send JPush
+                // notifications, so we must not show duplicate notifications.
+                if (MainActivity.instance != null &&
+                        (MainActivity.instance.pushAvailable || MainActivity.instance.jpushEnabledOnServer)) {
+                    AppLog.i(TAG, "NativeWS: JPush available (pushAvailable=" + MainActivity.instance.pushAvailable
+                            + ", jpushEnabledOnServer=" + MainActivity.instance.jpushEnabledOnServer
+                            + "), disconnecting native WS");
                     nativeWsIntentionalStop = true;
                     webSocket.close(1000, "jpush-available");
                     return;

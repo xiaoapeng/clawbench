@@ -762,3 +762,108 @@ func TestManager_BroadcastEvent_JPushSentForCancelled(t *testing.T) {
 		t.Error("JPush should be called for cancelled status")
 	}
 }
+
+func TestManager_BroadcastEvent_JPushDedupSameRegID(t *testing.T) {
+	// Two disconnected subscriptions with the same pushRegID (same device)
+	// should only result in one JPush notification.
+	pushCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		pushCount++
+		w.WriteHeader(200)
+		w.Write([]byte(`{"sendno":"123","msg_id":"456"}`))
+	}))
+	defer server.Close()
+
+	jpush := push.NewJPushClient(push.JPushConfig{
+		Enabled:      true,
+		AppKey:       "test-key",
+		MasterSecret: "test-secret",
+	})
+	jpush.SetBaseURL(server.URL)
+
+	mgr := newTestManager(jpush)
+
+	// Client-1: disconnected, has pushRegID
+	var writeMu1 sync.Mutex
+	mgr.Subscribe(nil, &writeMu1, "client-1")
+	mgr.RegisterPushID("reg-shared", "client-1")
+	mgr.DisconnectClient("client-1")
+
+	// Client-2: disconnected, manually set same pushRegID
+	var writeMu2 sync.Mutex
+	mgr.Subscribe(nil, &writeMu2, "client-2")
+	mgr.DisconnectClient("client-2")
+	mgr.mu.Lock()
+	s2 := mgr.subscriptions["client-2"]
+	mgr.mu.Unlock()
+	s2.mu.Lock()
+	s2.pushRegID = "reg-shared"
+	s2.mu.Unlock()
+
+	msg := ServerMessage{
+		Type:  "event",
+		ID:    "evt_1",
+		Event: "session_update",
+		Data: &SessionUpdateData{
+			SessionID: "s1",
+			Status:    "completed",
+		},
+	}
+	mgr.BroadcastEvent(msg)
+
+	if pushCount != 1 {
+		t.Errorf("expected exactly 1 JPush call for same regID, got %d", pushCount)
+	}
+}
+
+func TestManager_BroadcastEvent_JPushWhenNoWS(t *testing.T) {
+	// When all subscriptions for a regID are disconnected, JPush should fire.
+	pushCalled := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		pushCalled = true
+		w.WriteHeader(200)
+		w.Write([]byte(`{"sendno":"123","msg_id":"456"}`))
+	}))
+	defer server.Close()
+
+	jpush := push.NewJPushClient(push.JPushConfig{
+		Enabled:      true,
+		AppKey:       "test-key",
+		MasterSecret: "test-secret",
+	})
+	jpush.SetBaseURL(server.URL)
+
+	mgr := newTestManager(jpush)
+
+	// Client-1: disconnected, has pushRegID
+	var writeMu1 sync.Mutex
+	mgr.Subscribe(nil, &writeMu1, "client-1")
+	mgr.RegisterPushID("reg-123", "client-1")
+	mgr.DisconnectClient("client-1")
+
+	// Client-2: disconnected, same pushRegID (simulating same device)
+	var writeMu2 sync.Mutex
+	mgr.Subscribe(nil, &writeMu2, "client-2")
+	mgr.DisconnectClient("client-2")
+	mgr.mu.Lock()
+	s2 := mgr.subscriptions["client-2"]
+	mgr.mu.Unlock()
+	s2.mu.Lock()
+	s2.pushRegID = "reg-123"
+	s2.mu.Unlock()
+
+	msg := ServerMessage{
+		Type:  "event",
+		ID:    "evt_1",
+		Event: "session_update",
+		Data: &SessionUpdateData{
+			SessionID: "s1",
+			Status:    "completed",
+		},
+	}
+	mgr.BroadcastEvent(msg)
+
+	if !pushCalled {
+		t.Error("JPush should be called when no WS is connected")
+	}
+}
