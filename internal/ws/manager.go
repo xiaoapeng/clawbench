@@ -232,6 +232,10 @@ func (m *Manager) broadcastToSubscription(key string, msg ServerMessage) {
 		if msg.Event == "task_update" {
 			alert = "计划任务已完成"
 		}
+		// Use response preview as alert text when available
+		if d, ok := msg.Data.(*SessionUpdateData); ok && d.ResponsePreview != "" {
+			alert = d.ResponsePreview
+		}
 		slog.Info("ws: sending jpush notification", "event", msg.Event, "client_id", key, "reg_id", pushRegID, "title", title)
 		if err := m.jpush.SendNotification(pushRegID, title, alert, extras); err != nil {
 			slog.Warn("ws: jpush notification failed", "error", err, "client_id", key)
