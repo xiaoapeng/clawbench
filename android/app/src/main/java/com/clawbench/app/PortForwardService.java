@@ -1199,6 +1199,15 @@ public class PortForwardService extends Service {
 
                 if (!"event".equals(type)) return;
 
+                // If JPush is available, native WS is no longer needed —
+                // disconnect and let JPush handle notifications going forward.
+                if (MainActivity.instance != null && MainActivity.instance.pushAvailable) {
+                    AppLog.i(TAG, "NativeWS: JPush available, disconnecting native WS");
+                    nativeWsIntentionalStop = true;
+                    webSocket.close(1000, "jpush-available");
+                    return;
+                }
+
                 String eventId = msg.optString("id", "");
                 String event = msg.optString("event", "");
                 JSONObject data = msg.optJSONObject("data");
@@ -1267,14 +1276,8 @@ public class PortForwardService extends Service {
 
     /**
      * Post a system notification for an AI event.
-     * Skipped when JPush is available to avoid duplicate notifications.
      */
     private void postEventNotification(String eventType, JSONObject data) {
-        // Avoid duplicate notification: when JPush is available, push delivery is
-        // handled by JPush (server-side). Only post local notification as fallback.
-        if (MainActivity.instance != null && MainActivity.instance.pushAvailable) {
-            return;
-        }
         try {
             String status = data.optString("status", "");
             String title;
