@@ -164,6 +164,7 @@
 
       <!-- Session drawer for quote-question session switching -->
       <SessionDrawer
+        ref="quoteSessionDrawerRef"
         :open="quoteSessionDrawerOpen"
         :currentSessionId="sessionIdentity.currentSessionId.value"
         :runningSessionIds="sessionIdentity.runningSessions.value"
@@ -219,7 +220,7 @@
             <EthernetPort :size="16" />
             <span>{{ t('nav.portForward') }}</span>
           </button>
-          <button class="dock-overflow-item" :class="{ active: activeTab === 'terminal' }" @click.stop="handleOverflowSelect('terminal')">
+          <button v-if="!isTerminalDisabled" class="dock-overflow-item" :class="{ active: activeTab === 'terminal' }" @click.stop="handleOverflowSelect('terminal')">
             <TerminalIcon :size="16" />
             <span>{{ t('terminal.title') }}</span>
           </button>
@@ -327,7 +328,7 @@ provide('toast', toast)
 const sessionIdentity = useSessionIdentity()
 
 const showHidden = ref(false)
-const { localConfig, setLocalConfig: setSetting } = useSettingsConfig()
+const { localConfig, setLocalConfig: setSetting, loadConfig, getServerValueWithDefault } = useSettingsConfig()
 // Initialize from settings config (which handles legacy key migration)
 showHidden.value = !!localConfig.showHidden
 const sortField = ref(null)
@@ -342,8 +343,14 @@ useFileWatch({
 const { isAppMode } = useAppMode()
 const { syncToNative, sshInfo, loadSSHInfo } = usePortForward()
 const isSSHDisabled = computed(() => sshInfo.value?.enabled === false)
+const isTerminalDisabled = computed(() => !getServerValueWithDefault('terminal.enabled'))
 watch(isSSHDisabled, (disabled) => {
   if (disabled && activeTab.value === 'proxy') {
+    switchTab('chat')
+  }
+})
+watch(isTerminalDisabled, (disabled) => {
+  if (disabled && activeTab.value === 'terminal') {
     switchTab('chat')
   }
 })
@@ -373,6 +380,7 @@ const terminalKeyboardActive = computed(() => terminalActive.value && terminalKe
 
 const quoteQuestion = useQuoteQuestion()
 const quoteSessionDrawerOpen = ref(false)
+const quoteSessionDrawerRef = ref(null)
 
 function handleQuoteOpenSessions() {
   quoteSessionDrawerOpen.value = true
@@ -385,11 +393,13 @@ function handleQuoteSessionSelect(sessionId) {
 
 function handleQuoteSessionCreate(agentId) {
   sessionIdentity.createSession(agentId)
+  quoteSessionDrawerRef.value?.invalidate()
   quoteSessionDrawerOpen.value = false
 }
 
 function handleQuoteSessionDelete(sessionId, backend) {
   sessionIdentity.deleteSession(sessionId, backend)
+  quoteSessionDrawerRef.value?.invalidate()
 }
 
 async function handleLoginSuccess() {
@@ -513,8 +523,10 @@ function handleDockTerminal() {
 const overflowMenuOpen = ref(false)
 const overflowBtnRef = ref(null)
 const overflowTabs = computed(() => {
-  const tabs = ['history', 'terminal', 'settings']
-  if (!isSSHDisabled.value) tabs.splice(1, 0, 'proxy')
+  const tabs = ['history']
+  if (!isSSHDisabled.value) tabs.push('proxy')
+  if (!isTerminalDisabled.value) tabs.push('terminal')
+  tabs.push('settings')
   return tabs
 })
 const overflowTabMeta = {
@@ -668,6 +680,7 @@ function playQuoteEmitAnimation(e) {
 onMounted(async () => {
     initGlobalEvents()
     loadTasks()
+    loadConfig() // Load server config early for terminal.enabled check
     window.addEventListener('open-file-manager', handleOpenFileManager)
     window.addEventListener('navigate-to-commit', handleNavigateToCommit)
     window.addEventListener('quote-sent', playQuoteEmitAnimation)
