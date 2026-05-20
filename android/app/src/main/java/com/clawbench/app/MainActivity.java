@@ -634,7 +634,9 @@ public class MainActivity extends AppCompatActivity {
         super.onPause();
         // App going to background — if JPush is not available, start native WS
         // so we still get notifications when Android kills the WebView process.
-        if (!pushAvailable && webViewConnected) {
+        // Check both pushAvailable (SDK ready) and jpushEnabledOnServer (config fetched)
+        // to avoid starting native WS when JPush will handle notifications anyway.
+        if (!pushAvailable && !jpushEnabledOnServer && webViewConnected) {
             PortForwardService.startNativeEventWs(this);
         }
     }
