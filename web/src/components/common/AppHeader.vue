@@ -9,8 +9,10 @@
         <span class="project-name">{{ projectName }}</span>
         <ChevronDown :size="12" class="switch-chevron" :class="{ open: dropdownOpen }" />
       </button>
+    </div>
+    <Teleport to="body">
       <Transition name="dropdown">
-        <div v-if="dropdownOpen" class="project-dropdown">
+        <div v-if="dropdownOpen" class="project-dropdown" :style="dropdownStyle" ref="dropdownPanelRef">
           <div v-if="loadingRecent" class="dropdown-loading">{{ t('common.loading') }}</div>
           <template v-else>
             <div v-if="recentItems.length === 0" class="dropdown-empty">{{ t('appHeader.noRecentProjects') }}</div>
@@ -33,7 +35,7 @@
           </template>
         </div>
       </Transition>
-    </div>
+    </Teleport>
 
     <div v-if="gitBranch" class="branch-badge" :title="gitBranch" @click="openHistory">
       <GitBranch :size="12" class="branch-icon" />
@@ -255,8 +257,24 @@ watch(() => props.projectRoot, (newRoot) => {
 // Dropdown state
 const dropdownOpen = ref(false)
 const dropdownRef = ref(null)
+const dropdownPanelRef = ref(null)
 const loadingRecent = ref(false)
 const recentItems = ref([])
+
+// Dynamic dropdown positioning (teleported to body, needs fixed positioning)
+const dropdownStyle = ref({})
+
+function updateDropdownPosition() {
+    if (!dropdownRef.value) return
+    const rect = dropdownRef.value.getBoundingClientRect()
+    dropdownStyle.value = {
+        position: 'fixed',
+        top: `${rect.bottom + 4}px`,
+        left: `${rect.left}px`,
+        minWidth: `${Math.max(220, rect.width)}px`,
+        maxWidth: '280px',
+    }
+}
 
 let watchBase = ''
 
@@ -269,6 +287,7 @@ function toggleDropdown() {
         dropdownOpen.value = false
     } else {
         loadRecentProjects()
+        updateDropdownPosition()
         dropdownOpen.value = true
     }
 }
@@ -341,9 +360,9 @@ function openBrowse() {
 
 // Close dropdown on outside click
 function onClickOutside(e) {
-    if (dropdownRef.value && !dropdownRef.value.contains(e.target)) {
-        dropdownOpen.value = false
-    }
+    if (dropdownRef.value && dropdownRef.value.contains(e.target)) return
+    if (dropdownPanelRef.value && dropdownPanelRef.value.contains(e.target)) return
+    dropdownOpen.value = false
 }
 
 // Track whether the path element was dragged, so click can decide to bubble or not
@@ -413,6 +432,7 @@ onUnmounted(() => {
     font-size: 13px;
     font-weight: 500;
     max-width: 180px;
+    width: 100%;
     min-width: 0;
     transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
     line-height: 1.4;
@@ -451,110 +471,7 @@ onUnmounted(() => {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-}
-
-/* Dropdown */
-.project-dropdown {
-    position: absolute;
-    top: calc(100% + 4px);
-    left: 0;
-    min-width: 220px;
-    max-width: 280px;
-    background: var(--bg-primary);
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.1);
-    z-index: 3000;
-    overflow: hidden;
-    padding: 3px 0;
-}
-
-.dropdown-loading,
-.dropdown-empty {
-    text-align: center;
-    padding: 10px 12px;
-    color: var(--text-muted);
-    font-size: 12px;
-}
-
-.dropdown-item {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 5px 10px;
-    cursor: pointer;
-    transition: background 0.1s;
-    font-size: 12px;
-}
-
-.dropdown-item:hover {
-    background: var(--bg-tertiary);
-}
-
-.dropdown-item.active {
-    background: var(--accent-color);
-    color: #fff;
-}
-
-.dropdown-item.active .item-icon {
-    color: #fff;
-}
-
-.dropdown-item.active .item-path {
-    color: rgba(255,255,255,0.6);
-}
-
-.item-icon {
-    flex-shrink: 0;
-    color: var(--accent-color);
-}
-
-.dropdown-item.active .item-icon {
-    color: #fff;
-}
-
-.item-label {
-    flex-shrink: 0;
-    font-weight: 500;
-    white-space: nowrap;
-}
-
-.item-path {
-    flex: 1;
-    color: var(--text-muted);
-    font-size: 11px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    white-space: nowrap;
-    cursor: default;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-}
-
-.item-path::-webkit-scrollbar {
-    display: none;
-}
-
-.other-item .item-icon {
-    color: var(--text-secondary);
-}
-
-.dropdown-divider {
-    height: 1px;
-    background: var(--border-color);
-    margin: 2px 0;
-}
-
-/* Dropdown transition */
-.dropdown-enter-active,
-.dropdown-leave-active {
-    transition: opacity 0.15s, transform 0.15s;
-}
-
-.dropdown-enter-from,
-.dropdown-leave-to {
-    opacity: 0;
-    transform: translateY(-4px);
+    min-width: 0;
 }
 
 /* Branch badge */
@@ -593,6 +510,7 @@ onUnmounted(() => {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    min-width: 0;
 }
 
 .settings-toggle {
@@ -779,5 +697,104 @@ onUnmounted(() => {
     height: 1px;
     background: var(--border-color, #e5e5e5);
     margin: 3px 6px;
+}
+
+/* Project dropdown (teleported to body, positioned via JS) */
+.project-dropdown {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+    z-index: 9999;
+    overflow: hidden;
+    padding: 3px 0;
+}
+
+.project-dropdown .dropdown-loading,
+.project-dropdown .dropdown-empty {
+    text-align: center;
+    padding: 10px 12px;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.project-dropdown .dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    cursor: pointer;
+    transition: background 0.1s;
+    font-size: 12px;
+}
+
+.project-dropdown .dropdown-item:hover {
+    background: var(--bg-tertiary);
+}
+
+.project-dropdown .dropdown-item.active {
+    background: var(--accent-color);
+    color: #fff;
+}
+
+.project-dropdown .dropdown-item.active .item-icon {
+    color: #fff;
+}
+
+.project-dropdown .dropdown-item.active .item-path {
+    color: rgba(255,255,255,0.6);
+}
+
+.project-dropdown .item-icon {
+    flex-shrink: 0;
+    color: var(--accent-color);
+}
+
+.project-dropdown .dropdown-item.active .item-icon {
+    color: #fff;
+}
+
+.project-dropdown .item-label {
+    flex-shrink: 0;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.project-dropdown .item-path {
+    flex: 1;
+    color: var(--text-muted);
+    font-size: 11px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+    cursor: default;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.project-dropdown .item-path::-webkit-scrollbar {
+    display: none;
+}
+
+.project-dropdown .other-item .item-icon {
+    color: var(--text-secondary);
+}
+
+.project-dropdown .dropdown-divider {
+    height: 1px;
+    background: var(--border-color);
+    margin: 2px 0;
+}
+
+/* Dropdown transition (teleported to body) */
+.dropdown-enter-active,
+.dropdown-leave-active {
+    transition: opacity 0.15s, transform 0.15s;
+}
+
+.dropdown-enter-from,
+.dropdown-leave-to {
+    opacity: 0;
+    transform: translateY(-4px);
 }
 </style>

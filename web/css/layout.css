@@ -27,6 +27,7 @@
     padding: 0 6px;
     gap: 4px;
     flex-shrink: 0;
+    overflow: hidden;
     z-index: 1100;
 }
 
