@@ -1,6 +1,7 @@
 package ws
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -430,5 +431,143 @@ func TestBroadcastEvent_BufferWindow(t *testing.T) {
 	buffered2 := sub.GetBufferedEvents()
 	if len(buffered2) != 0 {
 		t.Errorf("expected 0 buffered events outside window, got %d", len(buffered2))
+	}
+}
+
+func TestManager_BroadcastEvent_JPushAlert_WithResponsePreview(t *testing.T) {
+	var receivedAlert string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err == nil {
+			if n, ok := payload["notification"].(map[string]any); ok {
+				if a, ok := n["android"].(map[string]any); ok {
+					receivedAlert, _ = a["alert"].(string)
+				}
+			}
+		}
+		w.WriteHeader(200)
+		w.Write([]byte(`{"sendno":"123","msg_id":"456"}`))
+	}))
+	defer server.Close()
+
+	jpush := push.NewJPushClient(push.JPushConfig{
+		Enabled:      true,
+		AppKey:       "test-key",
+		MasterSecret: "test-secret",
+	})
+	jpush.SetBaseURL(server.URL)
+
+	mgr := newTestManager(jpush)
+	var writeMu sync.Mutex
+	mgr.Subscribe(nil, &writeMu, "client-1")
+	mgr.RegisterPushID("reg-123", "client-1")
+	mgr.DisconnectClient("client-1")
+
+	msg := ServerMessage{
+		Type:  "event",
+		ID:    "evt_1",
+		Event: "session_update",
+		Data: &SessionUpdateData{
+			SessionID:      "s1",
+			Status:         "completed",
+			HasNewMessages: true,
+			ResponsePreview: "AI回复的前16个字符…",
+		},
+	}
+	mgr.BroadcastEvent(msg)
+
+	if receivedAlert != "AI回复的前16个字符…" {
+		t.Errorf("expected alert to be response preview, got %q", receivedAlert)
+	}
+}
+
+func TestManager_BroadcastEvent_JPushAlert_WithoutResponsePreview(t *testing.T) {
+	var receivedAlert string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err == nil {
+			if n, ok := payload["notification"].(map[string]any); ok {
+				if a, ok := n["android"].(map[string]any); ok {
+					receivedAlert, _ = a["alert"].(string)
+				}
+			}
+		}
+		w.WriteHeader(200)
+		w.Write([]byte(`{"sendno":"123","msg_id":"456"}`))
+	}))
+	defer server.Close()
+
+	jpush := push.NewJPushClient(push.JPushConfig{
+		Enabled:      true,
+		AppKey:       "test-key",
+		MasterSecret: "test-secret",
+	})
+	jpush.SetBaseURL(server.URL)
+
+	mgr := newTestManager(jpush)
+	var writeMu sync.Mutex
+	mgr.Subscribe(nil, &writeMu, "client-1")
+	mgr.RegisterPushID("reg-123", "client-1")
+	mgr.DisconnectClient("client-1")
+
+	msg := ServerMessage{
+		Type:  "event",
+		ID:    "evt_1",
+		Event: "session_update",
+		Data: &SessionUpdateData{
+			SessionID:      "s1",
+			Status:         "completed",
+			HasNewMessages: true,
+		},
+	}
+	mgr.BroadcastEvent(msg)
+
+	if receivedAlert != "AI会话已结束" {
+		t.Errorf("expected default alert, got %q", receivedAlert)
+	}
+}
+
+func TestManager_BroadcastEvent_JPushAlert_TaskUpdate(t *testing.T) {
+	var receivedAlert string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err == nil {
+			if n, ok := payload["notification"].(map[string]any); ok {
+				if a, ok := n["android"].(map[string]any); ok {
+					receivedAlert, _ = a["alert"].(string)
+				}
+			}
+		}
+		w.WriteHeader(200)
+		w.Write([]byte(`{"sendno":"123","msg_id":"456"}`))
+	}))
+	defer server.Close()
+
+	jpush := push.NewJPushClient(push.JPushConfig{
+		Enabled:      true,
+		AppKey:       "test-key",
+		MasterSecret: "test-secret",
+	})
+	jpush.SetBaseURL(server.URL)
+
+	mgr := newTestManager(jpush)
+	var writeMu sync.Mutex
+	mgr.Subscribe(nil, &writeMu, "client-1")
+	mgr.RegisterPushID("reg-123", "client-1")
+	mgr.DisconnectClient("client-1")
+
+	msg := ServerMessage{
+		Type:  "event",
+		ID:    "evt_1",
+		Event: "task_update",
+		Data: &TaskUpdateData{
+			TaskID: "t1",
+			Status: "completed",
+		},
+	}
+	mgr.BroadcastEvent(msg)
+
+	if receivedAlert != "计划任务已完成" {
+		t.Errorf("expected task alert, got %q", receivedAlert)
 	}
 }
