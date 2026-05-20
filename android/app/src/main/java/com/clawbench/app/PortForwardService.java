@@ -1267,8 +1267,14 @@ public class PortForwardService extends Service {
 
     /**
      * Post a system notification for an AI event.
+     * Skipped when JPush is available to avoid duplicate notifications.
      */
     private void postEventNotification(String eventType, JSONObject data) {
+        // Avoid duplicate notification: when JPush is available, push delivery is
+        // handled by JPush (server-side). Only post local notification as fallback.
+        if (MainActivity.instance != null && MainActivity.instance.pushAvailable) {
+            return;
+        }
         try {
             String status = data.optString("status", "");
             String title;
