@@ -1278,9 +1278,10 @@ public class PortForwardService extends Service {
 
             if ("session_update".equals(eventType)) {
                 sessionId = data.optString("session_id", "");
+                String responsePreview = data.optString("response_preview", "");
                 if ("completed".equals(status)) {
-                    title = "AI 会话完成";
-                    text = "会话已结束";
+                    title = "AI 任务完成";
+                    text = responsePreview.isEmpty() ? "AI会话已结束" : responsePreview;
                 } else {
                     title = "AI 会话通知";
                     text = "会话已取消";
