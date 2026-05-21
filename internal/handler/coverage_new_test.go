@@ -1400,7 +1400,7 @@ func TestUploadFile_Success(t *testing.T) {
 	assert.Equal(t, true, result["ok"])
 	path, ok := result["path"].(string)
 	require.True(t, ok)
-	assert.Contains(t, path, ".clawbench/uploads/test.txt")
+	assert.Contains(t, filepath.ToSlash(path), ".clawbench/uploads/test.txt")
 }
 
 func TestUploadFile_FilenameCollision_SequentialNumbering(t *testing.T) {
