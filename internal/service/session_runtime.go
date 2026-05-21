@@ -25,6 +25,12 @@ var sessionStreams sync.Map // map[string]chan ai.StreamEvent
 var sessionCancels sync.Map         // map[string]context.CancelFunc
 var sessionCancelReasons sync.Map   // map[string]string — "user", "disconnect"
 
+// responsePreviewMaxRunes is the maximum number of runes included in the
+// response preview sent via WS session_update events. This is intentionally
+// generous (for WS consumers); the JPush alert path applies its own shorter
+// limit (see ws.Manager.broadcastToSubscription).
+const responsePreviewMaxRunes = 64
+
 // EmitSessionEvent broadcasts a session_update event to connected clients.
 func EmitSessionEvent(sessionID, status string, hasNewMessages bool) {
 	mgr := ws.GetManager()
@@ -57,7 +63,7 @@ func EmitSessionEvent(sessionID, status string, hasNewMessages bool) {
 	})
 }
 
-// getSessionResponsePreview returns the first 64 runes of the AI's final reply text.
+// getSessionResponsePreview returns the first responsePreviewMaxRunes runes of the AI's final reply text.
 func getSessionResponsePreview(sessionID string) string {
 	messages, err := GetMessagesBySessionID(sessionID)
 	if err != nil {
@@ -78,8 +84,8 @@ func getSessionResponsePreview(sessionID string) string {
 		// Extract text from text-type blocks
 		for _, b := range content.Blocks {
 			if b.Type == "text" && b.Text != "" {
-				if utf8.RuneCountInString(b.Text) > 64 {
-					return string([]rune(b.Text)[:64]) + "…"
+				if utf8.RuneCountInString(b.Text) > responsePreviewMaxRunes {
+					return string([]rune(b.Text)[:responsePreviewMaxRunes]) + "…"
 				}
 				return b.Text
 			}
@@ -230,9 +236,13 @@ func ForceCancelSession(sessionID string) {
 	SetSessionRunning(sessionID, false, true)
 }
 
+// sessionStreamBufferSize is the buffer capacity for the per-session event channel.
+// Controls backpressure: when the channel is full, SendSessionEvent drops events.
+const sessionStreamBufferSize = 256
+
 // RegisterSessionStream creates and registers a stream channel for a session
 func RegisterSessionStream(sessionID string) chan ai.StreamEvent {
-	ch := make(chan ai.StreamEvent, 256)
+	ch := make(chan ai.StreamEvent, sessionStreamBufferSize)
 	sessionStreams.Store(sessionID, ch)
 	return ch
 }

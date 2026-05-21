@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"clawbench/internal/push"
 )
@@ -289,12 +291,12 @@ func TestCleanupStale_NoPushRegID(t *testing.T) {
 	mgr.Subscribe(nil, &writeMu, "client-1")
 	mgr.DisconnectClient("client-1")
 
-	// Set bufferStart to 121 seconds ago — should be cleaned up (no pushRegID, >120s)
+	// Set bufferStart to just past staleNoPushTimeout — should be cleaned up (no pushRegID)
 	mgr.mu.Lock()
 	sub := mgr.subscriptions["client-1"]
 	mgr.mu.Unlock()
 	sub.mu.Lock()
-	sub.bufferStart = time.Now().Add(-121 * time.Second)
+	sub.bufferStart = time.Now().Add(-staleNoPushTimeout - time.Second)
 	sub.mu.Unlock()
 
 	mgr.CleanupStale()
@@ -303,7 +305,7 @@ func TestCleanupStale_NoPushRegID(t *testing.T) {
 	_, exists := mgr.subscriptions["client-1"]
 	mgr.mu.Unlock()
 	if exists {
-		t.Error("expected stale subscription (no push) to be cleaned up after 120s")
+		t.Error("expected stale subscription (no push) to be cleaned up after staleNoPushTimeout")
 	}
 }
 
@@ -314,7 +316,7 @@ func TestCleanupStale_NoPushRegID_RecentNotCleaned(t *testing.T) {
 	mgr.Subscribe(nil, &writeMu, "client-1")
 	mgr.DisconnectClient("client-1")
 
-	// Set bufferStart to 60 seconds ago — should NOT be cleaned up (no pushRegID, <120s)
+	// Set bufferStart to well before staleNoPushTimeout — should NOT be cleaned up
 	mgr.mu.Lock()
 	sub := mgr.subscriptions["client-1"]
 	mgr.mu.Unlock()
@@ -328,7 +330,7 @@ func TestCleanupStale_NoPushRegID_RecentNotCleaned(t *testing.T) {
 	_, exists := mgr.subscriptions["client-1"]
 	mgr.mu.Unlock()
 	if !exists {
-		t.Error("expected subscription (no push, <120s) to not be cleaned up")
+		t.Error("expected subscription (no push, before staleNoPushTimeout) to not be cleaned up")
 	}
 }
 
@@ -341,7 +343,7 @@ func TestCleanupStale_WithPushRegID(t *testing.T) {
 	mgr.DisconnectClient("client-1")
 
 	// Set bufferStart to 31 minutes ago, lastActive to 31 minutes ago
-	// Should NOT be cleaned up (has pushRegID, lastActive < 10 days)
+	// Should NOT be cleaned up (has pushRegID, lastActive < staleWithPushTimeout)
 	mgr.mu.Lock()
 	sub := mgr.subscriptions["client-1"]
 	mgr.mu.Unlock()
@@ -356,12 +358,12 @@ func TestCleanupStale_WithPushRegID(t *testing.T) {
 	_, exists := mgr.subscriptions["client-1"]
 	mgr.mu.Unlock()
 	if !exists {
-		t.Error("expected subscription with pushRegID to survive (lastActive < 10 days)")
+		t.Error("expected subscription with pushRegID to survive (lastActive < staleWithPushTimeout)")
 	}
 
-	// Set lastActive to 11 days ago — should be cleaned up (no connection in 10 days)
+	// Set lastActive beyond staleWithPushTimeout — should be cleaned up
 	sub.mu.Lock()
-	sub.lastActive = time.Now().Add(-11 * 24 * time.Hour)
+	sub.lastActive = time.Now().Add(-staleWithPushTimeout - 24*time.Hour)
 	sub.mu.Unlock()
 
 	mgr.CleanupStale()
@@ -370,7 +372,7 @@ func TestCleanupStale_WithPushRegID(t *testing.T) {
 	_, exists = mgr.subscriptions["client-1"]
 	mgr.mu.Unlock()
 	if exists {
-		t.Error("expected subscription with pushRegID to be cleaned up (lastActive > 10 days)")
+		t.Error("expected subscription with pushRegID to be cleaned up (lastActive > staleWithPushTimeout)")
 	}
 }
 
@@ -498,17 +500,120 @@ func TestManager_BroadcastEvent_JPushAlert_WithSessionTitle(t *testing.T) {
 			SessionID:      "s1",
 			Status:         "completed",
 			HasNewMessages: true,
-			SessionTitle:   "帮我写一个Go HTTP服务器",
+			SessionTitle:    "帮我写一个Go HTTP服务器",
+			ResponsePreview: "AI回复的预览内容",
 		},
 	}
 	mgr.BroadcastEvent(msg)
 
+	// SessionTitle takes priority over ResponsePreview
 	if receivedAlert != "帮我写一个Go HTTP服务器" {
 		t.Errorf("expected alert to be session title, got %q", receivedAlert)
 	}
 }
 
-func TestManager_BroadcastEvent_JPushAlert_WithoutSessionTitle(t *testing.T) {
+func TestManager_BroadcastEvent_JPushAlert_WithResponsePreview(t *testing.T) {
+	var receivedAlert string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err == nil {
+			if n, ok := payload["notification"].(map[string]any); ok {
+				if a, ok := n["android"].(map[string]any); ok {
+					receivedAlert, _ = a["alert"].(string)
+				}
+			}
+		}
+		w.WriteHeader(200)
+		w.Write([]byte(`{"sendno":"123","msg_id":"456"}`))
+	}))
+	defer server.Close()
+
+	jpush := push.NewJPushClient(push.JPushConfig{
+		Enabled:      true,
+		AppKey:       "test-key",
+		MasterSecret: "test-secret",
+	})
+	jpush.SetBaseURL(server.URL)
+
+	mgr := newTestManager(jpush)
+	var writeMu sync.Mutex
+	mgr.Subscribe(nil, &writeMu, "client-1")
+	mgr.RegisterPushID("reg-123", "client-1")
+	mgr.DisconnectClient("client-1")
+
+	msg := ServerMessage{
+		Type:  "event",
+		ID:    "evt_1",
+		Event: "session_update",
+		Data: &SessionUpdateData{
+			SessionID:      "s1",
+			Status:         "completed",
+			HasNewMessages: true,
+			ResponsePreview: "AI回复的预览内容",
+		},
+	}
+	mgr.BroadcastEvent(msg)
+
+	// Short preview should pass through unchanged (under pushAlertMaxRunes)
+	if receivedAlert != "AI回复的预览内容" {
+		t.Errorf("expected alert to be response preview, got %q", receivedAlert)
+	}
+}
+
+func TestManager_BroadcastEvent_JPushAlert_TruncatesLongTitle(t *testing.T) {
+	var receivedAlert string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err == nil {
+			if n, ok := payload["notification"].(map[string]any); ok {
+				if a, ok := n["android"].(map[string]any); ok {
+					receivedAlert, _ = a["alert"].(string)
+				}
+			}
+		}
+		w.WriteHeader(200)
+		w.Write([]byte(`{"sendno":"123","msg_id":"456"}`))
+	}))
+	defer server.Close()
+
+	jpush := push.NewJPushClient(push.JPushConfig{
+		Enabled:      true,
+		AppKey:       "test-key",
+		MasterSecret: "test-secret",
+	})
+	jpush.SetBaseURL(server.URL)
+
+	mgr := newTestManager(jpush)
+	var writeMu sync.Mutex
+	mgr.Subscribe(nil, &writeMu, "client-1")
+	mgr.RegisterPushID("reg-123", "client-1")
+	mgr.DisconnectClient("client-1")
+
+	// pushAlertMaxRunes+1 rune title — should be truncated
+	longTitle := strings.Repeat("测", pushAlertMaxRunes+1)
+	msg := ServerMessage{
+		Type:  "event",
+		ID:    "evt_1",
+		Event: "session_update",
+		Data: &SessionUpdateData{
+			SessionID:      "s1",
+			Status:         "completed",
+			HasNewMessages: true,
+			SessionTitle:   longTitle,
+		},
+	}
+	mgr.BroadcastEvent(msg)
+
+	expected := string([]rune(longTitle)[:pushAlertMaxRunes]) + "…"
+	if receivedAlert != expected {
+		t.Errorf("expected truncated alert, got %q (want %q)", receivedAlert, expected)
+	}
+	if utf8.RuneCountInString(receivedAlert) != pushAlertMaxRunes+1 {
+		t.Errorf("expected alert of %d runes, got %d", pushAlertMaxRunes+1, utf8.RuneCountInString(receivedAlert))
+	}
+}
+
+func TestManager_BroadcastEvent_JPushAlert_WithoutTitleOrPreview(t *testing.T) {
 	var receivedAlert string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var payload map[string]any
@@ -865,5 +970,33 @@ func TestManager_BroadcastEvent_JPushWhenNoWS(t *testing.T) {
 
 	if !pushCalled {
 		t.Error("JPush should be called when no WS is connected")
+	}
+}
+
+func TestTruncateForPush(t *testing.T) {
+	short := "短文本"
+	if got := truncateForPush(short); got != short {
+		t.Errorf("short text should pass through, got %q", got)
+	}
+
+	// Exactly pushAlertMaxRunes — no truncation
+	exact := strings.Repeat("一二", pushAlertMaxRunes/2)
+	if utf8.RuneCountInString(exact) != pushAlertMaxRunes {
+		t.Fatalf("test setup: expected %d runes, got %d", pushAlertMaxRunes, utf8.RuneCountInString(exact))
+	}
+	if got := truncateForPush(exact); got != exact {
+		t.Errorf("exact-length text should not be truncated, got %q", got)
+	}
+
+	// Over pushAlertMaxRunes — truncate + "…"
+	long := strings.Repeat("一二", pushAlertMaxRunes/2) + "三"
+	runes := []rune(long)
+	expected := string(runes[:pushAlertMaxRunes]) + "…"
+	got := truncateForPush(long)
+	if got != expected {
+		t.Errorf("long text should be truncated, got %q (want %q)", got, expected)
+	}
+	if utf8.RuneCountInString(got) != pushAlertMaxRunes+1 {
+		t.Errorf("truncated text should be %d+1 runes, got %d", pushAlertMaxRunes, utf8.RuneCountInString(got))
 	}
 }

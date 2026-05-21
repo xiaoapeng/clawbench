@@ -12,6 +12,7 @@ import (
 	"github.com/coder/websocket"
 
 	"clawbench/internal/push"
+	"unicode/utf8"
 )
 
 // ClientSubscription tracks a single client's WS connection and push state.
@@ -29,6 +30,30 @@ type ClientSubscription struct {
 // maxSubscriptions limits the number of concurrent WS subscriptions to prevent
 // resource exhaustion. Matches the original SSE limit of 20.
 const maxSubscriptions = 20
+
+// pushAlertMaxRunes is the maximum number of runes used for the JPush alert text.
+// OPPO (the most restrictive vendor channel) limits alert to 50 characters;
+// we use 40 to leave room for the "…" ellipsis and a safety margin.
+const pushAlertMaxRunes = 40
+
+// wsWriteTimeout is the maximum time to wait for a WebSocket write to complete.
+const wsWriteTimeout = 5 * time.Second
+
+// disconnectedBufferWindow is the duration after disconnection during which
+// events are still buffered for replay. After this window, events are dropped.
+const disconnectedBufferWindow = 10 * time.Second
+
+// maxBufferedEvents is the maximum number of events retained in the replay
+// buffer for WS reconnection.
+const maxBufferedEvents = 50
+
+// staleNoPushTimeout is the duration after which a disconnected subscription
+// without a push registration ID is cleaned up.
+const staleNoPushTimeout = 120 * time.Second
+
+// staleWithPushTimeout is the duration after which a subscription with a push
+// registration ID but no WS connection is cleaned up.
+const staleWithPushTimeout = 10 * 24 * time.Hour
 
 // Manager manages all client subscriptions.
 type Manager struct {
@@ -217,7 +242,7 @@ func (m *Manager) broadcastToSubscription(key string, msg ServerMessage, deliver
 			return
 		}
 		writeMu.Lock()
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), wsWriteTimeout)
 		writeErr := conn.Write(ctx, websocket.MessageText, data)
 		cancel()
 		writeMu.Unlock()
@@ -233,7 +258,7 @@ func (m *Manager) broadcastToSubscription(key string, msg ServerMessage, deliver
 	}
 
 	// Client is disconnected — check buffer window
-	if sub.bufferStart.IsZero() || time.Since(sub.bufferStart) < 10*time.Second {
+	if sub.bufferStart.IsZero() || time.Since(sub.bufferStart) < disconnectedBufferWindow {
 		sub.bufferEvent(msg)
 	}
 
@@ -272,11 +297,16 @@ func (m *Manager) broadcastToSubscription(key string, msg ServerMessage, deliver
 		if msg.Event == "task_update" {
 			alert = "计划任务已完成"
 		}
-		// Use session title as alert text when available (more informative than response preview)
-		if d, ok := msg.Data.(*SessionUpdateData); ok && d.SessionTitle != "" {
-			alert = d.SessionTitle
+		// Use session title as alert text when available (more informative than response preview),
+		// then fall back to response preview. Both are truncated for push channel limits.
+		if d, ok := msg.Data.(*SessionUpdateData); ok {
+			if d.SessionTitle != "" {
+				alert = truncateForPush(d.SessionTitle)
+			} else if d.ResponsePreview != "" {
+				alert = truncateForPush(d.ResponsePreview)
+			}
 		}
-		slog.Info("ws: sending jpush notification", "event", msg.Event, "client_id", key, "reg_id", pushRegID, "title", title)
+		slog.Info("ws: sending jpush notification", "event", msg.Event, "client_id", key, "reg_id", pushRegID, "title", title, "alert", alert)
 		if err := m.jpush.SendNotification(pushRegID, title, alert, extras); err != nil {
 			slog.Warn("ws: jpush notification failed", "error", err, "client_id", key)
 		}
@@ -299,17 +329,17 @@ func (s *ClientSubscription) GetBufferedEvents() []ServerMessage {
 	return result
 }
 
-// bufferEvent appends an event to the replay buffer, keeping at most 50 events.
+// bufferEvent appends an event to the replay buffer, keeping at most maxBufferedEvents events.
 func (s *ClientSubscription) bufferEvent(msg ServerMessage) {
 	s.eventBuffer = append(s.eventBuffer, msg)
-	if len(s.eventBuffer) > 50 {
-		s.eventBuffer = s.eventBuffer[len(s.eventBuffer)-50:]
+	if len(s.eventBuffer) > maxBufferedEvents {
+		s.eventBuffer = s.eventBuffer[len(s.eventBuffer)-maxBufferedEvents:]
 	}
 }
 
 // CleanupStale removes stale subscriptions:
-//   - No pushRegID + disconnected for >120 seconds → remove
-//   - Has pushRegID + no WS connection in the last 10 days → remove
+//   - No pushRegID + disconnected for > staleNoPushTimeout → remove
+//   - Has pushRegID + no WS connection in the last staleWithPushTimeout → remove
 //   - Connected subscriptions are never cleaned up.
 func (m *Manager) CleanupStale() {
 	m.mu.Lock()
@@ -328,15 +358,15 @@ func (m *Manager) CleanupStale() {
 			continue
 		}
 		if sub.pushRegID == "" {
-			// No push reg ID — clean up after 120 seconds
-			if time.Since(sub.bufferStart) > 120*time.Second {
+			// No push reg ID — clean up after staleNoPushTimeout
+			if time.Since(sub.bufferStart) > staleNoPushTimeout {
 				delete(m.subscriptions, key)
 				slog.Info("ws: cleaned up stale subscription (no push)", "client_id", key, "disconnected_for", time.Since(sub.bufferStart))
 			}
 		} else {
-			// Has push reg ID — clean up if no WS connection in the last 10 days
+			// Has push reg ID — clean up if no WS connection within staleWithPushTimeout
 			// lastActive is updated on every Subscribe, so it tracks the most recent connection
-			if time.Since(sub.lastActive) > 10*24*time.Hour {
+			if time.Since(sub.lastActive) > staleWithPushTimeout {
 				delete(m.subscriptions, key)
 				slog.Info("ws: cleaned up stale subscription (with push, no connect in 10 days)", "client_id", key, "last_active", sub.lastActive)
 			}
@@ -347,6 +377,14 @@ func (m *Manager) CleanupStale() {
 
 // eventSeq is an atomic counter to ensure unique event IDs.
 var eventSeq atomic.Int64
+
+// truncateForPush truncates s to pushAlertMaxRunes, appending "…" if truncated.
+func truncateForPush(s string) string {
+	if utf8.RuneCountInString(s) <= pushAlertMaxRunes {
+		return s
+	}
+	return string([]rune(s)[:pushAlertMaxRunes]) + "…"
+}
 
 // GenerateEventID creates a unique event ID.
 // Uses an atomic counter instead of exposing server timestamps.
