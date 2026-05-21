@@ -1706,19 +1706,10 @@ func TestPiMetadataSessionID_PersistedToDB(t *testing.T) {
 // events from backends NOT in the external ID list (e.g., claude, codebuddy)
 // do NOT trigger external_session_id persistence. This ensures the "pi"
 // addition doesn't accidentally enable it for backends that don't need it.
-func TestPiSessionCapture_OtherBackendsIgnored(t *testing.T) {
-	// The handler condition explicitly lists backends:
-	// opencode || codex || deepseek || pi
-	// Claude/Codebuddy should NOT be in the list.
-	// Verify by checking that the condition would NOT match these backends.
-	for _, backend := range []string{"claude", "codebuddy", "vecli", "gemini"} {
-		// These backends should NOT trigger the session_capture persistence
-		// condition. We can't test the handler directly, but we verify the
-		// backend is NOT in the known external-ID list.
-		isExternalIDBackend := (backend == "opencode" || backend == "codex" || backend == "deepseek" || backend == "pi")
-		assert.False(t, isExternalIDBackend, "backend %q should NOT be in external session ID list", backend)
-	}
-}
+// TestPiSessionCapture_OtherBackendsIgnored removed — the original test was a tautology
+// that only tested a local boolean expression, not the actual handler code path.
+// The real coverage is in TestPiSessionCapture_* and TestCodexSessionCapture_PersistedToDB
+// which test the actual session_capture event processing for external-ID backends.
 
 // ============================================================================
 // Pi end-to-end resume chain test

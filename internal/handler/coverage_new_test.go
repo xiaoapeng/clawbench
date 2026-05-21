@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -20,6 +21,7 @@ import (
 	"clawbench/internal/model"
 	"clawbench/internal/push"
 	"clawbench/internal/service"
+	"clawbench/internal/terminal"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -797,17 +799,7 @@ func TestServeGitVerifyCommits_WrongMethod(t *testing.T) {
 // SetPushClient / ServePushConfig tests
 // ============================================================================
 
-func TestSetPushClient_SetsRef(t *testing.T) {
-	origRef := pushClientRef
-	defer func() { pushClientRef = origRef }()
-
-	client := &push.JPushClient{}
-	SetPushClient(client)
-	assert.Equal(t, client, pushClientRef)
-
-	SetPushClient(nil)
-	assert.Nil(t, pushClientRef)
-}
+// TestSetPushClient_SetsRef removed — trivial setter test that only verifies Go assignment syntax
 
 func TestServePushConfig_NoClient(t *testing.T) {
 	origRef := pushClientRef
@@ -874,15 +866,7 @@ func TestServePushConfig_WrongMethod(t *testing.T) {
 // SetSSHServer tests
 // ============================================================================
 
-func TestSetSSHServer_SetsRef(t *testing.T) {
-	origRef := sshServerRef
-	defer func() { sshServerRef = origRef }()
-
-	// Test setting to non-nil (using the type only — actual Server requires real SSH setup)
-	// Just verify nil round-trip
-	SetSSHServer(nil)
-	assert.Nil(t, sshServerRef)
-}
+// TestSetSSHServer_SetsRef removed — trivial setter test that only verifies nil assignment
 
 // ============================================================================
 // validateCreatePath tests
@@ -1213,4 +1197,513 @@ func TestServeRecentProjects_Empty(t *testing.T) {
 	req := newRequest(t, http.MethodGet, "/api/recent-projects", nil)
 	w := callHandler(ServeRecentProjects, req)
 	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+// ============================================================================
+// copyDir tests — symlink handling and error paths (41.9% → target 70%+)
+// ============================================================================
+
+func TestCopyDir_SymlinkWithinWatchDir(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	// Create a real file and a directory with a symlink pointing within WatchDir
+	createTestFile(t, env.ProjectDir, "realdir/target.txt", "symlink content")
+	require.NoError(t, os.MkdirAll(filepath.Join(env.ProjectDir, "srcdir"), 0755))
+	require.NoError(t, os.Symlink(filepath.Join(env.ProjectDir, "realdir"), filepath.Join(env.ProjectDir, "srcdir", "link-to-real")))
+
+	dstDir := filepath.Join(env.ProjectDir, "dstdir")
+	err := copyDir(filepath.Join(env.ProjectDir, "srcdir"), dstDir, env.WatchDir)
+	require.NoError(t, err)
+
+	// The symlink target is within watchDir, so the actual file should be copied
+	data, readErr := os.ReadFile(filepath.Join(dstDir, "link-to-real", "target.txt"))
+	require.NoError(t, readErr)
+	assert.Equal(t, "symlink content", string(data))
+}
+
+func TestCopyDir_SymlinkEscapingWatchDir_Skipped(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	// Create a symlink that points outside WatchDir
+	escapeTarget := t.TempDir()
+	os.WriteFile(filepath.Join(escapeTarget, "secret.txt"), []byte("secret"), 0644)
+
+	require.NoError(t, os.MkdirAll(filepath.Join(env.ProjectDir, "srcdir"), 0755))
+	require.NoError(t, os.Symlink(escapeTarget, filepath.Join(env.ProjectDir, "srcdir", "escape-link")))
+
+	dstDir := filepath.Join(env.ProjectDir, "dstdir")
+	err := copyDir(filepath.Join(env.ProjectDir, "srcdir"), dstDir, env.WatchDir)
+	require.NoError(t, err)
+
+	// The escaping symlink should be skipped — dst dir should exist but be empty
+	entries, readErr := os.ReadDir(dstDir)
+	require.NoError(t, readErr)
+	assert.Empty(t, entries, "escaping symlinks should be skipped")
+}
+
+func TestCopyDir_SymlinkEvalFails_Skipped(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	// Create a dangling symlink (target doesn't exist)
+	require.NoError(t, os.MkdirAll(filepath.Join(env.ProjectDir, "srcdir"), 0755))
+	require.NoError(t, os.Symlink("/nonexistent/path/xyz", filepath.Join(env.ProjectDir, "srcdir", "dangling")))
+
+	dstDir := filepath.Join(env.ProjectDir, "dstdir")
+	err := copyDir(filepath.Join(env.ProjectDir, "srcdir"), dstDir, env.WatchDir)
+	require.NoError(t, err)
+
+	// Dangling symlink should be skipped
+	entries, readErr := os.ReadDir(dstDir)
+	require.NoError(t, readErr)
+	assert.Empty(t, entries, "dangling symlinks should be skipped")
+}
+
+func TestCopyDir_SrcNotExists_ReturnsError(t *testing.T) {
+	err := copyDir("/nonexistent/src", "/tmp/dst", "/tmp")
+	assert.Error(t, err)
+}
+
+func TestCopyDir_SymlinkToDir_WithinWatchDir(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	// Create a directory and a symlink pointing to it within WatchDir
+	createTestFile(t, env.ProjectDir, "realdir/nested/file.txt", "nested content")
+	require.NoError(t, os.MkdirAll(filepath.Join(env.ProjectDir, "srcdir"), 0755))
+	require.NoError(t, os.Symlink(filepath.Join(env.ProjectDir, "realdir"), filepath.Join(env.ProjectDir, "srcdir", "link-dir")))
+
+	dstDir := filepath.Join(env.ProjectDir, "dstdir")
+	err := copyDir(filepath.Join(env.ProjectDir, "srcdir"), dstDir, env.WatchDir)
+	require.NoError(t, err)
+
+	// Symlink to directory within watchDir should be recursively copied
+	data, readErr := os.ReadFile(filepath.Join(dstDir, "link-dir", "nested", "file.txt"))
+	require.NoError(t, readErr)
+	assert.Equal(t, "nested content", string(data))
+}
+
+// ============================================================================
+// UploadFile tests — error paths (64.0% → target 80%+)
+// ============================================================================
+
+func TestUploadFilePost_NoProjectCookie(t *testing.T) {
+	_, teardown := setupTestEnv(t)
+	defer teardown()
+
+	req := newRequest(t, http.MethodPost, "/api/upload/file", nil)
+	w := callHandler(UploadFile, req)
+	assert.Equal(t, http.StatusForbidden, w.Code)
+}
+
+func TestUploadFilePost_WrongMethod(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	req := newRequest(t, http.MethodGet, "/api/upload/file", nil)
+	withProjectCookie(req, env.ProjectDir)
+	w := callHandler(UploadFile, req)
+	assert.Equal(t, http.StatusMethodNotAllowed, w.Code)
+}
+
+func TestUploadFile_NoFileProvided(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	// Send multipart form without a "file" field
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+	part, err := writer.CreateFormFile("wrong_field", "test.txt")
+	require.NoError(t, err)
+	fmt.Fprint(part, "hello")
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/upload/file", &buf)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	withProjectCookie(req, env.ProjectDir)
+	w := callHandler(UploadFile, req)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestUploadFile_NoExtension(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+	part, err := writer.CreateFormFile("file", "noextension")
+	require.NoError(t, err)
+	fmt.Fprint(part, "hello")
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/upload/file", &buf)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	withProjectCookie(req, env.ProjectDir)
+	w := callHandler(UploadFile, req)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestUploadFilePost_DangerousExtensions(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	tests := []struct {
+		name string
+		ext  string
+	}{
+		{"exe", "program.exe"},
+		{"bat", "script.bat"},
+		{"cmd", "script.cmd"},
+		{"ps1", "script.ps1"},
+		{"vbs", "script.vbs"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			writer := multipart.NewWriter(&buf)
+			part, createErr := writer.CreateFormFile("file", tt.ext)
+			require.NoError(t, createErr)
+			fmt.Fprint(part, "dangerous")
+			writer.Close()
+
+			req := httptest.NewRequest(http.MethodPost, "/api/upload/file", &buf)
+			req.Header.Set("Content-Type", writer.FormDataContentType())
+			withProjectCookie(req, env.ProjectDir)
+			w := callHandler(UploadFile, req)
+			assert.Equal(t, http.StatusBadRequest, w.Code)
+		})
+	}
+}
+
+func TestUploadFile_Success(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+	part, err := writer.CreateFormFile("file", "test.txt")
+	require.NoError(t, err)
+	fmt.Fprint(part, "hello world")
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/upload/file", &buf)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	withProjectCookie(req, env.ProjectDir)
+	w := callHandler(UploadFile, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var result map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &result))
+	assert.Equal(t, true, result["ok"])
+	path, ok := result["path"].(string)
+	require.True(t, ok)
+	assert.Contains(t, path, ".clawbench/uploads/test.txt")
+}
+
+func TestUploadFile_FilenameCollision_SequentialNumbering(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	// Pre-create the uploads directory with an existing file
+	uploadsDir := filepath.Join(env.ProjectDir, ".clawbench", "uploads")
+	require.NoError(t, os.MkdirAll(uploadsDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(uploadsDir, "test.txt"), []byte("existing"), 0644))
+
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+	part, err := writer.CreateFormFile("file", "test.txt")
+	require.NoError(t, err)
+	fmt.Fprint(part, "new content")
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/upload/file", &buf)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	withProjectCookie(req, env.ProjectDir)
+	w := callHandler(UploadFile, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var result map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &result))
+	path, ok := result["path"].(string)
+	require.True(t, ok)
+	assert.Contains(t, path, "test_1.txt", "collision should produce sequentially numbered filename")
+}
+
+func TestUploadFile_SpacesInFilename(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+	part, err := writer.CreateFormFile("file", "my file.txt")
+	require.NoError(t, err)
+	fmt.Fprint(part, "content with spaces")
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/upload/file", &buf)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	withProjectCookie(req, env.ProjectDir)
+	w := callHandler(UploadFile, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var result map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &result))
+	path, ok := result["path"].(string)
+	require.True(t, ok)
+	assert.Contains(t, path, "my_file.txt", "spaces should be replaced with underscores")
+}
+
+// ============================================================================
+// ServeQuickCommands — PUT reorder and additional error paths (47.6% → 80%+)
+// ============================================================================
+
+func TestServeQuickCommands_Reorder(t *testing.T) {
+	_, teardown := setupTestEnv(t)
+	defer teardown()
+
+	id1, err := service.AddQuickCommand("First", "cmd1", false, false)
+	require.NoError(t, err)
+	id2, err := service.AddQuickCommand("Second", "cmd2", false, false)
+	require.NoError(t, err)
+
+	body := map[string]any{
+		"ids": []int64{id2, id1},
+	}
+	req := newRequest(t, http.MethodPut, "/api/terminal/quick-commands/reorder", body)
+	w := callHandler(ServeQuickCommands, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var result map[string]any
+	decodeRespJSON(t, w.Body, &result)
+	assert.Equal(t, true, result["success"])
+}
+
+func TestServeQuickCommands_ReorderEmptyIDs(t *testing.T) {
+	_, teardown := setupTestEnv(t)
+	defer teardown()
+
+	body := map[string]any{
+		"ids": []int64{},
+	}
+	req := newRequest(t, http.MethodPut, "/api/terminal/quick-commands/reorder", body)
+	w := callHandler(ServeQuickCommands, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestServeQuickCommands_PutNonReorderPath(t *testing.T) {
+	_, teardown := setupTestEnv(t)
+	defer teardown()
+
+	req := newRequest(t, http.MethodPut, "/api/terminal/quick-commands/something-else", nil)
+	w := callHandler(ServeQuickCommands, req)
+	assert.Equal(t, http.StatusMethodNotAllowed, w.Code)
+}
+
+func TestServeQuickCommands_PostWithWhitespace(t *testing.T) {
+	_, teardown := setupTestEnv(t)
+	defer teardown()
+
+	// Labels/commands with only whitespace should be treated as empty after TrimSpace
+	body := map[string]any{
+		"label":    "  ",
+		"command": "  echo hi  ",
+	}
+	req := newRequest(t, http.MethodPost, "/api/terminal/quick-commands", body)
+	w := callHandler(ServeQuickCommands, req)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+// ============================================================================
+// ServeQuickCommandByID — additional error paths (59.4% → 80%+)
+// ============================================================================
+
+func TestServeQuickCommandByID_UpdateValidation(t *testing.T) {
+	_, teardown := setupTestEnv(t)
+	defer teardown()
+
+	id, err := service.AddQuickCommand("Old", "old cmd", false, false)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name string
+		body map[string]any
+	}{
+		{"empty label", map[string]any{"label": "", "command": "cmd"}},
+		{"empty command", map[string]any{"label": "Test", "command": ""}},
+		{"label too long", map[string]any{"label": string(make([]byte, 101)), "command": "cmd"}},
+		{"command too long", map[string]any{"label": "Test", "command": string(make([]byte, 4097))}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := newRequest(t, http.MethodPut, "/api/terminal/quick-commands/"+fmt.Sprint(id), tt.body)
+			w := callHandler(ServeQuickCommandByID, req)
+			assert.Equal(t, http.StatusBadRequest, w.Code)
+		})
+	}
+}
+
+func TestServeQuickCommandByID_DelegateToServeQuickCommands(t *testing.T) {
+	_, teardown := setupTestEnv(t)
+	defer teardown()
+
+	// When idStr is empty or "reorder", it should delegate to ServeQuickCommands
+	req := newRequest(t, http.MethodGet, "/api/terminal/quick-commands/reorder", nil)
+	w := callHandler(ServeQuickCommandByID, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+// ============================================================================
+// ServeRecentProjects — additional paths (50% → 80%+)
+// ============================================================================
+
+func TestServeRecentProjects_AddAndList(t *testing.T) {
+	_, teardown := setupTestEnv(t)
+	defer teardown()
+
+	// Add a project via POST
+	addReq := newRequest(t, http.MethodPost, "/api/recent-projects", map[string]string{
+		"path": "/home/user/myproject",
+	})
+	w := callHandler(ServeRecentProjects, addReq)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	// List should now contain the added project
+	listReq := newRequest(t, http.MethodGet, "/api/recent-projects", nil)
+	w = callHandler(ServeRecentProjects, listReq)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	// GetRecentProjects returns []string
+	var projects []string
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &projects))
+	assert.Contains(t, projects, "/home/user/myproject")
+}
+
+func TestServeRecentProjects_Delete(t *testing.T) {
+	_, teardown := setupTestEnv(t)
+	defer teardown()
+
+	// Add a project first
+	service.AddRecentProject("/home/user/to-delete")
+
+	delReq := newRequest(t, http.MethodDelete, "/api/recent-projects", map[string]string{
+		"path": "/home/user/to-delete",
+	})
+	w := callHandler(ServeRecentProjects, delReq)
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestServeRecentProjects_MethodNotAllowed(t *testing.T) {
+	_, teardown := setupTestEnv(t)
+	defer teardown()
+
+	req := newRequest(t, http.MethodPatch, "/api/recent-projects", nil)
+	w := callHandler(ServeRecentProjects, req)
+	assert.Equal(t, http.StatusMethodNotAllowed, w.Code)
+}
+
+// ============================================================================
+// writeDiffResponse — error path
+// ============================================================================
+
+func TestWriteDiffResponse_WithGitError(t *testing.T) {
+	w := httptest.NewRecorder()
+	// When cmdErr is non-nil but output is also non-empty, the handler still returns 200 with the output
+	writeDiffResponse(w, []byte("some diff output"), errors.New("git diff exited with code 1"))
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var result map[string]interface{}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &result))
+	assert.Contains(t, result, "diff")
+	assert.Equal(t, false, result["empty"])
+}
+
+// ============================================================================
+// TerminalWebSocket — additional error paths (50% → 70%+)
+// ============================================================================
+
+func TestTerminalWebSocket_NilManager(t *testing.T) {
+	origMgr := terminalMgr
+	defer func() { terminalMgr = origMgr }()
+	terminalMgr = nil
+
+	req := newRequest(t, http.MethodGet, "/api/terminal/ws", nil)
+	w := callHandler(TerminalWebSocket, req)
+	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+}
+
+func TestTerminalWebSocket_NoProjectCookie(t *testing.T) {
+	origMgr := terminalMgr
+	defer func() {
+		if terminalMgr != nil && terminalMgr != origMgr {
+			terminalMgr.Close()
+		}
+		terminalMgr = origMgr
+	}()
+
+	SetTerminalManager(terminal.NewManager(model.TerminalConfig{
+		Enabled:      true,
+		IdleTimeout:  "1m",
+		BufferLines:  100,
+		MaxLineBytes: 65536,
+		MaxBufferMB:  4,
+	}, 20000))
+
+	req := newRequest(t, http.MethodGet, "/api/terminal/ws", nil)
+	w := callHandler(TerminalWebSocket, req)
+	assert.Equal(t, http.StatusForbidden, w.Code)
+}
+
+// ============================================================================
+// ServeWatchDir — additional paths (66.7% → 80%+)
+// ============================================================================
+
+func TestServeWatchDir_WithConfig(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	req := newRequest(t, http.MethodGet, "/api/watch-dir", nil)
+	withProjectCookie(req, env.ProjectDir)
+	w := callHandler(ServeWatchDir, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var result map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &result))
+	// watchDir field contains the absolute path of the watch directory
+	watchDir, ok := result["watchDir"].(string)
+	require.True(t, ok)
+	assert.Contains(t, watchDir, env.WatchDir)
+}
+
+// ============================================================================
+// buildChatRequestFromQueue — verify file fields (assertion improvement)
+// ============================================================================
+
+func TestBuildChatRequestFromQueue_FilePathsAndFiles(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	sessionID, err := service.CreateSession(env.ProjectDir, "codebuddy", "queue-files-test", "", "", "default", "chat")
+	require.NoError(t, err)
+
+	// Create actual files so file annotations can be added
+	createTestFile(t, env.ProjectDir, "main.go", "package main")
+	createTestFile(t, env.ProjectDir, "config.yaml", "key: value")
+
+	qMsg := model.QueuedMessage{
+		Text:      "review these files",
+		FilePaths: []string{"main.go"},
+		Files:     []string{"config.yaml"},
+		CreatedAt: time.Now().Format(time.RFC3339),
+	}
+
+	req := buildChatRequestFromQueue(qMsg, sessionID, env.ProjectDir, "codebuddy", "codebuddy", env.ProjectDir)
+	require.NotNil(t, req)
+	assert.Contains(t, req.Prompt, "review these files")
+	assert.Equal(t, sessionID, req.SessionID)
+	// Verify file annotations are injected into the prompt
+	assert.Contains(t, req.Prompt, "main.go", "prompt should contain file path annotation")
 }

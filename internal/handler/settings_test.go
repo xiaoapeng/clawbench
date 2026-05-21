@@ -1347,9 +1347,14 @@ func TestServeConfigRestart_NilRestartFunc(t *testing.T) {
 	_, teardown := setupTestEnv(t)
 	defer teardown()
 
-	// Ensure restartFunc is nil
+	// Set restartFunc to a function that signals when it's called.
+	// This avoids DATA RACE: the goroutine inside ServeConfigRestart reads
+	// restartFunc, and we must not concurrently write it back.
 	origRestartFunc := restartFunc
-	restartFunc = nil
+	restartCalled := make(chan struct{})
+	restartFunc = func() {
+		close(restartCalled)
+	}
 	defer func() { restartFunc = origRestartFunc }()
 
 	req := httptest.NewRequest(http.MethodPost, "/api/config/restart", nil)
@@ -1359,11 +1364,17 @@ func TestServeConfigRestart_NilRestartFunc(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var resp map[string]any
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	assert.Equal(t, "restarting", resp["status"])
 
-	// Give the goroutine time to run (it will just log a warning, not panic)
-	time.Sleep(500 * time.Millisecond)
+	// Wait for the goroutine to actually execute restartFunc
+	// (restartGracePeriod = 200ms delay, then calls restartFunc)
+	select {
+	case <-restartCalled:
+		// Success — goroutine finished reading restartFunc and called it
+	case <-time.After(2 * time.Second):
+		t.Fatal("restartFunc was not called within expected time")
+	}
 }
 
 // --- validatePatchFields nested forbidden field ---

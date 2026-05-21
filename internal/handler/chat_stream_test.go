@@ -13,6 +13,7 @@ import (
 	"clawbench/internal/service"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // parseSSEEvents splits an SSE response body into individual event+data pairs.
@@ -130,7 +131,7 @@ func TestAIChatStream_ContentEvent(t *testing.T) {
 	events := parseSSEEvents(w.Body.String())
 	assert.Equal(t, "content", events[0]["event"])
 	var data map[string]string
-	json.Unmarshal([]byte(events[0]["data"]), &data)
+	require.NoError(t, json.Unmarshal([]byte(events[0]["data"]), &data))
 	assert.Equal(t, "hello world", data["content"])
 	assert.Equal(t, "done", events[1]["event"])
 }
@@ -155,7 +156,7 @@ func TestAIChatStream_ThinkingEvent(t *testing.T) {
 	events := parseSSEEvents(w.Body.String())
 	assert.Equal(t, "thinking", events[0]["event"])
 	var data map[string]string
-	json.Unmarshal([]byte(events[0]["data"]), &data)
+	require.NoError(t, json.Unmarshal([]byte(events[0]["data"]), &data))
 	assert.Equal(t, "let me think...", data["text"])
 }
 
@@ -182,7 +183,7 @@ func TestAIChatStream_ToolUseEvent(t *testing.T) {
 	events := parseSSEEvents(w.Body.String())
 	assert.Equal(t, "tool_use", events[0]["event"])
 	var data map[string]any
-	json.Unmarshal([]byte(events[0]["data"]), &data)
+	require.NoError(t, json.Unmarshal([]byte(events[0]["data"]), &data))
 	assert.Equal(t, "Read", data["name"])
 	assert.Equal(t, "t1", data["id"])
 	assert.Equal(t, true, data["done"])
@@ -213,7 +214,7 @@ func TestAIChatStream_ToolUseEventWithOutput(t *testing.T) {
 	events := parseSSEEvents(w.Body.String())
 	assert.Equal(t, "tool_use", events[0]["event"])
 	var data map[string]any
-	json.Unmarshal([]byte(events[0]["data"]), &data)
+	require.NoError(t, json.Unmarshal([]byte(events[0]["data"]), &data))
 	assert.Equal(t, "Bash", data["name"])
 	assert.Equal(t, "file1.go\nfile2.go", data["output"])
 	assert.Equal(t, "success", data["status"])
@@ -242,7 +243,7 @@ func TestAIChatStream_ToolResultEvent(t *testing.T) {
 	events := parseSSEEvents(w.Body.String())
 	assert.Equal(t, "tool_result", events[0]["event"])
 	var data map[string]any
-	json.Unmarshal([]byte(events[0]["data"]), &data)
+	require.NoError(t, json.Unmarshal([]byte(events[0]["data"]), &data))
 	assert.Equal(t, "t5", data["id"])
 	assert.Equal(t, "file contents here", data["output"])
 	assert.Equal(t, "success", data["status"])
@@ -271,7 +272,7 @@ func TestAIChatStream_ToolResultEventError(t *testing.T) {
 	events := parseSSEEvents(w.Body.String())
 	assert.Equal(t, "tool_result", events[0]["event"])
 	var data map[string]any
-	json.Unmarshal([]byte(events[0]["data"]), &data)
+	require.NoError(t, json.Unmarshal([]byte(events[0]["data"]), &data))
 	assert.Equal(t, "t6", data["id"])
 	assert.Equal(t, "command not found", data["output"])
 	assert.Equal(t, "error", data["status"])
@@ -324,7 +325,7 @@ func TestAIChatStream_ToolResultEventNoOutput(t *testing.T) {
 	events := parseSSEEvents(w.Body.String())
 	assert.Equal(t, "tool_result", events[0]["event"])
 	var data map[string]any
-	json.Unmarshal([]byte(events[0]["data"]), &data)
+	require.NoError(t, json.Unmarshal([]byte(events[0]["data"]), &data))
 	assert.Equal(t, "t7", data["id"])
 	assert.Nil(t, data["output"])
 	assert.Nil(t, data["status"])
@@ -353,7 +354,7 @@ func TestAIChatStream_ToolUseEvent_EmptyInput(t *testing.T) {
 	events := parseSSEEvents(w.Body.String())
 	assert.Equal(t, "tool_use", events[0]["event"])
 	var data map[string]any
-	json.Unmarshal([]byte(events[0]["data"]), &data)
+	require.NoError(t, json.Unmarshal([]byte(events[0]["data"]), &data))
 	input := data["input"].(map[string]any)
 	assert.Empty(t, input)
 }
@@ -403,7 +404,7 @@ func TestAIChatStream_MetadataEvent(t *testing.T) {
 	events := parseSSEEvents(w.Body.String())
 	assert.Equal(t, "metadata", events[0]["event"])
 	var data map[string]any
-	json.Unmarshal([]byte(events[0]["data"]), &data)
+	require.NoError(t, json.Unmarshal([]byte(events[0]["data"]), &data))
 	assert.Equal(t, "gpt-4", data["model"])
 }
 
@@ -469,7 +470,7 @@ func TestAIChatStream_ErrorEvent(t *testing.T) {
 	events := parseSSEEvents(w.Body.String())
 	assert.Equal(t, "error", events[0]["event"])
 	var data map[string]string
-	json.Unmarshal([]byte(events[0]["data"]), &data)
+	require.NoError(t, json.Unmarshal([]byte(events[0]["data"]), &data))
 	assert.Equal(t, "something broke", data["error"])
 }
 
@@ -491,7 +492,7 @@ func TestAIChatStream_ErrorEventWithReason(t *testing.T) {
 
 	events := parseSSEEvents(w.Body.String())
 	var data map[string]string
-	json.Unmarshal([]byte(events[0]["data"]), &data)
+	require.NoError(t, json.Unmarshal([]byte(events[0]["data"]), &data))
 	assert.Equal(t, "timeout", data["error"])
 	assert.Equal(t, "timeout", data["reason"])
 }
@@ -518,7 +519,7 @@ func TestAIChatStream_WarningEvent(t *testing.T) {
 	assert.Len(t, events, 3)
 	assert.Equal(t, "warning", events[0]["event"])
 	var warnData map[string]string
-	json.Unmarshal([]byte(events[0]["data"]), &warnData)
+	require.NoError(t, json.Unmarshal([]byte(events[0]["data"]), &warnData))
 	assert.Equal(t, "slow response", warnData["text"])
 	assert.Equal(t, "timeout", warnData["reason"])
 	assert.Equal(t, "content", events[1]["event"])
@@ -548,7 +549,7 @@ func TestAIChatStream_QueueConsumeEvent(t *testing.T) {
 	events := parseSSEEvents(w.Body.String())
 	assert.Equal(t, "queue_consume", events[0]["event"])
 	var data map[string]any
-	json.Unmarshal([]byte(events[0]["data"]), &data)
+	require.NoError(t, json.Unmarshal([]byte(events[0]["data"]), &data))
 	assert.Equal(t, "hello", data["text"])
 	filePaths := data["filePaths"].([]any)
 	assert.Equal(t, "/test.go", filePaths[0])
