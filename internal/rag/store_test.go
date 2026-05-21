@@ -2,6 +2,7 @@ package rag
 
 import (
 	"fmt"
+	"math"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -396,7 +397,8 @@ func TestStore_Close_NilDB(t *testing.T) {
 
 func TestEmbeddingToSQLArray(t *testing.T) {
 	vec := []float64{0.1, 0.2, 0.3}
-	result := embeddingToSQLArray(vec, 1024)
+	result, err := embeddingToSQLArray(vec, 1024)
+	assert.NoError(t, err)
 	assert.True(t, strings.HasPrefix(result, "array["))
 	assert.True(t, strings.HasSuffix(result, "]::FLOAT[1024]"))
 	assert.Contains(t, result, "0.1")
@@ -405,8 +407,65 @@ func TestEmbeddingToSQLArray(t *testing.T) {
 }
 
 func TestEmbeddingToSQLArray_Empty(t *testing.T) {
-	result := embeddingToSQLArray([]float64{}, 1024)
+	result, err := embeddingToSQLArray([]float64{}, 1024)
+	assert.NoError(t, err)
 	assert.Equal(t, "array[]::FLOAT[1024]", result)
+}
+
+func TestEmbeddingToSQLArray_NonFinite(t *testing.T) {
+	_, err := embeddingToSQLArray([]float64{0.1, math.NaN(), 0.3}, 1024)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "non-finite")
+
+	_, err = embeddingToSQLArray([]float64{0.1, math.Inf(1)}, 1024)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "non-finite")
+}
+
+// ---------- Non-finite embedding rejection in public methods (ISS-130) ----------
+
+func TestStore_InsertChunks_RejectsNaNEmbedding(t *testing.T) {
+	store := setupTestStore(t)
+
+	chunk := makeTestChunk("sess-nan", 1, 0, "test chunk with NaN embedding")
+	chunk.Embedding = makeTestEmbedding(1024)
+	chunk.Embedding[5] = math.NaN()
+
+	err := store.InsertChunks([]Chunk{chunk})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "embedding validation")
+}
+
+func TestStore_SearchSimple_RejectsInfEmbedding(t *testing.T) {
+	store := setupTestStore(t)
+
+	queryEmbedding := makeTestEmbedding(1024)
+	queryEmbedding[0] = math.Inf(1)
+
+	_, err := store.SearchSimple(queryEmbedding, 10, "", "", "", "", "", "", "")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "query embedding validation")
+}
+
+func TestStore_UpdateEmbedding_RejectsNaNEmbedding(t *testing.T) {
+	store := setupTestStore(t)
+
+	// First insert a valid chunk so UpdateEmbedding has a target
+	chunk := makeTestChunk("sess-update-nan", 1, 0, "test chunk for update")
+	err := store.InsertChunks([]Chunk{chunk})
+	require.NoError(t, err)
+
+	// Search to find the inserted chunk's ID
+	hits, err := store.SearchSimple(makeTestEmbedding(1024), 1, "", "", "", "", "", "", "")
+	require.NoError(t, err)
+	require.NotEmpty(t, hits)
+
+	// Try updating with NaN embedding
+	nanEmb := makeTestEmbedding(1024)
+	nanEmb[0] = math.NaN()
+	err = store.UpdateEmbedding(hits[0].ChunkID, nanEmb)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "embedding validation for update")
 }
 
 // ---------- Schema migration (new columns) ----------

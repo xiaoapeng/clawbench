@@ -186,7 +186,12 @@ func GetAndClearCancelReason(sessionID string) string {
 	if !ok {
 		return ""
 	}
-	return val.(string)
+	// Safe type assertion to prevent panic if value is not a string (ISS-126)
+	reason, ok := val.(string)
+	if !ok {
+		return ""
+	}
+	return reason
 }
 
 // CancelSession cancels an ongoing AI stream for a session.

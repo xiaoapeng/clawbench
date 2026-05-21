@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -233,7 +234,11 @@ func (s *Store) InsertChunks(chunks []Chunk) error {
 	for _, c := range chunks {
 		var embeddingSQL string
 		if c.Embedding != nil {
-			embeddingSQL = embeddingToSQLArray(c.Embedding, s.embeddingDim)
+			esql, err := embeddingToSQLArray(c.Embedding, s.embeddingDim)
+			if err != nil {
+				return fmt.Errorf("embedding validation for chunk %d: %w", c.ID, err)
+			}
+			embeddingSQL = esql
 		} else {
 			embeddingSQL = "NULL"
 		}
@@ -265,7 +270,10 @@ func (s *Store) InsertChunks(chunks []Chunk) error {
 func (s *Store) SearchSimple(queryEmbedding []float64, limit int, projectPath, backend, role, sessionID, excludeSessionID, fromTime, toTime string) ([]SearchHit, error) {
 	// Build embedding as SQL array literal since go-duckdb cannot bind []float64
 	// as a parameter for FLOAT[dim] columns.
-	embeddingLiteral := embeddingToSQLArray(queryEmbedding, s.embeddingDim)
+	embeddingLiteral, err := embeddingToSQLArray(queryEmbedding, s.embeddingDim)
+	if err != nil {
+		return nil, fmt.Errorf("query embedding validation: %w", err)
+	}
 
 	query := fmt.Sprintf(`
 		SELECT id,
@@ -538,7 +546,10 @@ func (s *Store) UpdateEmbedding(chunkID int64, embedding []float64) error {
 	}
 
 	// Re-insert with the SAME id and embedding
-	embeddingLiteral := embeddingToSQLArray(embedding, s.embeddingDim)
+	embeddingLiteral, err := embeddingToSQLArray(embedding, s.embeddingDim)
+	if err != nil {
+		return fmt.Errorf("embedding validation for update: %w", err)
+	}
 	_, err = s.db.Exec(fmt.Sprintf(`
 		INSERT INTO chat_chunks (id, session_id, message_id, chunk_text, chunk_text_segmented,
 			chunk_index, token_count, embedding, has_embedding, project_path, backend, role, created_at)
@@ -704,17 +715,22 @@ func (s *Store) RecoverFromCorruption() error {
 
 // embeddingToSQLArray converts a float64 slice to a DuckDB array literal string.
 // e.g., [0.1, 0.2, 0.3] -> "array[0.1, 0.2, 0.3]::FLOAT[dim]"
-func embeddingToSQLArray(vec []float64, dim int) string {
+// Returns error if any value is non-finite (NaN/Inf) to prevent SQL injection. (ISS-130)
+func embeddingToSQLArray(vec []float64, dim int) (string, error) {
 	var buf strings.Builder
 	buf.WriteString("array[")
 	for i, v := range vec {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
+		// Guard against NaN/Inf which produce invalid SQL float literals (ISS-130)
+		if math.IsInf(v, 0) || math.IsNaN(v) {
+			return "", fmt.Errorf("embedding contains non-finite value at index %d: %v", i, v)
+		}
 		buf.WriteString(strconv.FormatFloat(v, 'f', -1, 64))
 	}
 	buf.WriteString("]::FLOAT[")
 	buf.WriteString(strconv.Itoa(dim))
 	buf.WriteString("]")
-	return buf.String()
+	return buf.String(), nil
 }

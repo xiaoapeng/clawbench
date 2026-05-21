@@ -176,13 +176,14 @@ func getSessionID(r *http.Request) string {
 }
 
 // setSessionID sets session ID in cookie.
+// HttpOnly: true prevents JavaScript access, mitigating XSS-based session hijack (ISS-123).
 func setSessionID(w http.ResponseWriter, sessionID string) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     "chat_session_id",
 		Value:    sessionID,
 		Path:     "/",
 		MaxAge:   86400 * 30, // 30 days
-		HttpOnly: false,
+		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 	})
 }
