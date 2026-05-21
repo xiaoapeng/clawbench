@@ -897,6 +897,33 @@ func TestGetChatHistory_DifferentBackendsIsolated(t *testing.T) {
 	assert.Equal(t, "codebuddy msg", msgsCB[0].Content)
 }
 
+// TestGetChatHistory_SameSecondOrdering verifies that messages inserted in the
+// same second (identical created_at due to CURRENT_TIMESTAMP second precision)
+// are returned in insertion order (id ASC) rather than non-deterministic order.
+// This is the root cause of the bug where assistant output appeared above user input.
+func TestGetChatHistory_SameSecondOrdering(t *testing.T) {
+	setupDB(t)
+
+	sid := helperCreateSession(t, "/project", "claude", "Same Second")
+
+	// Insert user then assistant within the same second — no sleep
+	userID, err := service.AddChatMessage("/project", "claude", sid, "user", "我自己定 AI-Driven Engineering", nil, false, "")
+	assert.NoError(t, err)
+
+	assistantID, err := service.AddChatMessage("/project", "claude", sid, "assistant", "很好！AI-Driven Engineering — 精准", nil, false, "")
+	assert.NoError(t, err)
+
+	// assistantID > userID since AUTOINCREMENT guarantees this
+	assert.Greater(t, assistantID, userID, "assistant message should have higher ID than user message")
+
+	// Verify chronological order: user first, assistant second
+	msgs, err := service.GetChatHistory("/project", "claude", sid)
+	assert.NoError(t, err)
+	assert.Len(t, msgs, 2)
+	assert.Equal(t, "user", msgs[0].Role, "user message must come first")
+	assert.Equal(t, "assistant", msgs[1].Role, "assistant message must come second")
+}
+
 // Ensure TestMain-like global DB save/restore works correctly
 func TestGlobalDBPreservedAcrossParallelTests(t *testing.T) {
 	originalDB := service.DB
