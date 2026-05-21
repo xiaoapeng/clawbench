@@ -93,10 +93,13 @@ func setupSchedulerDB(t *testing.T) *sql.DB {
 	db.SetMaxOpenConns(1) // Required for :memory: SQLite — all queries must use the same connection
 	_, err = db.Exec(schedulerSchema)
 	assert.NoError(t, err)
+	origDB := service.DB
+	origDBRead := service.DBRead
 	service.DB = db
 	service.DBRead = db // Same instance for :memory: SQLite — data is shared
 	t.Cleanup(func() {
-		service.DBRead = nil
+		service.DB = origDB
+		service.DBRead = origDBRead
 		db.Close()
 	})
 	return db

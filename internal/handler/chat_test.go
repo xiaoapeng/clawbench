@@ -2457,10 +2457,11 @@ func TestAIChat_Get_NoSessionID_NoAgentsAvailable(t *testing.T) {
 // an internal error.
 func TestAIChat_Get_NoSessionID_CreateSessionError(t *testing.T) {
 	env, teardown := setupTestEnv(t)
-	defer teardown()
 
-	// Close the DB to force CreateSession to fail
-	service.DB.Close()
+	// Close the DB to force errors. Both DB and DBRead point to the same
+	// :memory: instance, so closing either closes both. After closing,
+	// queries will return errors rather than panic (nil dereference).
+	service.CloseDB()
 
 	req := newRequest(t, http.MethodGet, "/api/ai/chat?limit=20", nil)
 	withProjectCookie(req, env.ProjectDir)
@@ -2468,4 +2469,10 @@ func TestAIChat_Get_NoSessionID_CreateSessionError(t *testing.T) {
 
 	w := callHandlerWithAuth(AIChat, req)
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
+
+	// Prevent teardown from double-closing the already-closed db.
+	// Restore globals so teardown's db.Close() becomes a safe no-op on
+	// the original (pre-setupTestEnv) values.
+	_ = env
+	teardown()
 }
