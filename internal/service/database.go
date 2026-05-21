@@ -15,6 +15,10 @@ import (
 
 var DB *sql.DB
 
+// DBRead is the read-only connection pool (MaxOpenConns=2) for SELECT queries.
+// In WAL mode, reads never block writes and vice versa.
+var DBRead *sql.DB
+
 // InitDB initializes the SQLite database with latest schema.
 // When runFromServer is true (server startup), orphaned streaming messages
 // from previous crashes are cleaned up. When false (CLI subcommand), cleanup
@@ -206,6 +210,19 @@ func InitDB(runFromServer ...bool) error {
 	// SKIP when called from CLI subcommands (task/rag) — the server process
 	// may still be actively streaming, and these are NOT orphaned messages.
 	isServerStartup := len(runFromServer) > 0 && runFromServer[0]
+
+	// Initialize read connection pool for concurrent reads (WAL mode)
+	DBRead, err = sql.Open("sqlite", dbPath)
+	if err != nil {
+		return fmt.Errorf("failed to open read database: %w", err)
+	}
+	DBRead.SetMaxOpenConns(2)
+	if _, err := DBRead.Exec("PRAGMA journal_mode=WAL"); err != nil {
+		return fmt.Errorf("failed to set read DB WAL mode: %w", err)
+	}
+	if _, err := DBRead.Exec("PRAGMA busy_timeout=5000"); err != nil {
+		return fmt.Errorf("failed to set read DB busy_timeout: %w", err)
+	}
 	if isServerStartup {
 		rows, err := DB.Query("SELECT id, content FROM chat_history WHERE streaming = 1")
 		if err != nil {
@@ -256,6 +273,16 @@ func InitDB(runFromServer ...bool) error {
 	}
 
 	return nil
+}
+
+// CloseDB closes both write and read database connections.
+func CloseDB() {
+	if DB != nil {
+		DB.Close()
+	}
+	if DBRead != nil {
+		DBRead.Close()
+	}
 }
 
 // GetTTSSummary looks up a cached TTS summary by cache key.

@@ -192,6 +192,47 @@ func getIndexes(t *testing.T, db *sql.DB) map[string]bool {
 	return indexes
 }
 
+// ---------- Read-write connection separation ----------
+
+func TestInitDB_ReadWriteSeparation(t *testing.T) {
+	tmpDir := t.TempDir()
+	origBinDir := model.BinDir
+	model.BinDir = tmpDir
+	defer func() { model.BinDir = origBinDir }()
+
+	origDB := DB
+	origDBRead := DBRead
+	defer func() { DB = origDB; DBRead = origDBRead }()
+
+	err := InitDB()
+	assert.NoError(t, err)
+
+	// DB (write pool) should be initialized
+	assert.NotNil(t, DB, "DB (write pool) should be initialized")
+
+	// DBRead (read pool) should be initialized
+	assert.NotNil(t, DBRead, "DBRead (read pool) should be initialized")
+
+	// Both should be different instances
+	assert.NotEqual(t, DB, DBRead, "DB and DBRead should be separate connections")
+
+	// Verify write pool has MaxOpenConns=1
+	stats := DB.Stats()
+	assert.Equal(t, 1, stats.MaxOpenConnections, "DB write pool should have MaxOpenConns=1")
+
+	// Verify read pool has MaxOpenConns=2
+	statsRead := DBRead.Stats()
+	assert.Equal(t, 2, statsRead.MaxOpenConnections, "DBRead pool should have MaxOpenConns=2")
+
+	// Verify both can query
+	var count int
+	err = DBRead.QueryRow("SELECT COUNT(*) FROM chat_sessions").Scan(&count)
+	assert.NoError(t, err, "DBRead should be able to query")
+
+	// Verify CloseDB closes both
+	CloseDB()
+}
+
 // ---------- Performance indexes ----------
 
 func TestSchema_HistorySessionIDIndex(t *testing.T) {
