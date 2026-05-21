@@ -534,6 +534,30 @@ func GetSessionTitlesBatch(sessionIDs []string) (map[string]string, error) {
 	return titles, rows.Err()
 }
 
+// SessionInfo contains session metadata for the chat view.
+type SessionInfo struct {
+	Title          string
+	Backend        string
+	AgentID        string
+	Model          string
+	ThinkingEffort string
+}
+
+// GetSessionInfo fetches session metadata (title, backend, agent_id, model, thinking_effort)
+// in a single query instead of 5 separate queries.
+func GetSessionInfo(sessionID string) (*SessionInfo, error) {
+	info := &SessionInfo{}
+	err := DBRead.QueryRow(
+		`SELECT title, backend, agent_id, model, thinking_effort
+		 FROM chat_sessions WHERE id = ? AND deleted = 0`,
+		sessionID,
+	).Scan(&info.Title, &info.Backend, &info.AgentID, &info.Model, &info.ThinkingEffort)
+	if err != nil {
+		return nil, err
+	}
+	return info, nil
+}
+
 // GetSessionAgentID returns the agent_id of an active (non-deleted) session.
 func GetSessionAgentID(sessionID string) string {
 	var agentID string

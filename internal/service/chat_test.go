@@ -1844,6 +1844,39 @@ func TestGetSessionTitlesBatch_NonExistentID(t *testing.T) {
 	assert.False(t, ok, "non-existent ID should not appear in titles")
 }
 
+// ---------- GetSessionInfo ----------
+
+func TestGetSessionInfo(t *testing.T) {
+	_ = setupDB(t)
+
+	s1, _ := service.CreateSession("/project", "claude", "My Session", "claude", "claude-sonnet-4-6", "default", "chat")
+
+	info, err := service.GetSessionInfo(s1)
+	assert.NoError(t, err)
+	assert.Equal(t, "My Session", info.Title)
+	assert.Equal(t, "claude", info.Backend)
+	assert.Equal(t, "claude", info.AgentID)
+	assert.Equal(t, "claude-sonnet-4-6", info.Model)
+	assert.Equal(t, "", info.ThinkingEffort)
+}
+
+func TestGetSessionInfo_NotFound(t *testing.T) {
+	_ = setupDB(t)
+
+	_, err := service.GetSessionInfo("nonexistent")
+	assert.Error(t, err)
+}
+
+func TestGetSessionInfo_Deleted(t *testing.T) {
+	_ = setupDB(t)
+
+	s1, _ := service.CreateSession("/project", "claude", "Deleted", "claude", "", "default", "chat")
+	service.DeleteSession("/project", "claude", s1)
+
+	_, err := service.GetSessionInfo(s1)
+	assert.Error(t, err)
+}
+
 // ---------- GetSessions UnreadCount ----------
 
 func TestGetSessions_UnreadCount_NoMessages(t *testing.T) {

@@ -131,11 +131,20 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 
 		totalCount := service.GetChatMessageCount(sessionID)
 		messages, err := service.GetChatHistoryPaged(projectPath, sessionBackend, sessionID, limit, beforeTime)
-		// Get session title and agent info
-		sessionTitle, _ := service.GetSessionTitle(sessionID)
-		sessionAgentID := service.GetSessionAgentID(sessionID)
-		sessionModelID := service.GetSessionModel(sessionID)
-		sessionThinkingEffort := service.GetSessionThinkingEffort(sessionID)
+		// Get session metadata in a single query
+		sessionInfo, _ := service.GetSessionInfo(sessionID)
+		var sessionTitle, sessionAgentID, sessionModelID, sessionThinkingEffort string
+		var sessionInfoBackend string
+		if sessionInfo != nil {
+			sessionTitle = sessionInfo.Title
+			sessionInfoBackend = sessionInfo.Backend
+			sessionAgentID = sessionInfo.AgentID
+			sessionModelID = sessionInfo.Model
+			sessionThinkingEffort = sessionInfo.ThinkingEffort
+		}
+		if sessionInfoBackend != "" {
+			sessionBackend = sessionInfoBackend
+		}
 		running := service.IsSessionRunning(sessionID)
 		if err != nil {
 			writeJSON(w, http.StatusOK, map[string]any{"messages": []any{}, "running": running, "sessionId": sessionID, "sessionTitle": sessionTitle, "backend": sessionBackend, "agentId": sessionAgentID, "modelId": sessionModelID, "thinkingEffort": sessionThinkingEffort, "total": totalCount})
