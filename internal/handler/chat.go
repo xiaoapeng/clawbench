@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -83,6 +84,10 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 		// No specific session requested — use lightweight query to find the most recent session
 		latestID, latestBackend, err := service.GetLatestSessionID(projectPath)
 		if err != nil {
+			if err != sql.ErrNoRows {
+				model.WriteError(w, model.Internal(fmt.Errorf("failed to find latest session")))
+				return
+			}
 			// No sessions exist, create a new one with default agent.
 			// Don't pre-fill agent default model — leave empty so frontend
 			// falls back to global localStorage preference (cross-project).

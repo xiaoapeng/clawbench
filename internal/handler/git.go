@@ -814,18 +814,37 @@ func ServeGitVerifyCommits(w http.ResponseWriter, r *http.Request) {
 	logOutput, _ := logCmd.Output()
 
 	// Parse git log output — only valid commits appear
-	foundSHAs := map[string]bool{}
+	// Map full SHA → requested SHA for key normalization (frontend may send abbreviated SHAs)
+	fullToRequested := map[string]string{}
 	if len(logOutput) > 0 {
 		commits := parseGitLog(string(logOutput))
 		for _, c := range commits {
+			// Find which requested SHA matches this full SHA (by prefix)
+			for _, reqSHA := range body.SHAs {
+				if strings.HasPrefix(c.SHA, reqSHA) {
+					fullToRequested[c.SHA] = reqSHA
+					break
+				}
+			}
+			// Store under both full SHA and (if matched) requested SHA
 			results[c.SHA] = c
-			foundSHAs[c.SHA] = true
 		}
 	}
 
-	// For SHAs not found in git log, mark as nil (not a valid commit)
+	// Re-key results under the original requested SHAs and mark unmatched as nil
 	for _, sha := range body.SHAs {
-		if !foundSHAs[sha] {
+		matched := false
+		for fullSHA, reqSHA := range fullToRequested {
+			if reqSHA == sha {
+				if fullSHA != sha {
+					results[sha] = results[fullSHA]
+					delete(results, fullSHA)
+				}
+				matched = true
+				break
+			}
+		}
+		if !matched {
 			results[sha] = nil
 		}
 	}

@@ -938,9 +938,13 @@ func DeleteTaskExecution(executionID int64) error {
 		}
 	}
 
-	// Hard-delete the execution row
-	if _, err := DB.Exec("DELETE FROM task_executions WHERE id = ?", executionID); err != nil {
+	// Hard-delete the execution row (conditional on status to prevent TOCTOU race with DBRead)
+	result, err := DB.Exec("DELETE FROM task_executions WHERE id = ? AND status != 'running'", executionID)
+	if err != nil {
 		return fmt.Errorf("failed to delete execution: %w", err)
+	}
+	if rows, _ := result.RowsAffected(); rows == 0 {
+		return fmt.Errorf("cannot delete a running execution")
 	}
 
 	// Decrement run_count on the parent task (clamp to 0)
