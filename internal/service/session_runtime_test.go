@@ -529,6 +529,83 @@ func TestGetSessionResponsePreview_SkipsToolUseBlocks(t *testing.T) {
 	assert.Equal(t, "工具执行后的文本", result)
 }
 
+func TestGetSessionResponsePreview_PrefersTextAfterLastToolUse(t *testing.T) {
+	origDB := DB
+	db := setupChatTestDB(t)
+	DB = db
+	defer func() { DB = origDB }()
+
+	// Scenario: [text("Reading file..."), tool_use, text("Here is the analysis")]
+	// The preview should return "Here is the analysis", not "Reading file..."
+	textBeforeTool := model.ContentBlock{Type: "text", Text: "正在读取文件…"}
+	toolBlock := model.ContentBlock{Type: "tool_use", Name: "Read", ID: "tool-1"}
+	textAfterTool := model.ContentBlock{Type: "text", Text: "这是最终的分析结果"}
+	blocks := map[string]any{"blocks": []model.ContentBlock{textBeforeTool, toolBlock, textAfterTool}}
+	contentJSON, _ := json.Marshal(blocks)
+	insertTestMessage(t, db, "session-preview-after-tool", "user", "分析代码")
+	insertTestMessage(t, db, "session-preview-after-tool", "assistant", string(contentJSON))
+
+	result := getSessionResponsePreview("session-preview-after-tool")
+	assert.Equal(t, "这是最终的分析结果", result)
+}
+
+func TestGetSessionResponsePreview_MultipleToolUses(t *testing.T) {
+	origDB := DB
+	db := setupChatTestDB(t)
+	DB = db
+	defer func() { DB = origDB }()
+
+	// Scenario: [tool_use, text("intermediate"), tool_use, text("final answer")]
+	// Should return "final answer" — text after the LAST tool_use
+	tool1 := model.ContentBlock{Type: "tool_use", Name: "Read", ID: "tool-1"}
+	textMiddle := model.ContentBlock{Type: "text", Text: "中间结果"}
+	tool2 := model.ContentBlock{Type: "tool_use", Name: "Grep", ID: "tool-2"}
+	textFinal := model.ContentBlock{Type: "text", Text: "最终结论"}
+	blocks := map[string]any{"blocks": []model.ContentBlock{tool1, textMiddle, tool2, textFinal}}
+	contentJSON, _ := json.Marshal(blocks)
+	insertTestMessage(t, db, "session-preview-multi-tool", "user", "搜索代码")
+	insertTestMessage(t, db, "session-preview-multi-tool", "assistant", string(contentJSON))
+
+	result := getSessionResponsePreview("session-preview-multi-tool")
+	assert.Equal(t, "最终结论", result)
+}
+
+func TestGetSessionResponsePreview_OnlyToolUses(t *testing.T) {
+	origDB := DB
+	db := setupChatTestDB(t)
+	DB = db
+	defer func() { DB = origDB }()
+
+	// Only tool_use blocks, no text after — should return empty
+	tool1 := model.ContentBlock{Type: "tool_use", Name: "Read", ID: "tool-1"}
+	tool2 := model.ContentBlock{Type: "tool_use", Name: "Grep", ID: "tool-2"}
+	blocks := map[string]any{"blocks": []model.ContentBlock{tool1, tool2}}
+	contentJSON, _ := json.Marshal(blocks)
+	insertTestMessage(t, db, "session-preview-only-tools", "user", "搜索代码")
+	insertTestMessage(t, db, "session-preview-only-tools", "assistant", string(contentJSON))
+
+	result := getSessionResponsePreview("session-preview-only-tools")
+	assert.Equal(t, "", result)
+}
+
+func TestGetSessionResponsePreview_TextBeforeToolOnly(t *testing.T) {
+	origDB := DB
+	db := setupChatTestDB(t)
+	DB = db
+	defer func() { DB = origDB }()
+
+	// [text("thinking..."), tool_use] — no text AFTER tool_use, should return empty
+	textBlock := model.ContentBlock{Type: "text", Text: "让我思考一下"}
+	toolBlock := model.ContentBlock{Type: "tool_use", Name: "Read", ID: "tool-1"}
+	blocks := map[string]any{"blocks": []model.ContentBlock{textBlock, toolBlock}}
+	contentJSON, _ := json.Marshal(blocks)
+	insertTestMessage(t, db, "session-preview-text-before-tool", "user", "分析代码")
+	insertTestMessage(t, db, "session-preview-text-before-tool", "assistant", string(contentJSON))
+
+	result := getSessionResponsePreview("session-preview-text-before-tool")
+	assert.Equal(t, "", result)
+}
+
 func TestGetSessionResponsePreview_UsesLastAssistantMessage(t *testing.T) {
 	origDB := DB
 	origDBRead := DBRead
