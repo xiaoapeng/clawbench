@@ -531,9 +531,11 @@ func TestGetSessionResponsePreview_SkipsToolUseBlocks(t *testing.T) {
 
 func TestGetSessionResponsePreview_PrefersTextAfterLastToolUse(t *testing.T) {
 	origDB := DB
+	origDBRead := DBRead
 	db := setupChatTestDB(t)
 	DB = db
-	defer func() { DB = origDB }()
+	DBRead = db // Same instance for :memory: SQLite — data is shared
+	defer func() { DB = origDB; DBRead = origDBRead }()
 
 	// Scenario: [text("Reading file..."), tool_use, text("Here is the analysis")]
 	// The preview should return "Here is the analysis", not "Reading file..."
@@ -551,9 +553,11 @@ func TestGetSessionResponsePreview_PrefersTextAfterLastToolUse(t *testing.T) {
 
 func TestGetSessionResponsePreview_MultipleToolUses(t *testing.T) {
 	origDB := DB
+	origDBRead := DBRead
 	db := setupChatTestDB(t)
 	DB = db
-	defer func() { DB = origDB }()
+	DBRead = db // Same instance for :memory: SQLite — data is shared
+	defer func() { DB = origDB; DBRead = origDBRead }()
 
 	// Scenario: [tool_use, text("intermediate"), tool_use, text("final answer")]
 	// Should return "final answer" — text after the LAST tool_use
@@ -572,9 +576,11 @@ func TestGetSessionResponsePreview_MultipleToolUses(t *testing.T) {
 
 func TestGetSessionResponsePreview_OnlyToolUses(t *testing.T) {
 	origDB := DB
+	origDBRead := DBRead
 	db := setupChatTestDB(t)
 	DB = db
-	defer func() { DB = origDB }()
+	DBRead = db // Same instance for :memory: SQLite — data is shared
+	defer func() { DB = origDB; DBRead = origDBRead }()
 
 	// Only tool_use blocks, no text after — should return empty
 	tool1 := model.ContentBlock{Type: "tool_use", Name: "Read", ID: "tool-1"}
@@ -590,9 +596,11 @@ func TestGetSessionResponsePreview_OnlyToolUses(t *testing.T) {
 
 func TestGetSessionResponsePreview_TextBeforeToolOnly(t *testing.T) {
 	origDB := DB
+	origDBRead := DBRead
 	db := setupChatTestDB(t)
 	DB = db
-	defer func() { DB = origDB }()
+	DBRead = db // Same instance for :memory: SQLite — data is shared
+	defer func() { DB = origDB; DBRead = origDBRead }()
 
 	// [text("thinking..."), tool_use] — no text AFTER tool_use, should return empty
 	textBlock := model.ContentBlock{Type: "text", Text: "让我思考一下"}
@@ -610,9 +618,11 @@ func TestGetSessionResponsePreview_TextBeforeToolOnly(t *testing.T) {
 
 func TestGetSessionResponsePreview_RealData_TextThenToolThenSummary(t *testing.T) {
 	origDB := DB
+	origDBRead := DBRead
 	db := setupChatTestDB(t)
 	DB = db
-	defer func() { DB = origDB }()
+	DBRead = db // Same instance for :memory: SQLite — data is shared
+	defer func() { DB = origDB; DBRead = origDBRead }()
 
 	// Real pattern from session 93c986e1, message id=1063:
 	//   [thinking, text("方案一已经在上一轮实现了。验证一下当前状态："), tool_use(Bash), tool_use(Bash), text("方案一已在 commit b4d7b73 中实现完毕...")]
@@ -635,9 +645,11 @@ func TestGetSessionResponsePreview_RealData_TextThenToolThenSummary(t *testing.T
 
 func TestGetSessionResponsePreview_RealData_ToolThenWorktreeReport(t *testing.T) {
 	origDB := DB
+	origDBRead := DBRead
 	db := setupChatTestDB(t)
 	DB = db
-	defer func() { DB = origDB }()
+	DBRead = db // Same instance for :memory: SQLite — data is shared
+	defer func() { DB = origDB; DBRead = origDBRead }()
 
 	// Real pattern from session dd1968cf, message id=1059:
 	//   [thinking, tool_use(Bash), text("Worktree 已创建：\n\n- **路径**: `/root/code/clawbench/.worktrees/fix-push-summary-55`...")]
@@ -662,9 +674,11 @@ func TestGetSessionResponsePreview_RealData_ToolThenWorktreeReport(t *testing.T)
 
 func TestGetSessionResponsePreview_RealData_MultiToolInterleavedWithText(t *testing.T) {
 	origDB := DB
+	origDBRead := DBRead
 	db := setupChatTestDB(t)
 	DB = db
-	defer func() { DB = origDB }()
+	DBRead = db // Same instance for :memory: SQLite — data is shared
+	defer func() { DB = origDB; DBRead = origDBRead }()
 
 	// Real pattern from session da4003a0, message id=1047:
 	//   [thinking, tool_use(Bash), text("有问题！..."), tool_use(Bash), tool_use(Bash),
@@ -694,9 +708,11 @@ func TestGetSessionResponsePreview_RealData_MultiToolInterleavedWithText(t *test
 
 func TestGetSessionResponsePreview_RealData_ThinkingThenToolThenIssueLink(t *testing.T) {
 	origDB := DB
+	origDBRead := DBRead
 	db := setupChatTestDB(t)
 	DB = db
-	defer func() { DB = origDB }()
+	DBRead = db // Same instance for :memory: SQLite — data is shared
+	defer func() { DB = origDB; DBRead = origDBRead }()
 
 	// Real pattern from session bb92e480, message id=1039:
 	//   [thinking, tool_use(Bash), text("已创建 Issue: https://github.com/xulongzhe/clawbench/issues/55")]
@@ -716,9 +732,11 @@ func TestGetSessionResponsePreview_RealData_ThinkingThenToolThenIssueLink(t *tes
 
 func TestGetSessionResponsePreview_RealData_ThreeToolsThenWorktreeReport(t *testing.T) {
 	origDB := DB
+	origDBRead := DBRead
 	db := setupChatTestDB(t)
 	DB = db
-	defer func() { DB = origDB }()
+	DBRead = db // Same instance for :memory: SQLite — data is shared
+	defer func() { DB = origDB; DBRead = origDBRead }()
 
 	// Real pattern from session bb92e480, message id=1055:
 	//   [thinking, tool_use(Bash), tool_use(Bash), tool_use(Bash), text("Worktree 已创建：...")]
@@ -742,9 +760,11 @@ func TestGetSessionResponsePreview_RealData_ThreeToolsThenWorktreeReport(t *test
 
 func TestGetSessionResponsePreview_RealData_PureTextSummary(t *testing.T) {
 	origDB := DB
+	origDBRead := DBRead
 	db := setupChatTestDB(t)
 	DB = db
-	defer func() { DB = origDB }()
+	DBRead = db // Same instance for :memory: SQLite — data is shared
+	defer func() { DB = origDB; DBRead = origDBRead }()
 
 	// Real pattern from session id=726 (no tool_use at all):
 	//   [text("好的。后台耗电优化到此为止，总结已完成的改动：\n\n1. **webView.onPause()**...")]
