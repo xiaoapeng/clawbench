@@ -124,9 +124,13 @@ func TestSchema_SessionTypeColumnExists(t *testing.T) {
 	model.BinDir = tmpDir
 	defer func() { model.BinDir = origBinDir }()
 
+	origDB := DB
+	origDBRead := DBRead
+	defer func() { DB = origDB; DBRead = origDBRead }()
+
 	err := InitDB()
 	assert.NoError(t, err)
-	defer DB.Close()
+	defer CloseDB()
 
 	columns := getTableColumns(t, DB, "chat_sessions")
 	assert.Contains(t, columns, "session_type", "chat_sessions should have session_type column")
@@ -138,9 +142,13 @@ func TestSchema_TaskExecutionsColumns(t *testing.T) {
 	model.BinDir = tmpDir
 	defer func() { model.BinDir = origBinDir }()
 
+	origDB := DB
+	origDBRead := DBRead
+	defer func() { DB = origDB; DBRead = origDBRead }()
+
 	err := InitDB()
 	assert.NoError(t, err)
-	defer DB.Close()
+	defer CloseDB()
 
 	columns := getTableColumns(t, DB, "task_executions")
 	assert.Contains(t, columns, "session_id", "task_executions should have session_id column")
@@ -154,9 +162,13 @@ func TestSchema_NewIndexes(t *testing.T) {
 	model.BinDir = tmpDir
 	defer func() { model.BinDir = origBinDir }()
 
+	origDB := DB
+	origDBRead := DBRead
+	defer func() { DB = origDB; DBRead = origDBRead }()
+
 	err := InitDB()
 	assert.NoError(t, err)
-	defer DB.Close()
+	defer CloseDB()
 
 	indexes := getIndexes(t, DB)
 	assert.Contains(t, indexes, "idx_executions_session", "idx_executions_session index should exist")
@@ -276,9 +288,13 @@ func TestSchema_HistorySessionIDIndex(t *testing.T) {
 	model.BinDir = tmpDir
 	defer func() { model.BinDir = origBinDir }()
 
+	origDB := DB
+	origDBRead := DBRead
+	defer func() { DB = origDB; DBRead = origDBRead }()
+
 	err := InitDB()
 	assert.NoError(t, err)
-	defer DB.Close()
+	defer CloseDB()
 
 	indexes := getIndexes(t, DB)
 	assert.True(t, indexes["idx_history_session_id"], "expected idx_history_session_id index to exist")
@@ -290,9 +306,13 @@ func TestSchema_TasksProjectIndex(t *testing.T) {
 	model.BinDir = tmpDir
 	defer func() { model.BinDir = origBinDir }()
 
+	origDB := DB
+	origDBRead := DBRead
+	defer func() { DB = origDB; DBRead = origDBRead }()
+
 	err := InitDB()
 	assert.NoError(t, err)
-	defer DB.Close()
+	defer CloseDB()
 
 	indexes := getIndexes(t, DB)
 	assert.True(t, indexes["idx_tasks_project"], "expected idx_tasks_project index to exist")
