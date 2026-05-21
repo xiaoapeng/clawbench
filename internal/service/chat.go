@@ -256,12 +256,13 @@ func GetSessions(projectPath, backend string) ([]model.ChatSession, error) {
 			SELECT h.session_id, COUNT(*) AS cnt
 			FROM chat_history h
 			JOIN chat_sessions s2 ON s2.id = h.session_id
-			WHERE h.role = 'assistant' AND h.streaming = 0 AND h.deleted = 0
+			WHERE h.project_path = ?
+			  AND h.role = 'assistant' AND h.streaming = 0 AND h.deleted = 0
 			  AND (s2.last_read_at IS NULL OR h.created_at > s2.last_read_at)
 			GROUP BY h.session_id
 		) unread ON unread.session_id = s.id
 		WHERE s.project_path = ? AND s.deleted = 0 AND s.session_type = 'chat'`
-	args := []interface{}{projectPath}
+	args := []interface{}{projectPath, projectPath}
 	if backend != "" {
 		query += " AND s.backend = ?"
 		args = append(args, backend)
@@ -311,12 +312,13 @@ func GetSessionsPaged(projectPath, backend string, limit int, cursor string, cur
 			SELECT h.session_id, COUNT(*) AS cnt
 			FROM chat_history h
 			JOIN chat_sessions s2 ON s2.id = h.session_id
-			WHERE h.role = 'assistant' AND h.streaming = 0 AND h.deleted = 0
+			WHERE h.project_path = ?
+			  AND h.role = 'assistant' AND h.streaming = 0 AND h.deleted = 0
 			  AND (s2.last_read_at IS NULL OR h.created_at > s2.last_read_at)
 			GROUP BY h.session_id
 		) unread ON unread.session_id = s.id
 		WHERE s.project_path = ? AND s.deleted = 0 AND s.session_type = 'chat'`
-	args := []interface{}{projectPath}
+	args := []interface{}{projectPath, projectPath}
 	if backend != "" {
 		query += " AND s.backend = ?"
 		args = append(args, backend)

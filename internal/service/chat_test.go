@@ -1981,6 +1981,31 @@ func TestGetSessions_UnreadCount_DeletedMessagesExcluded(t *testing.T) {
 	assert.Equal(t, 1, sessions[0].UnreadCount, "deleted messages should not count as unread")
 }
 
+func TestGetSessions_UnreadCountScopedToProject(t *testing.T) {
+	db := setupDB(t)
+	_ = db
+
+	// Create sessions in two different projects
+	s1, _ := service.CreateSession("/project-a", "claude", "S1", "claude", "", "default", "chat")
+	s2, _ := service.CreateSession("/project-b", "claude", "S2", "claude", "", "default", "chat")
+
+	// Add assistant messages to both sessions
+	service.AddChatMessage("/project-a", "claude", s1, "assistant", `{"blocks":[{"type":"text","text":"hello"}]}`, nil, false, "")
+	service.AddChatMessage("/project-b", "claude", s2, "assistant", `{"blocks":[{"type":"text","text":"world"}]}`, nil, false, "")
+
+	// Query project-a only — should have 1 unread
+	sessions, err := service.GetSessions("/project-a", "")
+	assert.NoError(t, err)
+	assert.Len(t, sessions, 1)
+	assert.Equal(t, 1, sessions[0].UnreadCount, "unread count should only count messages in project-a")
+
+	// Verify project-b also has 1 unread independently
+	sessionsB, err := service.GetSessions("/project-b", "")
+	assert.NoError(t, err)
+	assert.Len(t, sessionsB, 1)
+	assert.Equal(t, 1, sessionsB[0].UnreadCount, "unread count should only count messages in project-b")
+}
+
 // ---------- GetSessionsPaged UnreadCount ----------
 
 func TestGetSessionsPaged_UnreadCount(t *testing.T) {
