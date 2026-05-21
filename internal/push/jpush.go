@@ -86,6 +86,8 @@ func (c *JPushClient) SendNotification(registrationID, title, alert string, extr
 	req.Header.Set("Authorization", "Basic "+auth)
 	req.Header.Set("Content-Type", "application/json")
 
+	slog.Debug("jpush: sending notification", "reg_id", registrationID, "title", title, "alert", alert, "extras", extras)
+
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("jpush: send request: %w", err)

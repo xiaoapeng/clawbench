@@ -285,12 +285,20 @@ func (m *Manager) broadcastToSubscription(key string, msg ServerMessage, deliver
 		deliveredRegIDs[pushRegID] = true
 		sub.mu.Unlock() // unlock before potentially slow network call
 		extras := map[string]string{"event_type": msg.Event}
-		// Extract session_id or task_id from data
 		switch d := msg.Data.(type) {
 		case *SessionUpdateData:
 			extras["session_id"] = d.SessionID
+			if d.ProjectPath != "" {
+				extras["project_path"] = d.ProjectPath
+			}
 		case *TaskUpdateData:
 			extras["task_id"] = d.TaskID
+			if d.SessionID != "" {
+				extras["session_id"] = d.SessionID
+			}
+			if d.ProjectPath != "" {
+				extras["project_path"] = d.ProjectPath
+			}
 		}
 		title := "AI任务完成"
 		alert := "AI会话已结束"
@@ -306,7 +314,7 @@ func (m *Manager) broadcastToSubscription(key string, msg ServerMessage, deliver
 				alert = truncateForPush(d.ResponsePreview)
 			}
 		}
-		slog.Info("ws: sending jpush notification", "event", msg.Event, "client_id", key, "reg_id", pushRegID, "title", title, "alert", alert)
+		slog.Debug("ws: sending jpush notification", "event", msg.Event, "client_id", key, "reg_id", pushRegID, "title", title, "extras", extras)
 		if err := m.jpush.SendNotification(pushRegID, title, alert, extras); err != nil {
 			slog.Warn("ws: jpush notification failed", "error", err, "client_id", key)
 		}

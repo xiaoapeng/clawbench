@@ -168,6 +168,10 @@ public class MainActivity extends AppCompatActivity {
     // during the window between JPush config fetch and SDK initialization.
     volatile boolean jpushEnabledOnServer = false;
 
+    // Pending navigation from a notification tap that occurred before the WebView
+    // was loaded (cold start). Consumed by WebAppInterface.getPendingNavigation().
+    public org.json.JSONObject pendingNavigation = null;
+
     // Fullscreen video state: managed by WebChromeClient.onShowCustomView/onHideCustomView
     private View customView;
     private WebChromeClient.CustomViewCallback customViewCallback;
@@ -178,6 +182,9 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
 
         instance = this;
+
+        // Check if launched from notification
+        logLaunchIntent(getIntent());
 
         // Keep screen on while app is in foreground (AI may take time to respond)
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -646,8 +653,37 @@ public class MainActivity extends AppCompatActivity {
         super.onResume();
         // App returning to foreground — stop native WS (WebView WS handles events)
         BackgroundService.stopNativeEventWs(this);
-        // Handle notification tap intent
-        handleNotificationIntent(getIntent());
+        // Handle notification tap intent + re-dispatch pending navigation
+        handleResumeIntent();
+    }
+
+    /**
+     * Handle notification intent and re-dispatch pending navigation on resume.
+     * Extracted from onResume() for testability (lifecycle methods call super which
+     * requires Android framework, making them untestable in pure JUnit).
+     */
+    void handleResumeIntent() {
+        Intent intent = getIntent();
+        AppLog.i(TAG, "MainActivity: onResume intent=" + intent
+                + ", action=" + (intent != null ? intent.getAction() : "null")
+                + ", extras=" + (intent != null ? intent.getExtras() : "null"));
+        handleNotificationIntent(intent);
+        redispatchPendingNavigation();
+    }
+
+    /**
+     * Re-dispatch pending navigation if it wasn't consumed yet.
+     * (e.g., CustomEvent was dispatched while WebView was paused/suspended)
+     */
+    void redispatchPendingNavigation() {
+        if (pendingNavigation != null && webView != null) {
+            AppLog.i(TAG, "MainActivity: onResume - re-dispatching pendingNavigation=" + pendingNavigation.toString());
+            final String jsArg = pendingNavigation.toString();
+            webView.evaluateJavascript(
+                "window.dispatchEvent(new CustomEvent('clawbench-open-session', { detail: " + jsArg + " }))",
+                result -> AppLog.i(TAG, "MainActivity: onResume re-dispatch evaluateJavascript result=" + result)
+            );
+        }
     }
 
     @Override
@@ -662,28 +698,68 @@ public class MainActivity extends AppCompatActivity {
      * Extracts session_id or task_id and dispatches a clawbench-open-session
      * event to the WebView (same behavior as JPush notification taps).
      */
-    private void handleNotificationIntent(Intent intent) {
-        if (intent == null) return;
+    void handleNotificationIntent(Intent intent) {
+        AppLog.i(TAG, "MainActivity: handleNotificationIntent called, intent=" + intent);
+        if (intent == null) {
+            AppLog.i(TAG, "MainActivity: handleNotificationIntent - intent is null, skipping");
+            return;
+        }
         String sessionId = intent.getStringExtra("session_id");
-        String taskId = intent.getStringExtra("task_id");
-        if (sessionId != null || taskId != null) {
-            // Use the same openSession pattern as JPushReceiver
-            if (webView != null) {
-                try {
-                    org.json.JSONObject detail = new org.json.JSONObject();
-                    if (sessionId != null) detail.put("sessionId", sessionId);
-                    if (taskId != null) detail.put("taskId", taskId);
+        String projectPath = intent.getStringExtra("project_path");
+        AppLog.i(TAG, "MainActivity: handleNotificationIntent - sessionId=" + sessionId + ", projectPath=" + projectPath);
+
+        // Also dump all intent extras for debugging
+        Bundle extras = intent.getExtras();
+        if (extras != null) {
+            for (String key : extras.keySet()) {
+                AppLog.i(TAG, "MainActivity: intent extra: " + key + "=" + extras.get(key));
+            }
+        }
+
+        if (sessionId != null) {
+            AppLog.i(TAG, "MainActivity: handleNotificationIntent - session_id found, dispatching navigation");
+            try {
+                org.json.JSONObject detail = new org.json.JSONObject();
+                detail.put("sessionId", sessionId);
+                if (projectPath != null) detail.put("projectPath", projectPath);
+                // Store as pending navigation for cold-start fallback (getPendingNavigation bridge)
+                pendingNavigation = detail;
+                AppLog.i(TAG, "MainActivity: stored pendingNavigation=" + detail.toString());
+                if (webView != null) {
+                    AppLog.i(TAG, "MainActivity: webView available, dispatching clawbench-open-session event");
                     webView.evaluateJavascript(
                         "window.dispatchEvent(new CustomEvent('clawbench-open-session', { detail: " + detail.toString() + " }))",
-                        null
+                        result -> {
+                            AppLog.i(TAG, "MainActivity: evaluateJavascript result=" + result);
+                            // JS event dispatched successfully — clear pendingNavigation
+                            // so onResume re-dispatch won't fire again
+                            pendingNavigation = null;
+                        }
                     );
-                } catch (Exception e) {
-                    Log.w(TAG, "Failed to dispatch open-session event from notification", e);
+                } else {
+                    AppLog.w(TAG, "MainActivity: webView is null, cannot dispatch event (pendingNavigation stored for cold-start)");
                 }
+            } catch (Exception e) {
+                AppLog.w(TAG, "MainActivity: failed to dispatch open-session event from notification", e);
             }
             // Clear extras so we don't re-dispatch on subsequent onResume
             intent.removeExtra("session_id");
-            intent.removeExtra("task_id");
+            intent.removeExtra("project_path");
+            AppLog.i(TAG, "MainActivity: cleared intent extras to prevent re-dispatch");
+        } else {
+            AppLog.i(TAG, "MainActivity: handleNotificationIntent - no session_id in intent extras");
+        }
+    }
+
+    /**
+     * Log launch intent extras (session_id/project_path from notification).
+     * Extracted from onCreate() for testability.
+     */
+    void logLaunchIntent(Intent launchIntent) {
+        if (launchIntent != null) {
+            String sid = launchIntent.getStringExtra("session_id");
+            String pp = launchIntent.getStringExtra("project_path");
+            AppLog.i(TAG, "MainActivity: onCreate intent extras: session_id=" + sid + ", project_path=" + pp);
         }
     }
 
@@ -1234,6 +1310,20 @@ public class MainActivity extends AppCompatActivity {
                     null
                 );
             });
+        }
+
+        /**
+         * Returns pending navigation data from a notification tap that occurred
+         * before the WebView was loaded (cold start). Returns null if none pending.
+         * Called by the frontend on mount to handle deferred deep links.
+         */
+        @JavascriptInterface
+        public String getPendingNavigation() {
+            org.json.JSONObject nav = activity.pendingNavigation;
+            activity.pendingNavigation = null;
+            String result = nav != null ? nav.toString() : null;
+            AppLog.i(TAG, "MainActivity: getPendingNavigation called, returning=" + result);
+            return result;
         }
 
         /**
