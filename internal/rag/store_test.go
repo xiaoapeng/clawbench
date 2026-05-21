@@ -2,6 +2,7 @@ package rag
 
 import (
 	"fmt"
+	"math"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -396,7 +397,8 @@ func TestStore_Close_NilDB(t *testing.T) {
 
 func TestEmbeddingToSQLArray(t *testing.T) {
 	vec := []float64{0.1, 0.2, 0.3}
-	result := embeddingToSQLArray(vec, 1024)
+	result, err := embeddingToSQLArray(vec, 1024)
+	assert.NoError(t, err)
 	assert.True(t, strings.HasPrefix(result, "array["))
 	assert.True(t, strings.HasSuffix(result, "]::FLOAT[1024]"))
 	assert.Contains(t, result, "0.1")
@@ -405,8 +407,19 @@ func TestEmbeddingToSQLArray(t *testing.T) {
 }
 
 func TestEmbeddingToSQLArray_Empty(t *testing.T) {
-	result := embeddingToSQLArray([]float64{}, 1024)
+	result, err := embeddingToSQLArray([]float64{}, 1024)
+	assert.NoError(t, err)
 	assert.Equal(t, "array[]::FLOAT[1024]", result)
+}
+
+func TestEmbeddingToSQLArray_NonFinite(t *testing.T) {
+	_, err := embeddingToSQLArray([]float64{0.1, math.NaN(), 0.3}, 1024)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "non-finite")
+
+	_, err = embeddingToSQLArray([]float64{0.1, math.Inf(1)}, 1024)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "non-finite")
 }
 
 // ---------- Schema migration (new columns) ----------
