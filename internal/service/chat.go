@@ -24,11 +24,13 @@ func GetChatHistoryPaged(projectPath, backend, sessionID string, limit int, befo
 
 	if limit > 0 && beforeTime != "" {
 		// Cursor-based: load messages older than beforeTime
+		// id is AUTOINCREMENT so ORDER BY id gives deterministic chronological order
+		// (unlike created_at which has only second-precision and can tie).
 		query := `SELECT id, role, content, files, backend, streaming, created_at, indexed FROM (
 			SELECT id, role, content, files, backend, streaming, created_at, indexed FROM chat_history
 			WHERE project_path = ? AND session_id = ? AND created_at < ? AND deleted = 0
-			ORDER BY created_at DESC, id DESC LIMIT ?
-		) sub ORDER BY created_at ASC, id ASC`
+			ORDER BY id DESC LIMIT ?
+		) sub ORDER BY id ASC`
 		rows, err := DBRead.Query(query, projectPath, sessionID, beforeTime, limit)
 		if err != nil {
 			return messages, err
@@ -42,8 +44,8 @@ func GetChatHistoryPaged(projectPath, backend, sessionID string, limit int, befo
 		query := `SELECT id, role, content, files, backend, streaming, created_at, indexed FROM (
 			SELECT id, role, content, files, backend, streaming, created_at, indexed FROM chat_history
 			WHERE project_path = ? AND session_id = ? AND deleted = 0
-			ORDER BY created_at DESC, id DESC LIMIT ?
-		) sub ORDER BY created_at ASC, id ASC`
+			ORDER BY id DESC LIMIT ?
+		) sub ORDER BY id ASC`
 		rows, err := DBRead.Query(query, projectPath, sessionID, limit)
 		if err != nil {
 			return messages, err
@@ -53,7 +55,7 @@ func GetChatHistoryPaged(projectPath, backend, sessionID string, limit int, befo
 	}
 
 	// No limit: return all messages in chronological order
-	query := `SELECT id, role, content, files, backend, streaming, created_at, indexed FROM chat_history WHERE project_path = ? AND session_id = ? AND deleted = 0 ORDER BY created_at ASC, id ASC`
+	query := `SELECT id, role, content, files, backend, streaming, created_at, indexed FROM chat_history WHERE project_path = ? AND session_id = ? AND deleted = 0 ORDER BY id ASC`
 	rows, err := DBRead.Query(query, projectPath, sessionID)
 	if err != nil {
 		return messages, err
@@ -119,7 +121,7 @@ func GetMessageByID(id int64) (*model.ChatMessage, error) {
 // Returns messages in chronological order with all content blocks (text, thinking, tool_use).
 func GetMessagesBySessionID(sessionID string) ([]model.ChatMessage, error) {
 	rows, err := DBRead.Query(
-		"SELECT id, role, content, files, backend, streaming, created_at, indexed FROM chat_history WHERE session_id = ? AND streaming = 0 ORDER BY created_at ASC, id ASC",
+		"SELECT id, role, content, files, backend, streaming, created_at, indexed FROM chat_history WHERE session_id = ? AND streaming = 0 ORDER BY id ASC",
 		sessionID,
 	)
 	if err != nil {
