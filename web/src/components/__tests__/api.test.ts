@@ -123,9 +123,39 @@ describe('apiDelete', () => {
     mockFetch.mockResolvedValue({
       ok: false,
       statusText: 'Forbidden',
+      json: () => Promise.resolve({}),
     })
 
     await expect(apiDelete('/api/test/123')).rejects.toThrow('Forbidden')
+  })
+
+  it('sends body with DELETE request when body option is provided', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ success: true }),
+    })
+
+    const result = await apiDelete('/api/git/branch', { body: { name: 'feature-x' } })
+    expect(mockFetch).toHaveBeenCalledWith(
+      '/api/git/branch',
+      expect.objectContaining({
+        method: 'DELETE',
+        body: JSON.stringify({ name: 'feature-x' }),
+        headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
+      }),
+    )
+    expect(result).toEqual({ success: true })
+  })
+
+  it('includes error from response JSON when DELETE fails', async () => {
+    mockFetch.mockResolvedValue({
+      ok: false,
+      statusText: 'Internal Server Error',
+      json: () => Promise.resolve({ error: 'cannot_delete_current' }),
+    })
+
+    await expect(apiDelete('/api/git/branch', { body: { name: 'main' } }))
+      .rejects.toThrow('cannot_delete_current')
   })
 })
 

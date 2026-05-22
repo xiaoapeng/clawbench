@@ -11,6 +11,7 @@ const API_TIMEOUT_MS = 10_000
 /** Options shared by all API helper functions */
 export interface ApiOptions {
     signal?: AbortSignal
+    body?: unknown
 }
 
 /**
@@ -109,9 +110,15 @@ export async function apiPatch<T = unknown>(url: string, body: unknown, opts: Ap
 export async function apiDelete<T = unknown>(url: string, opts: ApiOptions = {}): Promise<T> {
     const { signal, cleanup } = createSignal(opts)
     try {
-        const resp = await fetch(url, { method: 'DELETE', headers: localeHeaders(), signal })
-        if (!resp.ok) throw new Error(resp.statusText)
-        return resp.json()
+        const init: RequestInit = { method: 'DELETE', headers: localeHeaders(), signal }
+        if (opts.body !== undefined) {
+            init.headers = { 'Content-Type': 'application/json', ...localeHeaders() }
+            init.body = JSON.stringify(opts.body)
+        }
+        const resp = await fetch(url, init)
+        const data = await resp.json().catch(() => ({})) as Record<string, unknown>
+        if (!resp.ok) throw new Error(data.error ? String(data.error) : resp.statusText)
+        return data as T
     } finally {
         cleanup()
     }

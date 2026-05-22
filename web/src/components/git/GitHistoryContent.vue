@@ -155,7 +155,7 @@ import GitBreadcrumb from './GitBreadcrumb.vue'
 import GitManageContent from './GitManageContent.vue'
 import { renderDiff } from '@/utils/diff.ts'
 import { store } from '@/stores/app.ts'
-import { useCommitNavigation, consumePendingCommitNavigation, pendingSha as pendingCommitSha, consumePendingManageNavigation } from '@/composables/useCommitNavigation.ts'
+import { useCommitNavigation, consumePendingCommitNavigation, pendingSha as pendingCommitSha, consumePendingManageNavigation, pendingManageView } from '@/composables/useCommitNavigation.ts'
 const { t } = useI18n()
 
 const switchTab = inject('switchTab', () => {})
@@ -438,6 +438,15 @@ const { navigateToCommit, handleDrillBackToCommits } = useCommitNavigation({
     loadProjectHistory,
 })
 
+// Ensure IntersectionObserver is set up whenever user returns to the commits view.
+// This covers the case where observeList() was skipped due to early returns
+// (e.g. entering via Header branch badge → manage view → back to commits).
+watch(currentView, (view) => {
+  if (view === 'commits') {
+    nextTick(() => commitListRef.value?.observeList())
+  }
+})
+
 // Watch for commit navigation requests from chat (handles the case where
 // the history tab is already active and a commit hash link is clicked)
 watch(pendingCommitSha, async (sha) => {
@@ -445,6 +454,16 @@ watch(pendingCommitSha, async (sha) => {
   const consumed = consumePendingCommitNavigation()
   if (consumed) {
     await navigateToCommit(consumed)
+  }
+})
+
+// Watch for manage-view navigation requests from branch badge click
+// (handles the case where the history tab is already active)
+watch(pendingManageView, async (pending) => {
+  if (!pending || !props.active) return
+  const consumed = consumePendingManageNavigation()
+  if (consumed) {
+    currentView.value = 'manage'
   }
 })
 

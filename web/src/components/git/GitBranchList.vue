@@ -1,6 +1,6 @@
 <template>
-  <div class="git-branch-list" :class="{ collapsed }">
-    <div class="section-header" @click="toggleCollapse">
+  <div class="git-branch-list" :class="{ collapsed, 'no-header': hideHeader }">
+    <div v-if="!hideHeader" class="section-header" @click="toggleCollapse">
       <div class="section-left">
         <span class="section-title">{{ t('git.manage.branches') }}</span>
         <span v-if="branches.length > 0" class="section-count">{{ branches.length }}</span>
@@ -9,7 +9,7 @@
       <ChevronDown v-if="!collapsed" :size="16" class="section-chevron" />
       <ChevronRight v-else :size="16" class="section-chevron" />
     </div>
-    <div v-if="!collapsed" class="section-body">
+    <div v-if="hideHeader || !collapsed" class="section-body">
       <div v-if="loading" class="section-loading">
         <div class="spinner" style="width:18px;height:18px;border-width:2px;" />
       </div>
@@ -25,6 +25,7 @@
           :branch="b"
           :disabled="checkoutInProgress"
           @switch="$emit('switch-branch', $event)"
+          @delete="$emit('delete-branch', $event)"
         />
       </template>
     </div>
@@ -46,6 +47,7 @@ const props = withDefaults(defineProps<{
   error?: boolean
   checkoutInProgress?: boolean
   initialCollapsed?: boolean
+  hideHeader?: boolean
 }>(), {
   branches: () => [],
   stashCount: 0,
@@ -53,9 +55,10 @@ const props = withDefaults(defineProps<{
   error: false,
   checkoutInProgress: false,
   initialCollapsed: false,
+  hideHeader: false,
 })
 
-defineEmits(['switch-branch', 'retry'])
+defineEmits(['switch-branch', 'delete-branch', 'retry'])
 
 const STORAGE_KEY = 'git-branch-collapsed'
 const collapsed = ref(false)
@@ -91,6 +94,12 @@ const sortedBranches = computed(() => {
   min-height: 0;
   overflow: hidden;
   border-bottom: 1px solid var(--border-color, #dee2e6);
+}
+
+.git-branch-list.no-header {
+  border-bottom: none;
+  flex: 1;
+  overflow-y: auto;
 }
 
 .section-header {
