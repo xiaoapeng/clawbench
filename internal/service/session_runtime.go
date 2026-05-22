@@ -25,11 +25,8 @@ var sessionStreams sync.Map // map[string]chan ai.StreamEvent
 var sessionCancels sync.Map         // map[string]context.CancelFunc
 var sessionCancelReasons sync.Map   // map[string]string — "user", "disconnect"
 
-// responsePreviewMaxRunes is the maximum number of runes included in the
-// response preview sent via WS session_update events. This is intentionally
-// generous (for WS consumers); the JPush alert path applies its own shorter
-// limit (see ws.Manager.broadcastToSubscription).
-const responsePreviewMaxRunes = 64
+// responsePreviewMaxRunes is an alias for model.ResponsePreviewMaxRunes for local use.
+const responsePreviewMaxRunes = model.ResponsePreviewMaxRunes
 
 // EmitSessionEvent broadcasts a session_update event to connected clients.
 func EmitSessionEvent(sessionID, status string, hasNewMessages bool) {

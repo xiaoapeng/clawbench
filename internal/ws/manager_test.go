@@ -464,13 +464,14 @@ func TestBroadcastEvent_BufferWindow(t *testing.T) {
 }
 
 func TestManager_BroadcastEvent_JPushAlert_WithSessionTitle(t *testing.T) {
-	var receivedAlert string
+	var receivedTitle, receivedAlert string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var payload map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&payload); err == nil {
 			if n, ok := payload["notification"].(map[string]any); ok {
 				if a, ok := n["android"].(map[string]any); ok {
 					receivedAlert, _ = a["alert"].(string)
+					receivedTitle, _ = a["title"].(string)
 				}
 			}
 		}
@@ -506,20 +507,24 @@ func TestManager_BroadcastEvent_JPushAlert_WithSessionTitle(t *testing.T) {
 	}
 	mgr.BroadcastEvent(msg)
 
-	// SessionTitle takes priority over ResponsePreview
-	if receivedAlert != "帮我写一个Go HTTP服务器" {
-		t.Errorf("expected alert to be session title, got %q", receivedAlert)
+	// SessionTitle goes into the notification title; ResponsePreview goes into the alert
+	if receivedTitle != "Done:帮我写一个Go HTTP服务器" {
+		t.Errorf("expected title to include session title, got %q", receivedTitle)
+	}
+	if receivedAlert != "AI回复的预览内容" {
+		t.Errorf("expected alert to be response preview, got %q", receivedAlert)
 	}
 }
 
 func TestManager_BroadcastEvent_JPushAlert_WithResponsePreview(t *testing.T) {
-	var receivedAlert string
+	var receivedTitle, receivedAlert string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var payload map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&payload); err == nil {
 			if n, ok := payload["notification"].(map[string]any); ok {
 				if a, ok := n["android"].(map[string]any); ok {
 					receivedAlert, _ = a["alert"].(string)
+					receivedTitle, _ = a["title"].(string)
 				}
 			}
 		}
@@ -554,20 +559,25 @@ func TestManager_BroadcastEvent_JPushAlert_WithResponsePreview(t *testing.T) {
 	}
 	mgr.BroadcastEvent(msg)
 
+	// Without session title, notification title stays as default
+	if receivedTitle != "AI任务完成" {
+		t.Errorf("expected default title, got %q", receivedTitle)
+	}
 	// Short preview should pass through unchanged (under pushAlertMaxRunes)
 	if receivedAlert != "AI回复的预览内容" {
 		t.Errorf("expected alert to be response preview, got %q", receivedAlert)
 	}
 }
 
-func TestManager_BroadcastEvent_JPushAlert_TruncatesLongTitle(t *testing.T) {
-	var receivedAlert string
+func TestManager_BroadcastEvent_JPushAlert_TruncatesLongPreview(t *testing.T) {
+	var receivedTitle, receivedAlert string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var payload map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&payload); err == nil {
 			if n, ok := payload["notification"].(map[string]any); ok {
 				if a, ok := n["android"].(map[string]any); ok {
 					receivedAlert, _ = a["alert"].(string)
+					receivedTitle, _ = a["title"].(string)
 				}
 			}
 		}
@@ -589,8 +599,8 @@ func TestManager_BroadcastEvent_JPushAlert_TruncatesLongTitle(t *testing.T) {
 	mgr.RegisterPushID("reg-123", "client-1")
 	mgr.DisconnectClient("client-1")
 
-	// pushAlertMaxRunes+1 rune title — should be truncated
-	longTitle := strings.Repeat("测", pushAlertMaxRunes+1)
+	// Long response preview — should be truncated in alert
+	longPreview := strings.Repeat("测", pushAlertMaxRunes+1)
 	msg := ServerMessage{
 		Type:  "event",
 		ID:    "evt_1",
@@ -599,12 +609,18 @@ func TestManager_BroadcastEvent_JPushAlert_TruncatesLongTitle(t *testing.T) {
 			SessionID:      "s1",
 			Status:         "completed",
 			HasNewMessages: true,
-			SessionTitle:   longTitle,
+			SessionTitle:   "测试标题",
+			ResponsePreview: longPreview,
 		},
 	}
 	mgr.BroadcastEvent(msg)
 
-	expected := string([]rune(longTitle)[:pushAlertMaxRunes]) + "…"
+	// Title includes session title without truncation
+	if receivedTitle != "Done:测试标题" {
+		t.Errorf("expected title with session title, got %q", receivedTitle)
+	}
+	// Alert is the truncated response preview
+	expected := string([]rune(longPreview)[:pushAlertMaxRunes]) + "…"
 	if receivedAlert != expected {
 		t.Errorf("expected truncated alert, got %q (want %q)", receivedAlert, expected)
 	}
@@ -614,13 +630,14 @@ func TestManager_BroadcastEvent_JPushAlert_TruncatesLongTitle(t *testing.T) {
 }
 
 func TestManager_BroadcastEvent_JPushAlert_WithoutTitleOrPreview(t *testing.T) {
-	var receivedAlert string
+	var receivedTitle, receivedAlert string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var payload map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&payload); err == nil {
 			if n, ok := payload["notification"].(map[string]any); ok {
 				if a, ok := n["android"].(map[string]any); ok {
 					receivedAlert, _ = a["alert"].(string)
+					receivedTitle, _ = a["title"].(string)
 				}
 			}
 		}
@@ -654,6 +671,9 @@ func TestManager_BroadcastEvent_JPushAlert_WithoutTitleOrPreview(t *testing.T) {
 	}
 	mgr.BroadcastEvent(msg)
 
+	if receivedTitle != "AI任务完成" {
+		t.Errorf("expected default title, got %q", receivedTitle)
+	}
 	if receivedAlert != "AI会话已结束" {
 		t.Errorf("expected default alert, got %q", receivedAlert)
 	}

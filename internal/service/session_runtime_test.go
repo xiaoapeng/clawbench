@@ -678,9 +678,8 @@ func TestGetSessionResponsePreview_RealData_ToolThenWorktreeReport(t *testing.T)
 	result := getSessionResponsePreview("session-real-tool-worktree")
 	// Should start with the final answer, not with thinking or tool output
 	assert.Contains(t, result, "Worktree 已创建")
-	// Verify truncation kicks in (finalText is 110 runes, exceeds responsePreviewMaxRunes=64)
-	assert.True(t, utf8.RuneCountInString(result) <= responsePreviewMaxRunes+1, "result should be truncated")
-	assert.True(t, strings.HasSuffix(result, "…"), "truncated result should end with ellipsis")
+	// With responsePreviewMaxRunes=512, this text (110 runes) fits without truncation
+	assert.Equal(t, finalText, result)
 }
 
 func TestGetSessionResponsePreview_RealData_MultiToolInterleavedWithText(t *testing.T) {
@@ -766,7 +765,8 @@ func TestGetSessionResponsePreview_RealData_ThreeToolsThenWorktreeReport(t *test
 
 	result := getSessionResponsePreview("session-real-three-tools")
 	assert.Contains(t, result, "Worktree 已创建")
-	assert.True(t, utf8.RuneCountInString(result) <= responsePreviewMaxRunes+1, "result should be truncated")
+	// With responsePreviewMaxRunes=512, this text fits without truncation
+	assert.Equal(t, finalText, result)
 }
 
 func TestGetSessionResponsePreview_RealData_PureTextSummary(t *testing.T) {
@@ -790,7 +790,8 @@ func TestGetSessionResponsePreview_RealData_PureTextSummary(t *testing.T) {
 
 	result := getSessionResponsePreview("session-real-pure-text")
 	assert.Contains(t, result, "后台耗电优化到此为止")
-	assert.True(t, utf8.RuneCountInString(result) <= responsePreviewMaxRunes+1, "result should be truncated")
+	// With responsePreviewMaxRunes=512, this text fits without truncation
+	assert.Equal(t, finalText, result)
 }
 
 func TestGetSessionResponsePreview_UsesLastAssistantMessage(t *testing.T) {

@@ -2,6 +2,10 @@ package model
 
 import "time"
 
+// ResponsePreviewMaxRunes is the maximum number of runes included in the
+// response preview sent via WS session_update events and JPush notifications.
+const ResponsePreviewMaxRunes = 512
+
 // ChatMessage represents a single message in the chat history
 type ChatMessage struct {
 	ID          int64     `json:"id,omitempty"`

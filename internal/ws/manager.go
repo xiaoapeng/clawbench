@@ -11,6 +11,7 @@ import (
 
 	"github.com/coder/websocket"
 
+	"clawbench/internal/model"
 	"clawbench/internal/push"
 	"unicode/utf8"
 )
@@ -31,10 +32,8 @@ type ClientSubscription struct {
 // resource exhaustion. Matches the original SSE limit of 20.
 const maxSubscriptions = 20
 
-// pushAlertMaxRunes is the maximum number of runes used for the JPush alert text.
-// OPPO (the most restrictive vendor channel) limits alert to 50 characters;
-// we use 40 to leave room for the "…" ellipsis and a safety margin.
-const pushAlertMaxRunes = 40
+// pushAlertMaxRunes is an alias for model.ResponsePreviewMaxRunes for local use.
+const pushAlertMaxRunes = model.ResponsePreviewMaxRunes
 
 // wsWriteTimeout is the maximum time to wait for a WebSocket write to complete.
 const wsWriteTimeout = 5 * time.Second
@@ -305,12 +304,13 @@ func (m *Manager) broadcastToSubscription(key string, msg ServerMessage, deliver
 		if msg.Event == "task_update" {
 			alert = "计划任务已完成"
 		}
-		// Use session title as alert text when available (more informative than response preview),
-		// then fall back to response preview. Both are truncated for push channel limits.
+		// For session events: put session title in the notification title (more visible),
+		// and use response preview as the alert body (the actual AI answer content).
 		if d, ok := msg.Data.(*SessionUpdateData); ok {
 			if d.SessionTitle != "" {
-				alert = truncateForPush(d.SessionTitle)
-			} else if d.ResponsePreview != "" {
+				title = "Done:" + d.SessionTitle
+			}
+			if d.ResponsePreview != "" {
 				alert = truncateForPush(d.ResponsePreview)
 			}
 		}
