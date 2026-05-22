@@ -1979,3 +1979,235 @@ func TestWriteDiffResponse_EmptyDiffOutput(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &result))
 	assert.Equal(t, true, result["empty"])
 }
+
+// --- ServeGitTags ---
+
+func TestServeGitTags_NotGitRepo(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	req := newRequest(t, http.MethodGet, "/api/git/tags", nil)
+	withProjectCookie(req, env.ProjectDir)
+
+	w := callHandler(ServeGitTags, req)
+	assertOK(t, w)
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	assert.Equal(t, false, resp["isGit"])
+	tags, ok := resp["tags"].([]interface{})
+	assert.True(t, ok)
+	assert.Equal(t, 0, len(tags))
+}
+
+func TestServeGitTags_WrongMethod(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	initGitRepo(t, env.ProjectDir)
+
+	req := newRequest(t, http.MethodPost, "/api/git/tags", nil)
+	withProjectCookie(req, env.ProjectDir)
+
+	w := callHandler(ServeGitTags, req)
+	assertStatus(t, w, http.StatusMethodNotAllowed)
+}
+
+func TestServeGitTags_NoProjectCookie(t *testing.T) {
+	_, teardown := setupTestEnv(t)
+	defer teardown()
+
+	req := newRequest(t, http.MethodGet, "/api/git/tags", nil)
+	// No project cookie
+
+	w := callHandler(ServeGitTags, req)
+	assertStatus(t, w, http.StatusForbidden)
+}
+
+func TestServeGitTags_NoTags(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	initGitRepo(t, env.ProjectDir)
+
+	req := newRequest(t, http.MethodGet, "/api/git/tags", nil)
+	withProjectCookie(req, env.ProjectDir)
+
+	w := callHandler(ServeGitTags, req)
+	assertOK(t, w)
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	assert.Equal(t, true, resp["isGit"])
+	tags, ok := resp["tags"].([]interface{})
+	assert.True(t, ok)
+	assert.Equal(t, 0, len(tags))
+}
+
+func TestServeGitTags_LightweightTag(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	initGitRepo(t, env.ProjectDir)
+
+	// Create a lightweight tag (no message)
+	run := func(name string, args ...string) {
+		cmd := exec.Command(name, args...)
+		cmd.Dir = env.ProjectDir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("command %s %v failed: %v\n%s", name, args, err, out)
+		}
+	}
+	sha := getHeadSHA(t, env.ProjectDir)
+	run("git", "tag", "v1.0")
+
+	req := newRequest(t, http.MethodGet, "/api/git/tags", nil)
+	withProjectCookie(req, env.ProjectDir)
+
+	w := callHandler(ServeGitTags, req)
+	assertOK(t, w)
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	assert.Equal(t, true, resp["isGit"])
+	tags, ok := resp["tags"].([]interface{})
+	assert.True(t, ok)
+	assert.Equal(t, 1, len(tags))
+
+	tag := tags[0].(map[string]interface{})
+	assert.Equal(t, "v1.0", tag["name"])
+	assert.Equal(t, sha, tag["sha"])
+	assert.NotEmpty(t, tag["date"])
+	// Lightweight tags show the commit message via `git tag -n1`, not a tag message
+	assert.NotEmpty(t, tag["msg"])
+}
+
+func TestServeGitTags_AnnotatedTag(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	initGitRepo(t, env.ProjectDir)
+
+	// Create an annotated tag (has message)
+	run := func(name string, args ...string) {
+		cmd := exec.Command(name, args...)
+		cmd.Dir = env.ProjectDir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("command %s %v failed: %v\n%s", name, args, err, out)
+		}
+	}
+	run("git", "tag", "-a", "v2.0", "-m", "Release v2.0")
+
+	req := newRequest(t, http.MethodGet, "/api/git/tags", nil)
+	withProjectCookie(req, env.ProjectDir)
+
+	w := callHandler(ServeGitTags, req)
+	assertOK(t, w)
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	assert.Equal(t, true, resp["isGit"])
+	tags, ok := resp["tags"].([]interface{})
+	assert.True(t, ok)
+	assert.Equal(t, 1, len(tags))
+
+	tag := tags[0].(map[string]interface{})
+	assert.Equal(t, "v2.0", tag["name"])
+	assert.Equal(t, "Release v2.0", tag["msg"])
+	assert.NotEmpty(t, tag["date"])
+	assert.NotEmpty(t, tag["author"])
+}
+
+func TestServeGitTags_MultipleTags(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	initGitRepo(t, env.ProjectDir)
+
+	run := func(name string, args ...string) {
+		cmd := exec.Command(name, args...)
+		cmd.Dir = env.ProjectDir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("command %s %v failed: %v\n%s", name, args, err, out)
+		}
+	}
+	run("git", "tag", "v1.0")
+	run("git", "tag", "-a", "v2.0", "-m", "Second release")
+
+	req := newRequest(t, http.MethodGet, "/api/git/tags", nil)
+	withProjectCookie(req, env.ProjectDir)
+
+	w := callHandler(ServeGitTags, req)
+	assertOK(t, w)
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	tags, ok := resp["tags"].([]interface{})
+	assert.True(t, ok)
+	assert.Equal(t, 2, len(tags))
+}
+
+// --- Worktree ChangeCount ---
+
+func TestServeGitWorktrees_ChangeCountDirty(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	initGitRepo(t, env.ProjectDir)
+
+	// Create dirty state: modify tracked file + add untracked file
+	createTestFile(t, env.ProjectDir, "README.md", "# Modified")
+	createTestFile(t, env.ProjectDir, "newfile.txt", "new content")
+
+	req := newRequest(t, http.MethodGet, "/api/git/worktrees", nil)
+	withProjectCookie(req, env.ProjectDir)
+
+	w := callHandler(ServeGitWorktrees, req)
+	assertOK(t, w)
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	assert.Equal(t, true, resp["isGit"])
+	worktrees, ok := resp["worktrees"].([]interface{})
+	assert.True(t, ok)
+	assert.Equal(t, 1, len(worktrees))
+
+	wt := worktrees[0].(map[string]interface{})
+	assert.Equal(t, true, wt["dirty"])
+	// changeCount should be >= 2 (one modified, one untracked)
+	changeCount, ok := wt["changeCount"].(float64)
+	assert.True(t, ok, "changeCount should be a number")
+	assert.GreaterOrEqual(t, int(changeCount), 2)
+	// untrackedCount should be >= 1
+	untrackedCount, ok := wt["untrackedCount"].(float64)
+	assert.True(t, ok, "untrackedCount should be a number")
+	assert.GreaterOrEqual(t, int(untrackedCount), 1)
+	// changeCount should be > untrackedCount since we also have a modified file
+	assert.Greater(t, int(changeCount), int(untrackedCount))
+}
+
+func TestServeGitWorktrees_ChangeCountClean(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	initGitRepo(t, env.ProjectDir)
+
+	req := newRequest(t, http.MethodGet, "/api/git/worktrees", nil)
+	withProjectCookie(req, env.ProjectDir)
+
+	w := callHandler(ServeGitWorktrees, req)
+	assertOK(t, w)
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	worktrees, ok := resp["worktrees"].([]interface{})
+	assert.True(t, ok)
+	assert.Equal(t, 1, len(worktrees))
+
+	wt := worktrees[0].(map[string]interface{})
+	assert.Equal(t, false, wt["dirty"])
+	// changeCount should be 0 for clean worktree
+	changeCount, ok := wt["changeCount"].(float64)
+	assert.True(t, ok, "changeCount should be a number")
+	assert.Equal(t, 0, int(changeCount))
+}
