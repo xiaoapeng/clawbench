@@ -46,7 +46,7 @@ vi.mock('@/utils/chatSessionUtils', () => ({
     parseMessages: vi.fn().mockReturnValue([]),
 }))
 
-import { useSessionIdentity, registerSessionActions, initSessionFromAPI } from '@/composables/useSessionIdentity'
+import { useSessionIdentity, registerSessionActions, initSessionFromAPI, resetIdentity } from '@/composables/useSessionIdentity'
 
 describe('useSessionIdentity', () => {
     beforeEach(() => {
@@ -460,6 +460,73 @@ describe('useSessionIdentity', () => {
             expect(identity.currentThinkingEffort.value).toBe('medium')
 
             vi.unstubAllGlobals()
+        })
+    })
+
+    // ── resetIdentity ──
+
+    describe('resetIdentity', () => {
+        it('clears all identity refs to defaults', async () => {
+            const identity = useSessionIdentity()
+
+            // Set some state
+            identity.currentSessionId.value = 'session-1'
+            identity.currentSessionTitle.value = 'Title'
+            identity.currentBackend.value = 'codebuddy'
+            identity.currentAgentId.value = 'agent-1'
+            identity.currentModelId.value = 'model-1'
+            identity.currentModelName.value = 'Model One'
+            identity.currentThinkingEffort.value = 'high'
+            identity.runningSessions.value = new Set(['s1', 's2'])
+            identity.sessionDrawerOpen.value = true
+
+            resetIdentity()
+
+            expect(identity.currentSessionId.value).toBe('')
+            expect(identity.currentSessionTitle.value).toBe('')
+            expect(identity.currentBackend.value).toBe('')
+            expect(identity.currentAgentId.value).toBe('')
+            expect(identity.currentModelId.value).toBe('')
+            expect(identity.currentModelName.value).toBe('')
+            expect(identity.currentThinkingEffort.value).toBe('')
+            expect(identity.runningSessions.value.size).toBe(0)
+            expect(identity.sessionDrawerOpen.value).toBe(false)
+        })
+
+        it('clears registered session action callbacks', async () => {
+            const mockSwitch = vi.fn()
+            registerSessionActions({
+                switchSession: mockSwitch,
+                createSession: vi.fn(),
+                deleteSession: vi.fn(),
+                sendMessage: vi.fn(),
+                openChatPanel: vi.fn(),
+            })
+
+            resetIdentity()
+
+            // After reset, the identity should have null callbacks
+            // so calling switchSession should not invoke the old callback
+            const identity = useSessionIdentity()
+            await identity.switchSession('session-2')
+            expect(mockSwitch).not.toHaveBeenCalled()
+        })
+
+        it('clears openChatPanel callback', () => {
+            const mockOpen = vi.fn()
+            registerSessionActions({
+                switchSession: vi.fn(),
+                createSession: vi.fn(),
+                deleteSession: vi.fn(),
+                sendMessage: vi.fn(),
+                openChatPanel: mockOpen,
+            })
+
+            resetIdentity()
+
+            const identity = useSessionIdentity()
+            identity.openChatPanel()
+            expect(mockOpen).not.toHaveBeenCalled()
         })
     })
 })
