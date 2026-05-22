@@ -307,15 +307,18 @@ async function hotSwitchProject(newProjectPath, pendingSessionId) {
   await nextTick()
   await new Promise(r => setTimeout(r, 150))
 
-  // ── Phase 2: Reset module-level singletons ──
-  store.resetProjectState()
+  // ── Phase 2: POST to backend to set new project cookie ──
+  await store.setProject(newProjectPath)
+
+  // ── Phase 3: Reset module-level singletons ──
+  // (store state already reset by setProject, but identity/agents need explicit reset)
   resetIdentity()
   resetAgents()
 
-  // ── Phase 3: Change key → Vue destroys old component tree & builds new one ──
+  // ── Phase 4: Change key → Vue destroys old component tree & builds new one ──
   projectKey.value = newProjectPath
 
-  // ── Phase 4: Reload all project-scoped data (mirrors onMounted after auth) ──
+  // ── Phase 5: Reload all project-scoped data (mirrors onMounted after auth) ──
   try { await store.loadProject() } catch (_) {
     toast.show(t('toast.projectLoadFailed'), { icon: '⚠️', type: 'error', duration: 0, onClick: () => location.reload() })
   }
@@ -329,7 +332,7 @@ async function hotSwitchProject(newProjectPath, pendingSessionId) {
   loadTerminalStatus().catch(() => {})
   if (isAppMode.value) syncToNative().catch(() => {})
 
-  // ── Phase 5: Restore last opened file for the new project ──
+  // ── Phase 6: Restore last opened file for the new project ──
   const lastFile = localStorage.getItem('clawbenchLastFile_' + store.state.projectRoot)
   if (lastFile && lastFile !== store.state.currentFile?.path) {
     const lastSlash = lastFile.lastIndexOf('/')
@@ -339,7 +342,7 @@ async function hotSwitchProject(newProjectPath, pendingSessionId) {
     if (store.state.currentFile?.error) store.state.currentFile = null
   }
 
-  // ── Phase 6: Handle cross-project pending navigation ──
+  // ── Phase 7: Handle cross-project pending navigation ──
   if (pendingSessionId) {
     const checkReady = () => {
       if (sessionIdentity.currentSessionId.value) {
@@ -352,7 +355,7 @@ async function hotSwitchProject(newProjectPath, pendingSessionId) {
     checkReady()
   }
 
-  // ── Phase 7: Fade in ──
+  // ── Phase 8: Fade in ──
   switchingProject.value = false
 }
 
