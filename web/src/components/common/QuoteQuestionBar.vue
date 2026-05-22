@@ -165,7 +165,7 @@ function handleSend() {
 <style scoped>
 .quote-question-bar {
   position: fixed;
-  top: calc(var(--header-height, 40px) + 8px + env(safe-area-inset-top, 0px));
+  top: calc(var(--header-height, 40px) + 8px + var(--header-safe-area-top, 0px));
   left: 8px;
   right: 8px;
   background: var(--bg-secondary);
