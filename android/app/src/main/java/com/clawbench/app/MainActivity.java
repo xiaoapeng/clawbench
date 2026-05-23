@@ -17,7 +17,6 @@ import android.os.Environment;
 import android.os.PowerManager;
 import android.provider.MediaStore;
 import android.provider.Settings;
-import android.util.Log;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.WindowManager;
@@ -863,12 +862,12 @@ public class MainActivity extends AppCompatActivity {
     private void fetchPushConfig() {
         String serverUrl = prefs.getString(KEY_SERVER_URL, "");
         if (serverUrl.isEmpty()) {
-            Log.w(TAG, "No server URL configured, skipping push config fetch");
+            AppLog.w(TAG, "No server URL configured, skipping push config fetch");
             return;
         }
 
         if (jpushInitStarted) {
-            Log.i(TAG, "JPush init already started, skipping duplicate fetchPushConfig");
+            AppLog.i(TAG, "JPush init already started, skipping duplicate fetchPushConfig");
             return;
         }
         jpushInitStarted = true;
@@ -898,7 +897,7 @@ public class MainActivity extends AppCompatActivity {
 
                 int responseCode = conn.getResponseCode();
                 if (responseCode != 200) {
-                    Log.w(TAG, "Push config endpoint returned " + responseCode);
+                    AppLog.w(TAG, "Push config endpoint returned " + responseCode);
                     conn.disconnect();
                     return;
                 }
@@ -923,7 +922,7 @@ public class MainActivity extends AppCompatActivity {
                 // This lets native WS suppress notifications during the init window.
                 if (jpushEnabled && !jpushAppKey.isEmpty()) {
                     jpushEnabledOnServer = true;
-                    Log.i(TAG, "JPush enabled on server, initializing with AppKey: " + jpushAppKey.substring(0, 4) + "...");
+                    AppLog.i(TAG, "JPush enabled on server, initializing with AppKey: " + jpushAppKey.substring(0, 4) + "...");
                     runOnUiThread(() -> {
                         JPushInterface.setDebugMode(false);
                         JPushConfig config = new JPushConfig();
@@ -936,13 +935,13 @@ public class MainActivity extends AppCompatActivity {
                         // the native WS prematurely, even if init fails (e.g. 1005 error).
                         // Instead, pushAvailable is set in JPushReceiver.onRegister() only
                         // after the SDK confirms successful registration.
-                        Log.i(TAG, "JPush init called with server-provided AppKey, awaiting onRegister callback");
+                        AppLog.i(TAG, "JPush init called with server-provided AppKey, awaiting onRegister callback");
                     });
                 } else {
-                    Log.i(TAG, "JPush not configured on server — will keep WebSocket alive in background");
+                    AppLog.i(TAG, "JPush not configured on server — will keep WebSocket alive in background");
                 }
             } catch (Exception e) {
-                Log.w(TAG, "Failed to fetch push config: " + e.getMessage());
+                AppLog.w(TAG, "Failed to fetch push config: " + e.getMessage());
             }
         }).start();
     }
@@ -1120,10 +1119,11 @@ public class MainActivity extends AppCompatActivity {
          * Also requests battery optimization exemption on first port forward.
          */
         @JavascriptInterface
-        public void addForwardedPort(int port, String host) {
+        public void addForwardedPort(int localPort, int targetPort, String host) {
+            AppLog.i(TAG, "addForwardedPort: localPort=" + localPort + ", targetPort=" + targetPort + ", host=" + host);
             activity.runOnUiThread(() -> {
-                activity.forwardedPorts.put(port, host != null ? host : "");
-                BackgroundService.addForwardedPort(activity, port, host != null ? host : "");
+                activity.forwardedPorts.put(localPort, host != null ? host : "");
+                BackgroundService.addForwardedPort(activity, localPort, targetPort, host != null ? host : "");
 
                 // Request battery optimization exemption if not already granted.
                 // Re-check every time in case the user previously dismissed the dialog.
@@ -1261,10 +1261,11 @@ public class MainActivity extends AppCompatActivity {
          */
         @JavascriptInterface
         public void openInBrowser(int port, String protocol, String host) {
+            AppLog.i(TAG, "openInBrowser: port=" + port + ", protocol=" + protocol + ", host=" + host);
             activity.runOnUiThread(() -> {
                 String scheme = "https".equalsIgnoreCase(protocol) ? "https" : "http";
-                String targetHost = (host != null && !host.isEmpty()) ? host : "localhost";
-                String url = scheme + "://" + targetHost + ":" + port;
+                // External browser accesses the SSH tunnel on localhost, not the original host
+                String url = scheme + "://localhost:" + port;
                 Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 activity.startActivity(intent);
@@ -1278,6 +1279,7 @@ public class MainActivity extends AppCompatActivity {
          */
         @JavascriptInterface
         public void openInSandbox(int port, String protocol, String host) {
+            AppLog.i(TAG, "openInSandbox: port=" + port + ", protocol=" + protocol + ", host=" + host);
             activity.runOnUiThread(() -> {
                 String scheme = "https".equalsIgnoreCase(protocol) ? "https" : "http";
                 Intent intent = new Intent(activity, BrowserActivity.class);

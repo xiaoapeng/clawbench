@@ -238,6 +238,21 @@ describe('usePortForward', () => {
             delete (window as any).AndroidNative
         })
 
+        it('passes host parameter to native sandbox browser', async () => {
+            mockIsAppMode.value = true
+            const mockOpenInSandbox = vi.fn()
+            ;(window as any).AndroidNative = { openInSandbox: mockOpenInSandbox }
+
+            const { usePortForward } = await import('@/composables/usePortForward')
+            const { openPort } = usePortForward()
+
+            openPort(3000, 'http', '192.168.1.1')
+
+            expect(mockOpenInSandbox).toHaveBeenCalledWith(3000, 'http', '192.168.1.1')
+
+            delete (window as any).AndroidNative
+        })
+
         it('falls back to openInBrowser when sandbox not available', async () => {
             mockIsAppMode.value = true
             const mockOpenInBrowser = vi.fn()
@@ -271,6 +286,22 @@ describe('usePortForward', () => {
             mockIsAppMode.value = false
         })
 
+        it('passes host parameter to native openInBrowser', async () => {
+            mockIsAppMode.value = true
+            const mockOpenInBrowser = vi.fn()
+            ;(window as any).AndroidNative = { openInBrowser: mockOpenInBrowser }
+
+            const { usePortForward } = await import('@/composables/usePortForward')
+            const { openInExternalBrowser } = usePortForward()
+
+            openInExternalBrowser(3000, 'https', '192.168.1.1')
+
+            expect(mockOpenInBrowser).toHaveBeenCalledWith(3000, 'https', '192.168.1.1')
+
+            delete (window as any).AndroidNative
+            mockIsAppMode.value = false
+        })
+
         it('opens window in web mode', async () => {
             const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
 
@@ -287,7 +318,7 @@ describe('usePortForward', () => {
 
     describe('registerPort', () => {
         it('posts port to API and refreshes', async () => {
-            mockApiPost.mockResolvedValue({})
+            mockApiPost.mockResolvedValue({ localPort: 3000 })
             mockApiGet.mockResolvedValue({ ports: [] })
 
             const { usePortForward } = await import('@/composables/usePortForward')
@@ -302,7 +333,7 @@ describe('usePortForward', () => {
 
         it('passes host parameter to API and native layer in app mode', async () => {
             mockIsAppMode.value = true
-            mockApiPost.mockResolvedValue({})
+            mockApiPost.mockResolvedValue({ localPort: 3000 })
             mockApiGet.mockResolvedValue({ ports: [] })
             const mockAddForwardedPort = vi.fn()
             ;(window as any).AndroidNative = { addForwardedPort: mockAddForwardedPort }
@@ -315,7 +346,7 @@ describe('usePortForward', () => {
             expect(mockApiPost).toHaveBeenCalledWith('/api/proxy/ports', {
                 port: 3000, host: '192.168.1.1', name: 'App', protocol: 'http',
             })
-            expect(mockAddForwardedPort).toHaveBeenCalledWith(3000, '192.168.1.1')
+            expect(mockAddForwardedPort).toHaveBeenCalledWith(3000, 3000, '192.168.1.1')
 
             delete (window as any).AndroidNative
             mockIsAppMode.value = false
@@ -365,7 +396,7 @@ describe('usePortForward', () => {
             await updatePort(3000, 4000, '10.0.0.1', 'NewApp', 'https')
 
             expect(mockRemove).toHaveBeenCalledWith(3000)
-            expect(mockAdd).toHaveBeenCalledWith(4000, '10.0.0.1')
+            expect(mockAdd).toHaveBeenCalledWith(3000, 4000, '10.0.0.1')
 
             delete (window as any).AndroidNative
             mockIsAppMode.value = false
@@ -456,8 +487,8 @@ describe('usePortForward', () => {
 
             await syncToNative()
 
-            expect(mockAdd).toHaveBeenCalledWith(3000, '')
-            expect(mockAdd).toHaveBeenCalledWith(8080, '192.168.1.1')
+            expect(mockAdd).toHaveBeenCalledWith(3000, 3000, '')
+            expect(mockAdd).toHaveBeenCalledWith(8080, 8080, '192.168.1.1')
 
             delete (window as any).AndroidNative
             mockIsAppMode.value = false

@@ -86,10 +86,12 @@ export function usePortForward() {
   }
 
   async function registerPort(port: number, name?: string, protocol?: string, host?: string) {
-    await apiPost('/api/proxy/ports', { port, host: host || '', name: name || '', protocol: protocol || 'http' })
-    // Register with Android native layer
+    const result = await apiPost<{ localPort: number }>('/api/proxy/ports', { port, host: host || '', name: name || '', protocol: protocol || 'http' })
+    const localPort = result?.localPort ?? port
+    // Register with Android native layer: pass localPort, targetPort, host
     if (isAppMode.value) {
-      ;(window as any).AndroidNative?.addForwardedPort(port, host || '')
+      console.log('[PortForward] registerPort: localPort=' + localPort + ', targetPort=' + port + ', host=' + (host || ''))
+      ;(window as any).AndroidNative?.addForwardedPort(localPort, port, host || '')
     }
     // Silent refresh: don't flicker the port list with loading state
     await Promise.all([loadPorts(true), loadSSHInfo()])
@@ -97,10 +99,10 @@ export function usePortForward() {
 
   async function updatePort(localPort: number, port: number, host: string, name: string, protocol: string) {
     await apiPut('/api/proxy/ports', { localPort, port, host, name, protocol })
-    // Re-sync native layer after update
+    // Re-sync native layer after update: remove old, add new with correct localPort
     if (isAppMode.value) {
       ;(window as any).AndroidNative?.removeForwardedPort(localPort)
-      ;(window as any).AndroidNative?.addForwardedPort(port, host || '')
+      ;(window as any).AndroidNative?.addForwardedPort(localPort, port, host || '')
     }
     await Promise.all([loadPorts(true), loadSSHInfo()])
   }
@@ -130,7 +132,7 @@ export function usePortForward() {
       return
     }
     for (const p of ports.value) {
-      ;(window as any).AndroidNative?.addForwardedPort(p.localPort, p.host || '')
+      ;(window as any).AndroidNative?.addForwardedPort(p.localPort, p.port, p.host || '')
     }
   }
 
@@ -338,14 +340,16 @@ export function usePortForward() {
   }
 
   /** Open a forwarded port — in app mode opens sandbox browser, otherwise window.open */
-  function openPort(localPort: number, protocol?: string) {
+  function openPort(localPort: number, protocol?: string, host?: string) {
+    console.log('[PortForward] openPort: localPort=' + localPort + ', protocol=' + protocol + ', host=' + (host || ''))
     if (isAppMode.value) {
       const native = (window as any).AndroidNative
+      const hostArg = host || ''
       // Prefer sandbox browser (isolated process), fall back to external browser
       if (native?.openInSandbox) {
-        native.openInSandbox(localPort, protocol === 'https' ? 'https' : 'http', '')
+        native.openInSandbox(localPort, protocol === 'https' ? 'https' : 'http', hostArg)
       } else if (native?.openInBrowser) {
-        native.openInBrowser(localPort, protocol === 'https' ? 'https' : 'http', '')
+        native.openInBrowser(localPort, protocol === 'https' ? 'https' : 'http', hostArg)
       }
     } else {
       window.open(buildPortUrl(localPort, protocol), '_blank')
@@ -353,11 +357,11 @@ export function usePortForward() {
   }
 
   /** Open a forwarded port in external/system browser */
-  function openInExternalBrowser(localPort: number, protocol?: string) {
+  function openInExternalBrowser(localPort: number, protocol?: string, host?: string) {
     if (isAppMode.value) {
       const native = (window as any).AndroidNative
       if (native?.openInBrowser) {
-        native.openInBrowser(localPort, protocol === 'https' ? 'https' : 'http', '')
+        native.openInBrowser(localPort, protocol === 'https' ? 'https' : 'http', host || '')
       }
     } else {
       window.open(buildPortUrl(localPort, protocol), '_blank')
@@ -367,16 +371,18 @@ export function usePortForward() {
   /**
    * Ensure a port is registered for forwarding, registering it if needed,
    * and wait for it to appear in the ports list (max 5s).
+   * Returns the localPort that was assigned (may differ from target port).
    * Used by localhost URL tag click handler to auto-setup port forwarding.
    */
-  async function ensurePortRegistered(port: number, protocol: string): Promise<void> {
-    const exists = ports.value.some(p => p.port === port)
-    if (exists) return
+  async function ensurePortRegistered(port: number, protocol: string): Promise<number> {
+    const existing = ports.value.find(p => p.port === port)
+    if (existing) return existing.localPort
     await registerPort(port, '', protocol)
     // Wait for port to appear in the list (max 5s, poll every 200ms)
     for (let i = 0; i < 25; i++) {
       await new Promise(r => setTimeout(r, 200))
-      if (ports.value.some(p => p.port === port)) return
+      const found = ports.value.find(p => p.port === port)
+      if (found) return found.localPort
     }
     throw new Error(`Port ${port} did not appear in forwarding list after 5s`)
   }

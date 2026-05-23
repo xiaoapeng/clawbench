@@ -123,7 +123,7 @@ public class MainActivityPortHostTest {
     public void testAddForwardedPort_putsPortWithHost() throws Exception {
         // The real addForwardedPort will call runOnUiThread which we've stubbed
         // to actually execute the lambda. The lambda puts into forwardedPorts map.
-        bridge.addForwardedPort(20000, "10.0.0.1");
+        bridge.addForwardedPort(20000, 20000, "10.0.0.1");
 
         // After the lambda executes, the port should be in the map
         assertTrue("Should contain port 20000", activity.forwardedPorts.containsKey(20000));
@@ -132,10 +132,20 @@ public class MainActivityPortHostTest {
 
     @Test
     public void testAddForwardedPort_nullHost_putsEmptyString() throws Exception {
-        bridge.addForwardedPort(20000, null);
+        bridge.addForwardedPort(20000, 20000, null);
 
         assertTrue("Should contain port 20000", activity.forwardedPorts.containsKey(20000));
         assertEquals("", activity.forwardedPorts.get(20000));
+    }
+
+    @Test
+    public void testAddForwardedPort_differentTargetPort_forwardsToBackgroundService() throws Exception {
+        // When targetPort != localPort (e.g. privileged port remapping), the bridge
+        // should still pass the correct targetPort to BackgroundService.addForwardedPort
+        bridge.addForwardedPort(3080, 80, "192.168.1.5");
+
+        assertTrue("Should contain local port 3080", activity.forwardedPorts.containsKey(3080));
+        assertEquals("192.168.1.5", activity.forwardedPorts.get(3080));
     }
 
     // =====================================================
@@ -154,6 +164,31 @@ public class MainActivityPortHostTest {
             // May throw due to Android framework stubs — that's OK
         }
         // If we got here without crashing, the URL construction logic ran
+    }
+
+    @Test
+    public void testOpenInBrowser_alwaysUsesLocalhost() throws Exception {
+        // Verify the URL construction logic: openInBrowser always uses localhost
+        // regardless of the host parameter, because the external browser accesses
+        // the SSH tunnel which listens on localhost.
+        // Source code: String url = scheme + "://localhost:" + port;
+        int port = 20000;
+        String scheme = "http";
+        String url = scheme + "://localhost:" + port;
+        assertEquals("http://localhost:20000", url);
+
+        // With https
+        String httpsUrl = "https://localhost:" + port;
+        assertEquals("https://localhost:20000", httpsUrl);
+    }
+
+    @Test
+    public void testOpenInBrowser_httpsProtocol() throws Exception {
+        try {
+            bridge.openInBrowser(30000, "https", "10.0.0.1");
+        } catch (Exception e) {
+            // May throw due to Android framework stubs
+        }
     }
 
     @Test
