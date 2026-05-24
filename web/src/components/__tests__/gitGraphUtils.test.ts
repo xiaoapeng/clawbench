@@ -207,10 +207,10 @@ describe('02-single-merge', () => {
     expect(mergeIn.toLane).toBe(0)
   })
 
-  it('generates correct number of lines (VERT=1 path, FORK=1 path, MERGE-IN=2 paths)', () => {
+  it('generates correct number of lines (VERT=1 path, FORK=2 paths, MERGE-IN=2 paths)', () => {
     const { lines } = computeGraphData(SINGLE_MERGE, ROW_HEIGHT, undefined) as any
-    // 5 VERT + 1 FORK + 2 MERGE-IN = 8 line paths
-    expect(lines).toHaveLength(8)
+    // 5 VERT + 2 FORK (vert+bezier) + 2 MERGE-IN = 9 line paths
+    expect(lines).toHaveLength(9)
   })
 })
 
@@ -503,7 +503,7 @@ describe('smooth bezier for cross-lane connections', () => {
     expect(forkBeziers.length).toBeGreaterThanOrEqual(3)
   })
 
-  it('fork bezier uses childLane color for visual consistency', () => {
+  it('fork bezier uses parentLane color (the merged branch)', () => {
     // Single merge: merge commit on lane 0, feature on lane 1
     const { lines } = computeGraphData(SINGLE_MERGE, ROW_HEIGHT, undefined) as any
 
@@ -514,11 +514,11 @@ describe('smooth bezier for cross-lane connections', () => {
       return l.path.startsWith('M20,')
     })
 
-    // The fork bezier should use childLane color (lane 0 = blue)
-    // not parentLane color (lane 1 = orange)
+    // The fork bezier should use parentLane color (lane 1 = orange)
+    // because the line represents the branch being merged in
     for (const fb of forkBeziers) {
-      expect(fb.lane).toBe(0) // childLane, not parentLane
-      expect(fb.color).toBe('#4a90d9') // laneColor(0) = blue
+      expect(fb.lane).toBe(1) // parentLane = feature branch lane
+      expect(fb.color).toBe('#e67e22') // laneColor(1) = orange
     }
   })
 

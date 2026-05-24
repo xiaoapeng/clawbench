@@ -976,6 +976,11 @@ describe('line lane property matches actual X position', () => {
         if (!nums || nums.length < 4) continue
         const startX = parseFloat(nums[0])
         const endX = parseFloat(nums[nums.length - 2])
+        // Skip pure vertical lines (startX === endX) — FORK vertical stubs
+        // carry the merged branch's lane but are drawn at the child's X.
+        // Only check cross-lane lines (bezier / diagonal) where lane must
+        // match at least one endpoint.
+        if (Math.abs(startX - endX) < 1) continue
         const startLane = laneFromX(startX)
         const endLane = laneFromX(endX)
         // The line's lane property should match either its start or end X position

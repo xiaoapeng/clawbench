@@ -353,18 +353,43 @@ export function computeGraphData(commits, rowHeight, previousShaToLane) {
         })
       } else if (pi > 0) {
         // Cross-lane fork: merge commit's non-first parent (the branch tip).
-        // Single smooth bezier curve regardless of lane gap.
-        const fromX = laneCx(childLane)
-        const fromY = childCy + 5
-        const toX = laneCx(parentLane)
-        const toY = parentCy - 5
-        const dy = toY - fromY
-        const cp1Y = fromY + dy * 0.4
-        const cp2Y = fromY + dy * 0.6
+        // Mirror of merge-in: short vertical line from the child node, then a
+        // smooth S-curve bezier to the parent lane, then a vertical line to the
+        // parent.  This is the exact mirror of merge-in's (vertical + bezier)
+        // structure, so both look equally smooth.
+        // Color uses the parent lane (the branch being merged in), not the child
+        // lane, so the line visually belongs to the merged branch.
+        const childX = laneCx(childLane)
+        const parentX = laneCx(parentLane)
+        const childBottom = childCy + 5
+        const parentTop = parentCy - 5
+
+        // Mirror of merge-in: vertical line goes from child down to one row
+        // below, then bezier takes over (merge-in: vertical to parentRowTop, then
+        // bezier; fork: vertical to childRowBottom, then bezier).
+        const childRowBottom = (row + 1) * rowHeight
+        const bezierFromY = childRowBottom
+
+        // Draw vertical line from child to one row below
+        if (bezierFromY > childBottom) {
+          lines.push({
+            path: `M${childX},${childBottom} L${childX},${bezierFromY}`,
+            color: laneColor(parentLane),
+            lane: parentLane,
+          })
+        }
+
+        // Short bezier from child lane to parent lane — control points
+        // mirror merge-in: cp1 near start (stays on childX), cp2 near end
+        // (stays on parentX), keeping the curve tangential to vertical at
+        // both ends.
+        const dy = parentTop - bezierFromY
+        const cp1Y = bezierFromY + dy * 0.25
+        const cp2Y = parentTop - dy * 0.25
         lines.push({
-          path: `M${fromX},${fromY} C${fromX},${cp1Y} ${toX},${cp2Y} ${toX},${toY}`,
-          color: laneColor(childLane),
-          lane: childLane,
+          path: `M${childX},${bezierFromY} C${childX},${cp1Y} ${parentX},${cp2Y} ${parentX},${parentTop}`,
+          color: laneColor(parentLane),
+          lane: parentLane,
         })
       } else {
         // Cross-lane merge-in: child's first parent is on a different lane.
