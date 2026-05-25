@@ -146,6 +146,8 @@ export default {
       viewDetails: 'View details',
       speaking: 'Speaking',
       readAloud: 'Read',
+      summaryViewOriginal: 'View Original',
+      summaryViewSummary: 'View Summary',
       deepThinking: 'Thinking',
     },
     speech: {
@@ -202,6 +204,8 @@ export default {
       repeat: 'Repeat:',
       prompt: 'Prompt:',
       cancelled: 'Cancelled',
+      summaryViewOriginal: 'AI summarized · View original',
+      summaryViewSummary: 'View summary',
       loading: 'Loading...',
       pause: 'Disable',
       resume: 'Enable',
@@ -369,6 +373,8 @@ export default {
       allExecutionsDeleted: 'All execution records cleared',
       clearAll: 'Clear all',
       completed: 'Execution completed',
+      tabOriginal: 'Original',
+      tabSummary: 'Summary',
     },
   },
   file: {

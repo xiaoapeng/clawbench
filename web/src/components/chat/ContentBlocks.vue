@@ -1,5 +1,11 @@
 <template>
   <div class="content-blocks">
+    <!-- Summary mode: render summary as a single text block -->
+    <template v-if="showingSummary && summary">
+      <div v-html="renderTextBlock(summary, msgId, 0, false)"></div>
+    </template>
+    <!-- Original content mode -->
+    <template v-else>
     <template v-for="(block, bi) in blocks" :key="bi">
       <!-- Thinking block -->
       <div v-if="block.type === 'thinking'" class="chat-thinking" @click.stop="handleThinkingClick(block)">
@@ -82,10 +88,16 @@
       <!-- Text block: streaming uses throttled render to avoid UI freeze -->
       <div v-else-if="block.type === 'text'" v-html="getBlockHtml(bi, block)"></div>
     </template>
+    </template>
     <!-- Loading dots while AI is still streaming (not when cancelled) -->
     <div v-if="streaming && !cancelled" class="placeholder-dots"><span></span><span></span><span></span></div>
     <!-- Cancelled marker -->
     <div v-if="cancelled" class="chat-cancelled-mark">{{ t('chat.contentBlocks.cancelled') }}</div>
+    <!-- Summary toggle banner -->
+    <div v-if="summary && !streaming" class="summary-banner" @click="emit('toggle-summary')">
+      <template v-if="showingSummary">{{ t('chat.contentBlocks.summaryViewOriginal') }}</template>
+      <template v-else>{{ t('chat.contentBlocks.summaryViewSummary') }}</template>
+    </div>
   </div>
 </template>
 
@@ -150,6 +162,8 @@ const props = defineProps({
   blockAskQuestions: { type: Object, default: () => ({}) },
   streaming: { type: Boolean, default: false },
   cancelled: { type: Boolean, default: false },
+  summary: { type: String, default: null },
+  showingSummary: { type: Boolean, default: false },
   // Render functions
   renderTextBlock: { type: Function, required: true },
   formatToolInput: { type: Function, required: true },
@@ -164,7 +178,7 @@ const props = defineProps({
   active: { type: Boolean, default: true },
 })
 
-const emit = defineEmits(['toggle-tool', 'show-tool-detail', 'show-thinking-detail', 'task-card-click', 'send-message', 'render-flush'])
+const emit = defineEmits(['toggle-tool', 'show-tool-detail', 'show-thinking-detail', 'task-card-click', 'send-message', 'render-flush', 'toggle-summary'])
 
 // Key helper: use msgId if available, otherwise msgIndex
 function key(bi) {
@@ -321,6 +335,10 @@ onUnmounted(() => {
   border-radius: 4px;
   margin-top: 4px;
 }
+
+
+
+
 
 .chat-error-card {
   display: flex;
