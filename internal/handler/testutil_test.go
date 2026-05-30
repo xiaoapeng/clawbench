@@ -83,7 +83,6 @@ func setupTestEnv(t *testing.T) (*testEnv, func()) {
 			backend TEXT NOT NULL DEFAULT 'claude',
 			streaming INTEGER NOT NULL DEFAULT 0,
 			indexed INTEGER NOT NULL DEFAULT 0,
-			deleted INTEGER NOT NULL DEFAULT 0,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		);
 		CREATE TABLE IF NOT EXISTS chat_sessions (
@@ -187,6 +186,11 @@ func setupTestEnv(t *testing.T) (*testEnv, func()) {
 	`)
 	if err != nil {
 		t.Fatalf("failed to create tables: %v", err)
+	}
+
+	// Create agent store tables (agents + agent_api_keys)
+	if _, err := db.Exec(service.AgentDDL); err != nil {
+		t.Fatalf("failed to create agent tables: %v", err)
 	}
 
 	service.DB = db

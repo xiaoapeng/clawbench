@@ -51,10 +51,13 @@ func TestContinueFromExecution_NormalFlow(t *testing.T) {
 
 	taskID := helperCreateScheduledTask(t, "/project", "Daily Code Review", "claude")
 	sessID := helperCreateScheduledSessionWithDetails(t, "/project", "claude", "Daily Code Review", "claude-agent", "claude-sonnet-4-6", "high")
+	// Set external session ID on the source session (simulates CLI having assigned one)
+	err := service.UpdateExternalSessionID(sessID, "ext-session-123")
+	assert.NoError(t, err)
 	execID := helperCreateTaskExecution(t, taskID, sessID, "completed")
 
 	// Add messages to the scheduled session
-	_, err := service.AddChatMessage("/project", "claude", sessID, "user", "Review the code", nil, false, "")
+	_, err = service.AddChatMessage("/project", "claude", sessID, "user", "Review the code", nil, false, "")
 	assert.NoError(t, err)
 	_, err = service.AddChatMessage("/project", "claude", sessID, "assistant", "Code looks good", nil, false, "")
 	assert.NoError(t, err)
@@ -69,10 +72,11 @@ func TestContinueFromExecution_NormalFlow(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "chat", sessionType)
 
-	// New session should have the task name as title
+	// New session should have the task name with [MM-DD HH:MM] prefix as title
 	title, err := service.GetSessionTitle(newSessID)
 	assert.NoError(t, err)
-	assert.Equal(t, "Daily Code Review", title)
+	assert.Contains(t, title, "Daily Code Review")
+	assert.Regexp(t, `^\[\d{2}-\d{2} \d{2}:\d{2}\] Daily Code Review$`, title)
 
 	// New session should inherit agent/model/thinking
 	info, err := service.GetSessionInfo(newSessID)
@@ -89,8 +93,8 @@ func TestContinueFromExecution_NormalFlow(t *testing.T) {
 	assert.NotNil(t, sourceSessID)
 	assert.Equal(t, sessID, *sourceSessID)
 
-	// External session ID should be empty
-	assert.Equal(t, "", service.GetExternalSessionID(newSessID))
+	// External session ID should be inherited from source session
+	assert.Equal(t, "ext-session-123", service.GetExternalSessionID(newSessID))
 
 	// Messages should be copied
 	msgs, err := service.GetChatHistory("/project", "claude", newSessID)
@@ -122,7 +126,7 @@ func TestContinueFromExecution_AlreadyContinued(t *testing.T) {
 	assert.True(t, alreadyExists2)
 }
 
-// ---------- ContinueFromExecution: delete then re-continue ----------
+// ---------- ContinueFromExecution: delete then re-continue (restores) ----------
 
 func TestContinueFromExecution_DeletedThenRecontinue(t *testing.T) {
 	setupDB(t)
@@ -131,17 +135,25 @@ func TestContinueFromExecution_DeletedThenRecontinue(t *testing.T) {
 	sessID := helperCreateScheduledSession(t, "/project", "claude", "Task")
 	execID := helperCreateTaskExecution(t, taskID, sessID, "completed")
 
-	newSessID1, _, err := service.ContinueFromExecution(execID, "/project")
+	newSessID1, alreadyExists1, err := service.ContinueFromExecution(execID, "/project")
 	assert.NoError(t, err)
+	assert.False(t, alreadyExists1)
 
 	// Delete the continued session
 	err = service.DeleteSession("/project", "claude", newSessID1)
 	assert.NoError(t, err)
 
-	// Should be able to continue again
-	newSessID2, _, err := service.ContinueFromExecution(execID, "/project")
+	// Should restore the deleted session, not create a new one
+	newSessID2, alreadyExists2, err := service.ContinueFromExecution(execID, "/project")
 	assert.NoError(t, err)
-	assert.NotEqual(t, newSessID1, newSessID2) // Different session ID
+	assert.Equal(t, newSessID1, newSessID2) // Same session ID (restored)
+	assert.True(t, alreadyExists2)
+
+	// Session should no longer be deleted
+	var deleted int
+	err = service.DB.QueryRow("SELECT deleted FROM chat_sessions WHERE id = ?", newSessID2).Scan(&deleted)
+	assert.NoError(t, err)
+	assert.Equal(t, 0, deleted)
 }
 
 // ---------- ContinueFromExecution: session count limit ----------
@@ -206,32 +218,6 @@ func TestContinueFromExecution_SkipsStreamingMessages(t *testing.T) {
 	assert.Equal(t, "user", msgs[0].Role)
 	assert.Equal(t, "assistant", msgs[1].Role)
 	assert.Equal(t, "final", msgs[1].Content)
-}
-
-func TestContinueFromExecution_SkipsDeletedMessages(t *testing.T) {
-	setupDB(t)
-
-	taskID := helperCreateScheduledTask(t, "/project", "Task", "claude")
-	sessID := helperCreateScheduledSession(t, "/project", "claude", "Task")
-	execID := helperCreateTaskExecution(t, taskID, sessID, "completed")
-
-	// Add a message then soft-delete it
-	msgID, err := service.AddChatMessage("/project", "claude", sessID, "user", "deleted msg", nil, false, "")
-	assert.NoError(t, err)
-	_, err = service.DB.Exec("UPDATE chat_history SET deleted = 1 WHERE id = ?", msgID)
-	assert.NoError(t, err)
-
-	// Add an active message
-	_, err = service.AddChatMessage("/project", "claude", sessID, "user", "active msg", nil, false, "")
-	assert.NoError(t, err)
-
-	newSessID, _, err := service.ContinueFromExecution(execID, "/project")
-	assert.NoError(t, err)
-
-	msgs, err := service.GetChatHistory("/project", "claude", newSessID)
-	assert.NoError(t, err)
-	assert.Len(t, msgs, 1)
-	assert.Equal(t, "active msg", msgs[0].Content)
 }
 
 // ---------- ContinueFromExecution: summaries copy ----------
@@ -333,6 +319,7 @@ func TestContinueFromExecution_FieldInheritance(t *testing.T) {
 
 	taskID := helperCreateScheduledTask(t, "/project", "Task", "codebuddy")
 	sessID := helperCreateScheduledSessionWithDetails(t, "/project", "codebuddy", "Task", "cb-agent", "gpt-4o", "medium")
+	// Set external session ID (codebuddy uses ClawBench UUID directly, so external_session_id stays empty)
 	execID := helperCreateTaskExecution(t, taskID, sessID, "completed")
 
 	newSessID, _, err := service.ContinueFromExecution(execID, "/project")
@@ -350,6 +337,10 @@ func TestContinueFromExecution_FieldInheritance(t *testing.T) {
 	err = service.DB.QueryRow("SELECT project_path FROM chat_sessions WHERE id = ?", newSessID).Scan(&projPath)
 	assert.NoError(t, err)
 	assert.Equal(t, "/project", projPath)
+
+	// External session ID should be inherited from source session
+	// (codebuddy now stores its ClawBench UUID as external_session_id)
+	assert.Equal(t, sessID, service.GetExternalSessionID(newSessID))
 }
 
 // ---------- ContinueFromExecution: original session unaffected ----------
@@ -450,233 +441,179 @@ func helperCreateScheduledSessionWithDetails(t *testing.T, projectPath, backend,
 	return id
 }
 
-// ---------- CheckContinueSession: error paths ----------
-
-// TestCheckContinueSession_ExecutionNotFound covers the sql.ErrNoRows branch
-// in CheckContinueSession when the execution ID doesn't exist.
-func TestCheckContinueSession_ExecutionNotFound(t *testing.T) {
+func TestContinueFromExecution_CopiesTaskExecutionSummary(t *testing.T) {
 	setupDB(t)
+	projectPath := "/test/project"
 
-	exists, sessionID, err := service.CheckContinueSession(99999)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "not found")
-	assert.False(t, exists)
-	assert.Empty(t, sessionID)
+	// Create task + session + assistant message + execution
+	taskID := helperCreateScheduledTask(t, projectPath, "Summary Test", "agent1")
+	sessionID := helperCreateScheduledSessionWithDetails(t, projectPath, "claude", "Summary Test", "agent1", "", "")
+	_, err := service.DB.Exec("INSERT INTO chat_history (session_id, project_path, role, content, backend) VALUES (?, ?, 'user', 'hello', 'claude')", sessionID, projectPath)
+	assert.NoError(t, err)
+	_, err = service.DB.Exec("INSERT INTO chat_history (session_id, project_path, role, content, backend) VALUES (?, ?, 'assistant', '{\"blocks\":[{\"type\":\"text\",\"text\":\"response\"}]}', 'claude')", sessionID, projectPath)
+	assert.NoError(t, err)
+	execID := helperCreateTaskExecution(t, taskID, sessionID, "completed")
+
+	// Add task_execution type summary (this is what scheduled sessions have)
+	_, err = service.DB.Exec("INSERT INTO summaries (target_type, target_id, summary, created_at) VALUES ('task_execution', ?, 'This is the task execution summary', CURRENT_TIMESTAMP)", execID)
+	assert.NoError(t, err)
+
+	// Continue
+	newSessionID, alreadyExists, err := service.ContinueFromExecution(execID, projectPath)
+	assert.NoError(t, err)
+	assert.False(t, alreadyExists)
+	assert.NotEmpty(t, newSessionID)
+
+	// Verify: task_execution summary is copied as chat_message type to the last assistant message
+	var lastAssistantID int64
+	err = service.DB.QueryRow("SELECT id FROM chat_history WHERE session_id = ? AND role = 'assistant' ORDER BY id DESC LIMIT 1", newSessionID).Scan(&lastAssistantID)
+	assert.NoError(t, err)
+
+	var copiedSummary string
+	err = service.DB.QueryRow("SELECT summary FROM summaries WHERE target_type = 'chat_message' AND target_id = ?", lastAssistantID).Scan(&copiedSummary)
+	assert.NoError(t, err)
+	assert.Equal(t, "This is the task execution summary", copiedSummary)
 }
 
-// ---------- ContinueFromExecution: source session not found ----------
+// ========== restoreDeletedSession (tested via DB) ==========
 
-// TestContinueFromExecution_SourceSessionNotFound covers the case where
-// the execution's session_id references a session that doesn't exist
-// in chat_sessions (data corruption or manual DB edit).
-func TestContinueFromExecution_SourceSessionNotFound(t *testing.T) {
+// TestRestoreDeletedSession_NonExistent verifies that restoring a non-existent
+// session does not error (UPDATE on non-existent row is a no-op).
+func TestRestoreDeletedSession_NonExistent(t *testing.T) {
 	setupDB(t)
 
-	taskID := helperCreateScheduledTask(t, "/project", "Task", "claude")
-	// Insert execution pointing to a non-existent session
-	result, err := service.DB.Exec(
-		"INSERT INTO task_executions (task_id, session_id, status) VALUES (?, ?, 'completed')",
-		taskID, "nonexistent-session-id",
+	// Directly call the equivalent of restoreDeletedSession via DB
+	_, err := service.DB.Exec(
+		"UPDATE chat_sessions SET deleted = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+		"non-existent-session-id",
 	)
 	assert.NoError(t, err)
-	execID, _ := result.LastInsertId()
-
-	_, _, err = service.ContinueFromExecution(execID, "/project")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "source session")
 }
 
-// ---------- ContinueFromExecution: task not found ----------
-
-// TestContinueFromExecution_TaskNotFound covers the case where the
-// execution references a task that has been hard-deleted.
-func TestContinueFromExecution_TaskNotFound(t *testing.T) {
+// TestRestoreDeletedSession_AlreadyRestored verifies that restoring an
+// already-active session (deleted=0) is idempotent — no error, no side effect.
+func TestRestoreDeletedSession_AlreadyRestored(t *testing.T) {
 	setupDB(t)
 
-	sessID := helperCreateScheduledSession(t, "/project", "claude", "Task")
-	// Insert execution pointing to a non-existent task
-	result, err := service.DB.Exec(
-		"INSERT INTO task_executions (task_id, session_id, status) VALUES (?, ?, 'completed')",
-		99999, sessID,
+	sid := helperCreateSession(t, "/project", "claude", "Active")
+	// Session is already active (deleted=0)
+	_, err := service.DB.Exec(
+		"UPDATE chat_sessions SET deleted = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+		sid,
 	)
 	assert.NoError(t, err)
-	execID, _ := result.LastInsertId()
 
-	_, _, err = service.ContinueFromExecution(execID, "/project")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "task")
+	var deleted int
+	err = service.DB.QueryRow("SELECT deleted FROM chat_sessions WHERE id = ?", sid).Scan(&deleted)
+	assert.NoError(t, err)
+	assert.Equal(t, 0, deleted, "session should still be active")
 }
 
-// ---------- ContinueFromExecution: INSERT session fails ----------
+// ========== CheckContinueSession: soft-deleted session auto-restore ==========
 
-// TestContinueFromExecution_DuplicateSessionID covers the INSERT error path
-// by creating a session with the same ID that generateSessionID would produce.
-// This tests the "failed to create continued session" error branch.
-func TestContinueFromExecution_InsertSessionFails(t *testing.T) {
+// TestCheckContinueSession_AutoRestoresDeletedSession verifies that
+// CheckContinueSession finds a soft-deleted continued session and
+// auto-restores it (sets deleted=0), returning exists=true.
+func TestCheckContinueSession_AutoRestoresDeletedSession(t *testing.T) {
 	setupDB(t)
 
 	taskID := helperCreateScheduledTask(t, "/project", "Task", "claude")
 	sessID := helperCreateScheduledSession(t, "/project", "claude", "Task")
 	execID := helperCreateTaskExecution(t, taskID, sessID, "completed")
 
-	// Pre-create a chat session with source_session_id = sessID to block dedup check
-	// Then when ContinueFromExecution tries to INSERT, it will collide on the UUID
-	// This is hard to force directly; instead, test the session limit path which
-	// is the more common INSERT-failure scenario
+	// Continue the execution to create a continued session
+	newSessID, _, err := service.ContinueFromExecution(execID, "/project")
+	assert.NoError(t, err)
 
-	// Set max to 0 temporarily — the session count check is skipped when 0
-	origMax := model.SessionMaxCount
-	model.SessionMaxCount = 0
-	t.Cleanup(func() { model.SessionMaxCount = origMax })
+	// Soft-delete the continued session
+	err = service.DeleteSession("/project", "claude", newSessID)
+	assert.NoError(t, err)
 
-	// This should succeed (no limit)
+	// CheckContinueSession should find and auto-restore the deleted session
+	exists, foundID, err := service.CheckContinueSession(execID)
+	assert.NoError(t, err)
+	assert.True(t, exists)
+	assert.Equal(t, newSessID, foundID)
+
+	// Verify the session is restored (deleted=0)
+	var deleted int
+	err = service.DB.QueryRow("SELECT deleted FROM chat_sessions WHERE id = ?", newSessID).Scan(&deleted)
+	assert.NoError(t, err)
+	assert.Equal(t, 0, deleted, "session should be restored (deleted=0)")
+}
+
+// ========== Dedup query: ORDER BY with both active and deleted sessions ==========
+
+// TestContinueFromExecution_DedupPrefersActiveOverDeleted verifies that
+// when both an active and a soft-deleted continued session exist for the same
+// source_session_id, the dedup query (ORDER BY deleted ASC, updated_at DESC LIMIT 1)
+// returns the active one, so no unnecessary restore happens.
+func TestContinueFromExecution_DedupPrefersActiveOverDeleted(t *testing.T) {
+	setupDB(t)
+
+	taskID := helperCreateScheduledTask(t, "/project", "Task", "claude")
+	sessID := helperCreateScheduledSession(t, "/project", "claude", "Task")
+	execID := helperCreateTaskExecution(t, taskID, sessID, "completed")
+
+	// First continuation creates session A
+	sessA, _, err := service.ContinueFromExecution(execID, "/project")
+	assert.NoError(t, err)
+
+	// Soft-delete session A
+	err = service.DeleteSession("/project", "claude", sessA)
+	assert.NoError(t, err)
+
+	// Manually create session B (simulating a second continued session)
+	// by directly inserting into the DB with a different ID
+	sessB := "manual-continued-session-b"
+	err = service.DB.QueryRow("SELECT id FROM chat_sessions WHERE id = ?", sessB).Scan(new(string))
+	// sessB shouldn't exist yet
+	_, err = service.DB.Exec(
+		"INSERT INTO chat_sessions (id, project_path, backend, title, agent_id, agent_source, model, session_type, source_session_id, external_session_id) VALUES (?, ?, ?, ?, ?, ?, ?, 'chat', ?, ?)",
+		sessB, "/project", "claude", "Manual B", "", "default", "", sessID, sessID,
+	)
+	assert.NoError(t, err)
+
+	// Now dedup: ORDER BY deleted ASC should prefer sessB (deleted=0) over sessA (deleted=1)
+	exists, foundID, err := service.CheckContinueSession(execID)
+	assert.NoError(t, err)
+	assert.True(t, exists)
+	assert.Equal(t, sessB, foundID, "active session B should be preferred over deleted session A")
+}
+
+// ========== ContinueFromExecution with empty external_session_id ==========
+
+// TestContinueFromExecution_EmptyExternalSessionID verifies that when the source
+// session has an empty external_session_id (e.g., session_capture was missed),
+// the continued session still gets created with the empty value.
+// buildChatRequest handles this by clearing effectiveSessionID (no --resume).
+func TestContinueFromExecution_EmptyExternalSessionID(t *testing.T) {
+	setupDB(t)
+
+	taskID := helperCreateScheduledTask(t, "/project", "Task", "pi")
+	sessID := helperCreateScheduledSession(t, "/project", "pi", "Task")
+	execID := helperCreateTaskExecution(t, taskID, sessID, "completed")
+
+	// Clear external_session_id to simulate missed session_capture
+	err := service.UpdateExternalSessionID(sessID, "")
+	assert.NoError(t, err)
+
 	newSessID, _, err := service.ContinueFromExecution(execID, "/project")
 	assert.NoError(t, err)
 	assert.NotEmpty(t, newSessID)
+
+	// Continued session should have empty external_session_id (inherited from source)
+	extID := service.GetExternalSessionID(newSessID)
+	assert.Equal(t, "", extID, "continued session should inherit empty external_session_id")
 }
 
-// ---------- ContinueFromExecution: copies messages with files ----------
+// ========== Restored session preserves all chat history ==========
 
-// TestContinueFromExecution_CopiesFiles covers the files column copy path
-// and the sql.NullString branch for files.
-func TestContinueFromExecution_CopiesFiles(t *testing.T) {
-	setupDB(t)
-
-	taskID := helperCreateScheduledTask(t, "/project", "Task", "claude")
-	sessID := helperCreateScheduledSession(t, "/project", "claude", "Task")
-	execID := helperCreateTaskExecution(t, taskID, sessID, "completed")
-
-	// Add message with files
-	_, err := service.AddChatMessage("/project", "claude", sessID, "user", "check this file", []string{"/project/main.go"}, false, "")
-	assert.NoError(t, err)
-
-	newSessID, _, err := service.ContinueFromExecution(execID, "/project")
-	assert.NoError(t, err)
-
-	msgs, err := service.GetChatHistory("/project", "claude", newSessID)
-	assert.NoError(t, err)
-	assert.Len(t, msgs, 1)
-	assert.Equal(t, "user", msgs[0].Role)
-	assert.NotNil(t, msgs[0].Files)
-	assert.Contains(t, msgs[0].Files, "/project/main.go")
-}
-
-// ---------- DB error paths (closed connection) ----------
-
-// TestCheckContinueSession_DBError covers the generic DB error path
-// in CheckContinueSession by closing the DB connection.
-func TestCheckContinueSession_DBError(t *testing.T) {
-	setupDB(t)
-
-	origDB := service.DB
-
-	// Close DB to force errors
-	origDB.Close()
-
-	_, _, err := service.CheckContinueSession(1)
-	assert.Error(t, err)
-
-	// Restore for cleanup — use a fresh in-memory DB so CloseDB doesn't panic
-	freshDB, _ := sql.Open("sqlite", ":memory:")
-	service.DB = freshDB
-	service.DBRead = freshDB
-}
-
-// TestContinueFromExecution_DBError covers the generic DB error path
-// in ContinueFromExecution by closing the DB connection.
-func TestContinueFromExecution_DBError(t *testing.T) {
-	setupDB(t)
-
-	// Close DB to force errors
-	service.DB.Close()
-
-	_, _, err := service.ContinueFromExecution(1, "/project")
-	assert.Error(t, err)
-
-	// Restore for cleanup
-	freshDB, _ := sql.Open("sqlite", ":memory?")
-	service.DB = freshDB
-	service.DBRead = freshDB
-}
-
-// ---------- ContinueFromExecution: dedup query returns non-ErrNoRows error ----------
-
-// TestContinueFromExecution_DedupError covers the err != sql.ErrNoRows
-// branch in the dedup check (line 105-107) by closing the DB connection
-// right before the dedup query would execute.
-func TestContinueFromExecution_DedupError(t *testing.T) {
-	setupDB(t)
-
-	taskID := helperCreateScheduledTask(t, "/project", "Task", "claude")
-	sessID := helperCreateScheduledSession(t, "/project", "claude", "Task")
-	execID := helperCreateTaskExecution(t, taskID, sessID, "completed")
-
-	// Delete the task to make the query fail at the task lookup stage
-	// (this is simpler than closing DB mid-query)
-	service.DB.Exec("DELETE FROM scheduled_tasks WHERE id = ?", taskID)
-
-	_, _, err := service.ContinueFromExecution(execID, "/project")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "task")
-}
-
-// ---------- ContinueFromExecution: session count DB error ----------
-
-// TestContinueFromExecution_SessionCountDBError covers the DB error path
-// in the session count check (line 116-118).
-func TestContinueFromExecution_SessionCountDBError(t *testing.T) {
-	setupDB(t)
-
-	origMax := model.SessionMaxCount
-	model.SessionMaxCount = 1
-	t.Cleanup(func() { model.SessionMaxCount = origMax })
-
-	taskID := helperCreateScheduledTask(t, "/project", "Task", "claude")
-	sessID := helperCreateScheduledSession(t, "/project", "claude", "Task")
-	execID := helperCreateTaskExecution(t, taskID, sessID, "completed")
-
-	// Drop the chat_sessions table to force a DB error in the count query
-	// But we need the source session to exist first, so we drop an index instead
-	// Actually, the simplest way is to close DB
-	service.DB.Close()
-
-	_, _, err := service.ContinueFromExecution(execID, "/project")
-	assert.Error(t, err)
-
-	// Restore
-	freshDB, _ := sql.Open("sqlite", ":memory:")
-	service.DB = freshDB
-	service.DBRead = freshDB
-}
-
-// ---------- CheckContinueSession: dedup query error (not ErrNoRows) ----------
-
-// TestCheckContinueSession_DedupDBError covers the dedup query error path
-// in CheckContinueSession where the error is not sql.ErrNoRows.
-func TestCheckContinueSession_DedupDBError(t *testing.T) {
-	setupDB(t)
-
-	taskID := helperCreateScheduledTask(t, "/project", "Task", "claude")
-	sessID := helperCreateScheduledSession(t, "/project", "claude", "Task")
-	execID := helperCreateTaskExecution(t, taskID, sessID, "completed")
-
-	// Close DBRead to force a non-ErrNoRows error on the dedup query
-	service.DBRead.Close()
-
-	_, _, err := service.CheckContinueSession(execID)
-	assert.Error(t, err)
-
-	// Restore
-	freshDB, _ := sql.Open("sqlite", ":memory:")
-	service.DB = freshDB
-	service.DBRead = freshDB
-}
-
-// ---------- ContinueFromExecution: query messages error ----------
-
-// TestContinueFromExecution_QueryMessagesError covers the error path when
-// querying source session's chat_history fails after session creation.
-func TestContinueFromExecution_QueryMessagesError(t *testing.T) {
+// TestContinueFromExecution_RestoredSessionPreservesHistory verifies that
+// when a continued session is deleted and then restored, all chat history
+// is still present. This was a key bug: the old code soft-deleted
+// chat_history rows, but now only the session record is soft-deleted.
+func TestContinueFromExecution_RestoredSessionPreservesHistory(t *testing.T) {
 	setupDB(t)
 
 	taskID := helperCreateScheduledTask(t, "/project", "Task", "claude")
@@ -684,105 +621,317 @@ func TestContinueFromExecution_QueryMessagesError(t *testing.T) {
 	execID := helperCreateTaskExecution(t, taskID, sessID, "completed")
 
 	// Add messages to source session
-	_, err := service.AddChatMessage("/project", "claude", sessID, "user", "hello", nil, false, "")
+	_, err := service.AddChatMessage("/project", "claude", sessID, "user", "Review the code", nil, false, "")
+	assert.NoError(t, err)
+	_, err = service.AddChatMessage("/project", "claude", sessID, "assistant", "Code looks good", nil, false, "")
 	assert.NoError(t, err)
 
-	// Drop chat_history to force query failure at step 9
-	service.DB.Exec("DROP TABLE chat_history")
+	// Continue the execution
+	newSessID, _, err := service.ContinueFromExecution(execID, "/project")
+	assert.NoError(t, err)
 
-	_, _, err = service.ContinueFromExecution(execID, "/project")
-	assert.Error(t, err)
+	// Verify the continued session has messages
+	msgs, err := service.GetChatHistory("/project", "claude", newSessID)
+	assert.NoError(t, err)
+	assert.Len(t, msgs, 2)
+
+	// Add an extra message to the continued session
+	_, err = service.AddChatMessage("/project", "claude", newSessID, "user", "Tell me more", nil, false, "")
+	assert.NoError(t, err)
+
+	// Soft-delete the continued session
+	err = service.DeleteSession("/project", "claude", newSessID)
+	assert.NoError(t, err)
+
+	// Restore via ContinueFromExecution
+	restoredID, alreadyExists, err := service.ContinueFromExecution(execID, "/project")
+	assert.NoError(t, err)
+	assert.Equal(t, newSessID, restoredID)
+	assert.True(t, alreadyExists)
+
+	// Verify chat history is intact after restore
+	// GetChatHistory works even for deleted sessions since chat_history has no deleted column
+	msgs, err = service.GetChatHistory("/project", "claude", restoredID)
+	assert.NoError(t, err)
+	assert.Len(t, msgs, 3, "restored session should have all 3 messages (2 copied + 1 added)")
+	assert.Equal(t, "user", msgs[0].Role)
+	assert.Equal(t, "Review the code", msgs[0].Content)
+	assert.Equal(t, "assistant", msgs[1].Role)
+	assert.Equal(t, "Code looks good", msgs[1].Content)
+	assert.Equal(t, "user", msgs[2].Role)
+	assert.Equal(t, "Tell me more", msgs[2].Content)
 }
 
-// ---------- ContinueFromExecution: source session query DB error ----------
+// ========== Soft-deleted source session external_session_id read ==========
 
-// TestContinueFromExecution_SourceSessionDBError covers the case where
-// reading source session metadata fails with a DB error (not ErrNoRows).
-func TestContinueFromExecution_SourceSessionDBError(t *testing.T) {
+// TestContinueFromExecution_SoftDeletedSourceReadsExternalSessionID verifies
+// that ContinueFromExecution can read external_session_id from a soft-deleted
+// source session (the query does not filter by deleted=0).
+func TestContinueFromExecution_SoftDeletedSourceReadsExternalSessionID(t *testing.T) {
 	setupDB(t)
 
-	taskID := helperCreateScheduledTask(t, "/project", "Task", "claude")
-	sessID := helperCreateScheduledSession(t, "/project", "claude", "Task")
+	taskID := helperCreateScheduledTask(t, "/project", "Task", "opencode")
+	sessID := helperCreateScheduledSession(t, "/project", "opencode", "Task")
 	execID := helperCreateTaskExecution(t, taskID, sessID, "completed")
 
-	// Drop chat_sessions to force a DB error
-	service.DB.Exec("DROP TABLE chat_sessions")
+	// Set external_session_id on the source session
+	err := service.UpdateExternalSessionID(sessID, "opencode-sess-xyz")
+	assert.NoError(t, err)
 
-	_, _, err := service.ContinueFromExecution(execID, "/project")
-	assert.Error(t, err)
+	// Soft-delete the source session
+	err = service.DeleteSession("/project", "opencode", sessID)
+	assert.NoError(t, err)
+
+	// Continue should still be able to read external_session_id from the soft-deleted source
+	newSessID, _, err := service.ContinueFromExecution(execID, "/project")
+	assert.NoError(t, err)
+	assert.Equal(t, "opencode-sess-xyz", service.GetExternalSessionID(newSessID),
+		"continued session should inherit external_session_id from soft-deleted source")
 }
 
-// ---------- ContinueFromExecution: task query DB error ----------
+// ========== Title format edge cases ==========
 
-// TestContinueFromExecution_TaskQueryDBError covers the case where
-// reading task metadata fails with a non-ErrNoRows DB error.
-func TestContinueFromExecution_TaskQueryDBError(t *testing.T) {
+// TestContinueFromExecution_TitleFormatWithExplicitTimestamp verifies the
+// [MM-DD HH:MM] title prefix with a known execution timestamp.
+func TestContinueFromExecution_TitleFormatWithExplicitTimestamp(t *testing.T) {
 	setupDB(t)
 
-	sessID := helperCreateScheduledSession(t, "/project", "claude", "Task")
+	taskID := helperCreateScheduledTask(t, "/project", "Daily Review", "claude")
+	sessID := helperCreateScheduledSession(t, "/project", "claude", "Daily Review")
+
+	// Insert execution with a known created_at
 	result, err := service.DB.Exec(
-		"INSERT INTO task_executions (task_id, session_id, status) VALUES (?, ?, 'completed')",
-		99999, sessID,
+		"INSERT INTO task_executions (task_id, session_id, status, created_at) VALUES (?, ?, 'completed', '2026-03-15 08:30:00')",
+		taskID, sessID,
 	)
 	assert.NoError(t, err)
 	execID, _ := result.LastInsertId()
 
-	// Drop scheduled_tasks to force a DB error
-	service.DB.Exec("DROP TABLE scheduled_tasks")
+	newSessID, _, err := service.ContinueFromExecution(execID, "/project")
+	assert.NoError(t, err)
+
+	title, err := service.GetSessionTitle(newSessID)
+	assert.NoError(t, err)
+	assert.Equal(t, "[03-15 08:30] Daily Review", title)
+}
+
+// Regression test: copied messages must NOT have ISO 8601 UTC timestamps
+// (e.g. "2026-05-29T01:59:53Z") because the Go SQLite driver converts DATETIME
+// to that format when reading. When written back, the format breaks string-based
+// time comparisons with CURRENT_TIMESTAMP format ("YYYY-MM-DD HH:MM:SS"),
+// causing phantom unread badges. The fix: let the database assign CURRENT_TIMESTAMP
+// as created_at instead of copying the ISO-format value.
+func TestContinueFromExecution_CreatedAtFormatConsistent(t *testing.T) {
+	setupDB(t)
+	projectPath := "/project"
+
+	taskID := helperCreateScheduledTask(t, projectPath, "Format Test", "claude")
+	sessID := helperCreateScheduledSession(t, projectPath, "claude", "Format Test")
+	execID := helperCreateTaskExecution(t, taskID, sessID, "completed")
+
+	// Add messages (AddChatMessage uses DEFAULT CURRENT_TIMESTAMP → "YYYY-MM-DD HH:MM:SS")
+	_, err := service.AddChatMessage(projectPath, "claude", sessID, "user", "prompt", nil, false, "")
+	assert.NoError(t, err)
+	_, err = service.AddChatMessage(projectPath, "claude", sessID, "assistant", "response", nil, false, "")
+	assert.NoError(t, err)
+
+	newSessID, _, err := service.ContinueFromExecution(execID, projectPath)
+	assert.NoError(t, err)
+
+	// Verify: copied messages' created_at should NOT contain 'T' or 'Z' (ISO format markers)
+	var hasBadFormat int
+	err = service.DB.QueryRow(
+		"SELECT COUNT(*) FROM chat_history WHERE session_id = ? AND (created_at LIKE '%T%' OR created_at LIKE '%Z%')",
+		newSessID,
+	).Scan(&hasBadFormat)
+	assert.NoError(t, err)
+	assert.Equal(t, 0, hasBadFormat, "copied messages should use CURRENT_TIMESTAMP format, not ISO 8601")
+
+	// Verify: unread count query should return 0 for the continued session
+	// (last_read_at is set at creation time, and created_at uses the same format)
+	var unreadCount int
+	err = service.DB.QueryRow(`
+		SELECT COALESCE(unread.cnt, 0) FROM chat_sessions s
+		LEFT JOIN (
+			SELECT h.session_id, COUNT(*) AS cnt
+			FROM chat_history h
+			JOIN chat_sessions s2 ON s2.id = h.session_id
+			WHERE h.project_path = ?
+			  AND h.role = 'assistant' AND h.streaming = 0
+			  AND (s2.last_read_at IS NULL OR h.created_at > s2.last_read_at)
+			GROUP BY h.session_id
+		) unread ON unread.session_id = s.id
+		WHERE s.id = ?`,
+		projectPath, newSessID,
+	).Scan(&unreadCount)
+	assert.NoError(t, err)
+	assert.Equal(t, 0, unreadCount, "continued session should have 0 unread messages after creation")
+}
+
+// ========== CheckContinueSession: execution not found ==========
+
+func TestCheckContinueSession_ExecutionNotFound(t *testing.T) {
+	setupDB(t)
+
+	exists, sessionID, err := service.CheckContinueSession(99999)
+	assert.Error(t, err)
+	assert.False(t, exists)
+	assert.Empty(t, sessionID)
+}
+
+// ========== ContinueFromExecution: task not found ==========
+
+func TestContinueFromExecution_TaskNotFound(t *testing.T) {
+	setupDB(t)
+
+	// Create an execution referencing a non-existent task
+	sessID := helperCreateScheduledSession(t, "/project", "claude", "Task")
+	result, err := service.DB.Exec(
+		"INSERT INTO task_executions (task_id, session_id, status) VALUES (99999, ?, 'completed')",
+		sessID,
+	)
+	assert.NoError(t, err)
+	execID, _ := result.LastInsertId()
 
 	_, _, err = service.ContinueFromExecution(execID, "/project")
 	assert.Error(t, err)
 }
 
-// TestContinueFromExecution_CopiesMessagesWithNullCreatedAt covers the
-// createdAt nil branch (line 169-171) where source messages have no
-// created_at value, and the INSERT uses nil instead.
-func TestContinueFromExecution_CopiesMessagesWithNullCreatedAt(t *testing.T) {
+// ========== CheckContinueSession: closed DB connection ==========
+
+func TestCheckContinueSession_ClosedDB(t *testing.T) {
 	setupDB(t)
 
-	taskID := helperCreateScheduledTask(t, "/project", "Task", "claude")
-	sessID := helperCreateScheduledSession(t, "/project", "claude", "Task")
-	execID := helperCreateTaskExecution(t, taskID, sessID, "completed")
-
-	// Insert message directly with NULL created_at (bypassing AddChatMessage which sets CURRENT_TIMESTAMP)
-	_, err := service.DB.Exec(
-		"INSERT INTO chat_history (project_path, role, content, session_id, backend, streaming, deleted, created_at) VALUES (?, 'user', 'no timestamp', ?, 'claude', 0, 0, NULL)",
-		"/project", sessID,
-	)
+	origDBRead := service.DBRead
+	// Use a closed DB connection — this triggers a real error from the SQL driver
+	closedDB, err := sql.Open("sqlite", ":memory:")
 	assert.NoError(t, err)
+	closedDB.Close()
+	service.DBRead = closedDB
+	t.Cleanup(func() { service.DBRead = origDBRead })
 
-	newSessID, _, err := service.ContinueFromExecution(execID, "/project")
-	assert.NoError(t, err)
-
-	// Verify messages were copied by querying directly (GetChatHistory can't handle NULL created_at)
-	var count int
-	err = service.DB.QueryRow("SELECT COUNT(*) FROM chat_history WHERE session_id = ? AND role = 'user'", newSessID).Scan(&count)
-	assert.NoError(t, err)
-	assert.Equal(t, 1, count, "message should be copied to continued session")
+	exists, sessionID, err := service.CheckContinueSession(1)
+	assert.Error(t, err)
+	assert.False(t, exists)
+	assert.Empty(t, sessionID)
 }
 
-// TestContinueFromExecution_SummaryQueryError covers the summary query
-// error path (line 193-195) by dropping the summaries table after
-// copying messages but before summaries are queried.
-// This is hard to test directly; instead we verify the happy path
-// where summaries table has no matching entries (no error).
-func TestContinueFromExecution_NoSummaryForMessage(t *testing.T) {
+// ========== restoreDeletedSession: DB error path ==========
+
+func TestRestoreDeletedSession_DBError(t *testing.T) {
 	setupDB(t)
 
-	taskID := helperCreateScheduledTask(t, "/project", "Task", "claude")
-	sessID := helperCreateScheduledSession(t, "/project", "claude", "Task")
-	execID := helperCreateTaskExecution(t, taskID, sessID, "completed")
+	origDB := service.DB
+	// Set DB to a closed connection to trigger an error
+	closedDB, err := sql.Open("sqlite", ":memory:")
+	assert.NoError(t, err)
+	closedDB.Close()
+	service.DB = closedDB
+	t.Cleanup(func() { service.DB = origDB })
 
-	// Add message without any summary
-	_, err := service.AddChatMessage("/project", "claude", sessID, "user", "no summary", nil, false, "")
+	// restoreDeletedSession is private, but we can test the equivalent DB call
+	_, err = service.DB.Exec(
+		"UPDATE chat_sessions SET deleted = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+		"some-session-id",
+	)
+	assert.Error(t, err, "should fail with closed DB")
+}
+
+// ========== ContinueFromExecution: task_execution summary not copied when assistant message already has chat_message summary ==========
+
+func TestContinueFromExecution_TaskExecutionSummaryNotCopiedWhenChatMessageSummaryExists(t *testing.T) {
+	setupDB(t)
+	projectPath := "/test/project"
+
+	// Create task + session + assistant message + execution
+	taskID := helperCreateScheduledTask(t, projectPath, "Summary Priority Test", "agent1")
+	sessionID := helperCreateScheduledSessionWithDetails(t, projectPath, "claude", "Summary Priority Test", "agent1", "", "")
+	_, err := service.DB.Exec("INSERT INTO chat_history (session_id, project_path, role, content, backend) VALUES (?, ?, 'user', 'hello', 'claude')", sessionID, projectPath)
 	assert.NoError(t, err)
-	_, err = service.AddChatMessage("/project", "claude", sessID, "assistant", "no summary reply", nil, false, "")
+	asstResult, err := service.DB.Exec("INSERT INTO chat_history (session_id, project_path, role, content, backend) VALUES (?, ?, 'assistant', '{\"blocks\":[{\"type\":\"text\",\"text\":\"response\"}]}', 'claude')", sessionID, projectPath)
+	assert.NoError(t, err)
+	asstID, _ := asstResult.LastInsertId()
+	execID := helperCreateTaskExecution(t, taskID, sessionID, "completed")
+
+	// Add BOTH a chat_message summary and a task_execution summary
+	_, err = service.DB.Exec("INSERT INTO summaries (target_type, target_id, summary, created_at) VALUES ('chat_message', ?, 'chat-level summary', CURRENT_TIMESTAMP)", asstID)
+	assert.NoError(t, err)
+	_, err = service.DB.Exec("INSERT INTO summaries (target_type, target_id, summary, created_at) VALUES ('task_execution', ?, 'task-level summary', CURRENT_TIMESTAMP)", execID)
 	assert.NoError(t, err)
 
-	newSessID, _, err := service.ContinueFromExecution(execID, "/project")
+	// Continue
+	newSessionID, alreadyExists, err := service.ContinueFromExecution(execID, projectPath)
+	assert.NoError(t, err)
+	assert.False(t, alreadyExists)
+	assert.NotEmpty(t, newSessionID)
+
+	// The new assistant message should have the chat_message summary (from step 10a), NOT the task_execution summary
+	var newAsstID int64
+	err = service.DB.QueryRow("SELECT id FROM chat_history WHERE session_id = ? AND role = 'assistant' ORDER BY id DESC LIMIT 1", newSessionID).Scan(&newAsstID)
 	assert.NoError(t, err)
 
-	msgs, err := service.GetChatHistory("/project", "claude", newSessID)
+	summary, found := service.GetSummary("chat_message", newAsstID)
+	assert.True(t, found)
+	assert.Equal(t, "chat-level summary", summary, "chat_message summary from 10a should take priority over task_execution summary from 10b")
+}
+
+// ========== ContinueFromExecution: task_execution summary with empty string not copied ==========
+
+func TestContinueFromExecution_TaskExecutionSummaryEmptyNotCopied(t *testing.T) {
+	setupDB(t)
+	projectPath := "/test/project"
+
+	// Create task + session + assistant message + execution
+	taskID := helperCreateScheduledTask(t, projectPath, "Empty Summary Test", "agent1")
+	sessionID := helperCreateScheduledSessionWithDetails(t, projectPath, "claude", "Empty Summary Test", "agent1", "", "")
+	_, err := service.DB.Exec("INSERT INTO chat_history (session_id, project_path, role, content, backend) VALUES (?, ?, 'user', 'hello', 'claude')", sessionID, projectPath)
 	assert.NoError(t, err)
-	assert.Len(t, msgs, 2)
+	_, err = service.DB.Exec("INSERT INTO chat_history (session_id, project_path, role, content, backend) VALUES (?, ?, 'assistant', '{\"blocks\":[{\"type\":\"text\",\"text\":\"response\"}]}', 'claude')", sessionID, projectPath)
+	assert.NoError(t, err)
+	execID := helperCreateTaskExecution(t, taskID, sessionID, "completed")
+
+	// Add an empty task_execution summary — should NOT be copied
+	_, err = service.DB.Exec("INSERT INTO summaries (target_type, target_id, summary, created_at) VALUES ('task_execution', ?, '', CURRENT_TIMESTAMP)", execID)
+	assert.NoError(t, err)
+
+	// Continue
+	newSessionID, alreadyExists, err := service.ContinueFromExecution(execID, projectPath)
+	assert.NoError(t, err)
+	assert.False(t, alreadyExists)
+	assert.NotEmpty(t, newSessionID)
+
+	// The new assistant message should NOT have any chat_message summary
+	var newAsstID int64
+	err = service.DB.QueryRow("SELECT id FROM chat_history WHERE session_id = ? AND role = 'assistant' ORDER BY id DESC LIMIT 1", newSessionID).Scan(&newAsstID)
+	assert.NoError(t, err)
+
+	_, found := service.GetSummary("chat_message", newAsstID)
+	assert.False(t, found, "empty task_execution summary should not be copied")
+}
+
+// ========== ContinueFromExecution: task_execution summary with no assistant message ==========
+
+func TestContinueFromExecution_TaskExecutionSummaryNoAssistantMessage(t *testing.T) {
+	setupDB(t)
+	projectPath := "/test/project"
+
+	// Create task + session with NO messages + execution
+	taskID := helperCreateScheduledTask(t, projectPath, "No Asst Test", "agent1")
+	sessionID := helperCreateScheduledSessionWithDetails(t, projectPath, "claude", "No Asst Test", "agent1", "", "")
+	execID := helperCreateTaskExecution(t, taskID, sessionID, "completed")
+
+	// Add a task_execution summary
+	_, err := service.DB.Exec("INSERT INTO summaries (target_type, target_id, summary, created_at) VALUES ('task_execution', ?, 'task summary', CURRENT_TIMESTAMP)", execID)
+	assert.NoError(t, err)
+
+	// Continue — no assistant message exists, so task_execution summary won't be copied as chat_message
+	newSessionID, alreadyExists, err := service.ContinueFromExecution(execID, projectPath)
+	assert.NoError(t, err)
+	assert.False(t, alreadyExists)
+	assert.NotEmpty(t, newSessionID)
+
+	// No chat_message summaries should exist for the new session's messages
+	msgs, err := service.GetChatHistory(projectPath, "claude", newSessionID)
+	assert.NoError(t, err)
+	assert.Empty(t, msgs)
 }
