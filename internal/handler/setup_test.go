@@ -94,8 +94,8 @@ func TestSetupProviders_ReturnsWizardReadyOnly(t *testing.T) {
 
 	// Verify no enterprise providers
 	for _, p := range providers {
-		pMap := p.(map[string]any)
-		id := pMap["id"].(string)
+		pMap, _ := p.(map[string]any)
+		id, _ := pMap["id"].(string)
 		assert.NotEqual(t, "amazon-bedrock", id)
 		assert.NotEqual(t, "azure-openai-responses", id)
 		assert.NotEqual(t, "google-vertex", id)
@@ -118,10 +118,10 @@ func TestSetupProviders_ContainsExpectedProviders(t *testing.T) {
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 
-	providers := resp["providers"].([]any)
+	providers, _ := resp["providers"].([]any)
 	providerIDs := make(map[string]bool)
 	for _, p := range providers {
-		pMap := p.(map[string]any)
+		pMap, _ := p.(map[string]any)
 		providerIDs[pMap["id"].(string)] = true
 	}
 
@@ -145,9 +145,9 @@ func TestSetupProviders_EachHasRequiredFields(t *testing.T) {
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 
-	providers := resp["providers"].([]any)
+	providers, _ := resp["providers"].([]any)
 	for _, p := range providers {
-		pMap := p.(map[string]any)
+		pMap, _ := p.(map[string]any)
 		assert.NotEmpty(t, pMap["id"], "provider should have id")
 		assert.NotEmpty(t, pMap["name"], "provider should have name")
 		assert.NotEmpty(t, pMap["envVar"], "provider should have envVar")
@@ -267,12 +267,12 @@ func TestSetupComplete_UnknownProvider(t *testing.T) {
 	defer teardown()
 
 	body := map[string]any{
-		"provider":         "nonexistent",
-		"api_key":          "test-key",
-		"model":            "test-model",
-		"summarize_model":  "test-summarize-model",
-		"agent_name":       "Test",
-		"agent_id":         "test",
+		"provider":        "nonexistent",
+		"api_key":         "test-key",
+		"model":           "test-model",
+		"summarize_model": "test-summarize-model",
+		"agent_name":      "Test",
+		"agent_id":        "test",
 	}
 	req := newRequest(t, http.MethodPost, "/api/setup/complete", body)
 	withAuthCookie(req, model.SessionToken)
@@ -290,16 +290,16 @@ func TestSetupComplete_CreatesAgent(t *testing.T) {
 	model.AgentList = []*model.Agent{}
 
 	// Clear existing agents in DB
-	service.DB.Exec("DELETE FROM agents")
+	_, _ = service.DB.Exec("DELETE FROM agents")
 
 	body := map[string]any{
-		"provider":         "openai",
-		"custom_url":       "",
-		"api_key":          "sk-test-key-12345",
-		"model":            "gpt-5.5",
-		"summarize_model":  "gpt-4o-mini",
-		"agent_name":       "OpenAI",
-		"agent_id":         "openai",
+		"provider":        "openai",
+		"custom_url":      "",
+		"api_key":         "sk-test-key-12345",
+		"model":           "gpt-5.5",
+		"summarize_model": "gpt-4o-mini",
+		"agent_name":      "OpenAI",
+		"agent_id":        "openai",
 	}
 	req := newRequest(t, http.MethodPost, "/api/setup/complete", body)
 	withAuthCookie(req, model.SessionToken)
@@ -326,7 +326,7 @@ func TestSetupComplete_CreatesAgent(t *testing.T) {
 
 	// Verify API key encrypted in DB
 	var count int
-	service.DB.QueryRow("SELECT COUNT(*) FROM agent_api_keys WHERE agent_id = ? AND provider = ?", "openai", "openai").Scan(&count)
+	_ = service.DB.QueryRow("SELECT COUNT(*) FROM agent_api_keys WHERE agent_id = ? AND provider = ?", "openai", "openai").Scan(&count)
 	assert.Equal(t, 1, count)
 }
 
@@ -335,12 +335,12 @@ func TestSetupComplete_DuplicateAgentID(t *testing.T) {
 	defer teardown()
 
 	body := map[string]any{
-		"provider":         "openai",
-		"api_key":          "sk-test-key",
-		"model":            "gpt-5.5",
-		"summarize_model":  "gpt-4o-mini",
-		"agent_name":       "OpenAI",
-		"agent_id":         "codebuddy", // already exists in test setup
+		"provider":        "openai",
+		"api_key":         "sk-test-key",
+		"model":           "gpt-5.5",
+		"summarize_model": "gpt-4o-mini",
+		"agent_name":      "OpenAI",
+		"agent_id":        "codebuddy", // already exists in test setup
 	}
 	req := newRequest(t, http.MethodPost, "/api/setup/complete", body)
 	withAuthCookie(req, model.SessionToken)
@@ -469,7 +469,7 @@ func TestSetupModels_OpenAIProviderHTTPFetch(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{
+		_, _ = w.Write([]byte(`{
 			"data": [
 				{"id": "gpt-4o", "name": "GPT-4o", "created": 1700000000},
 				{"id": "gpt-4o-mini", "created": 1700000001}
@@ -478,12 +478,11 @@ func TestSetupModels_OpenAIProviderHTTPFetch(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// Use a provider with ModelsEndpoint pointing to our mock
-	// NOTE: custom_url now returns empty model list, so we test the built-in provider path instead
+	// Built-in provider (no custom_url) should return models from the known list.
+	// custom_url mode always returns empty models — tested separately.
 	body := map[string]any{
-		"provider":   "openai",
-		"custom_url": server.URL + "/chat/completions",
-		"api_key":    "test-key",
+		"provider": "openai",
+		"api_key":  "test-key",
 	}
 	req := newRequest(t, http.MethodPost, "/api/setup/models", body)
 	withAuthCookie(req, model.SessionToken)
@@ -494,9 +493,10 @@ func TestSetupModels_OpenAIProviderHTTPFetch(t *testing.T) {
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 
-	// Custom URL mode now returns empty model list
-	models := resp["models"].([]any)
-	assert.Empty(t, models, "custom URL mode should return empty model list")
+	models, _ := resp["models"].([]any)
+	assert.NotEmpty(t, models, "should have models from known list")
+	hint := resp["summarize_model_hint"]
+	assert.NotEmpty(t, hint)
 }
 
 // TestSetupModels_KnownModelsFields tests that KnownModels entries have expected fields.
@@ -517,11 +517,11 @@ func TestSetupModels_KnownModelsFields(t *testing.T) {
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 
-	models := resp["models"].([]any)
+	models, _ := resp["models"].([]any)
 	require.NotEmpty(t, models)
 
 	// Check first model has expected fields
-	first := models[0].(map[string]any)
+	first, _ := models[0].(map[string]any)
 	assert.NotEmpty(t, first["id"])
 	assert.NotEmpty(t, first["name"])
 	_, hasCreated := first["created"]
@@ -539,7 +539,7 @@ func TestSetupModels_InvalidJSON(t *testing.T) {
 	_, teardown := setupAgentTestEnv(t)
 	defer teardown()
 
-	req := httptest.NewRequest(http.MethodPost, "/api/setup/models", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/setup/models", http.NoBody)
 	req.Header.Set("Content-Type", "application/json")
 	withAuthCookie(req, model.SessionToken)
 	w := callHandler(ServeSetupModels, req)
@@ -598,7 +598,7 @@ func TestSetupVerify_InvalidJSON(t *testing.T) {
 	_, teardown := setupAgentTestEnv(t)
 	defer teardown()
 
-	req := httptest.NewRequest(http.MethodPost, "/api/setup/verify", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/setup/verify", http.NoBody)
 	req.Header.Set("Content-Type", "application/json")
 	withAuthCookie(req, model.SessionToken)
 	w := callHandler(ServeSetupVerify, req)
@@ -615,12 +615,12 @@ func TestSetupComplete_EmptyProviderEmptyCustomURL(t *testing.T) {
 	defer teardown()
 
 	body := map[string]any{
-		"provider":    "",
-		"custom_url":  "",
-		"api_key":     "test-key",
-		"model":       "gpt-4o",
-		"agent_name":  "Test",
-		"agent_id":    "test-empty",
+		"provider":   "",
+		"custom_url": "",
+		"api_key":    "test-key",
+		"model":      "gpt-4o",
+		"agent_name": "Test",
+		"agent_id":   "test-empty",
 	}
 	req := newRequest(t, http.MethodPost, "/api/setup/complete", body)
 	withAuthCookie(req, model.SessionToken)
@@ -638,7 +638,7 @@ func TestSetupComplete_CustomURLDefaultsToOpenAI(t *testing.T) {
 	// Clear agents to simulate fresh setup
 	model.Agents = map[string]*model.Agent{}
 	model.AgentList = []*model.Agent{}
-	service.DB.Exec("DELETE FROM agents")
+	_, _ = service.DB.Exec("DELETE FROM agents")
 
 	body := map[string]any{
 		"provider":        "",
@@ -659,9 +659,9 @@ func TestSetupComplete_CustomURLDefaultsToOpenAI(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	assert.True(t, resp["success"].(bool))
 
-	// Verify agent was created with agent ID as provider (custom URL mode stores agent ID, not "openai")
+	// Verify agent was created with agent ID as provider (custom URL mode stores agent ID as provider)
 	var count int
-	service.DB.QueryRow("SELECT COUNT(*) FROM agent_api_keys WHERE agent_id = ? AND provider = ?", "custom-openai", "custom-openai").Scan(&count)
+	_ = service.DB.QueryRow("SELECT COUNT(*) FROM agent_api_keys WHERE agent_id = ? AND provider = ?", "custom-openai", "custom-openai").Scan(&count)
 	assert.Equal(t, 1, count)
 }
 
@@ -673,7 +673,7 @@ func TestSetupComplete_ConcurrentRequest(t *testing.T) {
 
 	model.Agents = map[string]*model.Agent{}
 	model.AgentList = []*model.Agent{}
-	service.DB.Exec("DELETE FROM agents")
+	_, _ = service.DB.Exec("DELETE FROM agents")
 
 	// Hold the lock to simulate a concurrent request in progress
 	setupCompleteMu.Lock()
@@ -701,7 +701,7 @@ func TestSetupComplete_NoSummarizeModel(t *testing.T) {
 
 	model.Agents = map[string]*model.Agent{}
 	model.AgentList = []*model.Agent{}
-	service.DB.Exec("DELETE FROM agents")
+	_, _ = service.DB.Exec("DELETE FROM agents")
 
 	body := map[string]any{
 		"provider":        "openai",
@@ -728,7 +728,7 @@ func TestSetupComplete_InvalidJSON(t *testing.T) {
 	_, teardown := setupAgentTestEnv(t)
 	defer teardown()
 
-	req := httptest.NewRequest(http.MethodPost, "/api/setup/complete", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/setup/complete", http.NoBody)
 	req.Header.Set("Content-Type", "application/json")
 	withAuthCookie(req, model.SessionToken)
 	w := callHandler(ServeSetupComplete, req)
@@ -798,7 +798,7 @@ func TestFetchModelsFromEndpoint_Success(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{
+		_, _ = w.Write([]byte(`{
 			"data": [
 				{"id": "gpt-4o", "name": "GPT-4o", "created": 1700000000},
 				{"id": "gpt-4o-mini", "created": 1700000001}
@@ -833,7 +833,7 @@ func TestFetchModelsFromEndpoint_InvalidJSON(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`not json`))
+		_, _ = w.Write([]byte(`not json`))
 	}))
 	defer server.Close()
 
@@ -856,7 +856,7 @@ func TestFetchModelsFromEndpoint_NoAPIKey(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"data": [{"id": "model-1"}]}`))
+		_, _ = w.Write([]byte(`{"data": [{"id": "model-1"}]}`))
 	}))
 	defer server.Close()
 
@@ -882,9 +882,7 @@ func TestWritePiConfigFiles(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Override home directory to temp dir
-	origHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpDir)
-	defer os.Setenv("HOME", origHome)
+	t.Setenv("HOME", tmpDir)
 
 	spec := model.FindProviderSpec("openai")
 	require.NotNil(t, spec)
@@ -896,7 +894,7 @@ func TestWritePiConfigFiles(t *testing.T) {
 		CustomURL: "",
 	}
 
-	writePiConfigFiles(req, spec)
+	writePiConfigFiles(req)
 
 	// Verify auth.json was written
 	authPath := filepath.Join(tmpDir, ".pi", "agent", "auth.json")
@@ -928,7 +926,7 @@ func TestAtomicWriteFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "test.txt")
 
-	err := atomicWriteFile(path, []byte("hello world"), 0644)
+	err := atomicWriteFile(path, []byte("hello world"), 0o644)
 	require.NoError(t, err)
 
 	data, err := os.ReadFile(path)
@@ -944,8 +942,8 @@ func TestAtomicWriteFile_Overwrite(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "test.txt")
 
-	require.NoError(t, atomicWriteFile(path, []byte("first"), 0644))
-	require.NoError(t, atomicWriteFile(path, []byte("second"), 0644))
+	require.NoError(t, atomicWriteFile(path, []byte("first"), 0o644))
+	require.NoError(t, atomicWriteFile(path, []byte("second"), 0o644))
 
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
@@ -1078,6 +1076,22 @@ func TestSetupModels_CustomURLWithMockServer(t *testing.T) {
 	_, teardown := setupAgentTestEnv(t)
 	defer teardown()
 
+	// Start a mock /v1/models server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "Bearer test-key", r.Header.Get("Authorization"))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{
+			"data": [
+				{"id": "custom-model-1", "name": "Custom Model 1"},
+				{"id": "custom-model-2-mini", "name": "Custom Model 2 Mini"}
+			]
+		}`))
+	}))
+	defer server.Close()
+
+	// Custom URL mode now returns an empty model list — the user must enter
+	// model IDs manually. Verify the response matches this behavior.
 	body := map[string]any{
 		"provider":   "",
 		"custom_url": "https://api.example.com/v1/chat/completions",
@@ -1092,9 +1106,11 @@ func TestSetupModels_CustomURLWithMockServer(t *testing.T) {
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 
-	// Custom URL mode now returns empty model list
-	models := resp["models"].([]any)
-	assert.Empty(t, models, "custom URL mode should return empty model list")
+	models, _ := resp["models"].([]any)
+	assert.Len(t, models, 0, "custom URL mode should return empty model list")
+
+	hint := resp["summarize_model_hint"]
+	assert.Empty(t, hint, "custom URL mode should return empty summarize_model_hint")
 }
 
 // ---------- ServeSetupVerify with custom URL ----------
@@ -1133,7 +1149,7 @@ func TestSetupComplete_AnthropicProvider(t *testing.T) {
 
 	model.Agents = map[string]*model.Agent{}
 	model.AgentList = []*model.Agent{}
-	service.DB.Exec("DELETE FROM agents")
+	_, _ = service.DB.Exec("DELETE FROM agents")
 
 	origSummarizer := summarizer
 	defer func() { summarizer = origSummarizer }()
@@ -1172,7 +1188,7 @@ func TestSetupComplete_MutexIsUnlockedAfterRequest(t *testing.T) {
 
 	model.Agents = map[string]*model.Agent{}
 	model.AgentList = []*model.Agent{}
-	service.DB.Exec("DELETE FROM agents")
+	_, _ = service.DB.Exec("DELETE FROM agents")
 
 	// First request
 	body1 := map[string]any{
@@ -1212,7 +1228,7 @@ func TestSetupComplete_DefaultAgentID(t *testing.T) {
 
 	model.Agents = map[string]*model.Agent{}
 	model.AgentList = []*model.Agent{}
-	service.DB.Exec("DELETE FROM agents")
+	_, _ = service.DB.Exec("DELETE FROM agents")
 
 	body := map[string]any{
 		"provider":        "openai",
@@ -1241,7 +1257,7 @@ func TestFetchModelsFromEndpoint_EmptyData(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"data": []}`))
+		_, _ = w.Write([]byte(`{"data": []}`))
 	}))
 	defer server.Close()
 
@@ -1262,12 +1278,12 @@ func createFakePiBinary(t *testing.T, exitCode int, output string) string {
 
 	baseDir := filepath.Dir(exePath)
 	piDir := filepath.Join(baseDir, ".clawbench", "pi")
-	require.NoError(t, os.MkdirAll(piDir, 0755))
+	require.NoError(t, os.MkdirAll(piDir, 0o755))
 
 	// Create a script that prints output and exits with the given code
 	script := "#!/bin/sh\necho '" + output + "'\nexit " + fmt.Sprintf("%d", exitCode)
 	piPath := filepath.Join(piDir, "pi")
-	require.NoError(t, os.WriteFile(piPath, []byte(script), 0755))
+	require.NoError(t, os.WriteFile(piPath, []byte(script), 0o755))
 
 	return piPath
 }
@@ -1280,7 +1296,7 @@ func cleanupFakePiBinary(t *testing.T) {
 	}
 	baseDir := filepath.Dir(exePath)
 	piDir := filepath.Join(baseDir, ".clawbench", "pi")
-	os.RemoveAll(piDir)
+	_ = os.RemoveAll(piDir)
 }
 
 // TestSetupVerify_FakePiSuccess tests the full verify path with a fake Pi binary
@@ -1425,9 +1441,9 @@ func TestSetupVerify_FakePiNoEnvVar(t *testing.T) {
 	origRegistry := model.ProviderRegistry
 	model.ProviderRegistry["test-no-envvar"] = model.ProviderSpec{
 		ID: "test-no-envvar", Name: "Test No EnvVar", EnvVar: "",
-		ChatEndpoint: "https://api.example.com/v1/chat/completions",
+		ChatEndpoint:   "https://api.example.com/v1/chat/completions",
 		ModelsEndpoint: "https://api.example.com/v1/models",
-		APIFormat: "openai", SupportsCLI: true, WizardReady: true,
+		APIFormat:      "openai", SupportsCLI: true, WizardReady: true,
 	}
 	defer func() { model.ProviderRegistry = origRegistry }()
 
@@ -1458,9 +1474,7 @@ func TestWritePiConfigFiles_HomeDirError(t *testing.T) {
 	// Actually os.UserHomeDir reads $HOME on Unix, so we can't easily make it fail.
 	// Instead test that writePiConfigFiles works correctly and doesn't crash.
 	tmpDir := t.TempDir()
-	origHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpDir)
-	defer os.Setenv("HOME", origHome)
+	t.Setenv("HOME", tmpDir)
 
 	spec := model.FindProviderSpec("anthropic")
 	require.NotNil(t, spec)
@@ -1472,7 +1486,7 @@ func TestWritePiConfigFiles_HomeDirError(t *testing.T) {
 		CustomURL: "",
 	}
 
-	writePiConfigFiles(req, spec)
+	writePiConfigFiles(req)
 
 	// Verify files were written
 	authPath := filepath.Join(tmpDir, ".pi", "agent", "auth.json")
@@ -1495,13 +1509,16 @@ func TestAtomicWriteFile_WriteToReadOnlyDir(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix file permissions not supported on Windows")
 	}
+	if os.Getuid() == 0 {
+		t.Skip("skipping as root: root bypasses filesystem permissions")
+	}
 	tmpDir := t.TempDir()
 	readOnlyDir := filepath.Join(tmpDir, "readonly")
-	require.NoError(t, os.MkdirAll(readOnlyDir, 0555))
-	defer os.Chmod(readOnlyDir, 0755) // restore for cleanup
+	require.NoError(t, os.MkdirAll(readOnlyDir, 0o555))
+	defer func() { _ = os.Chmod(readOnlyDir, 0o755) }() // restore for cleanup
 
 	path := filepath.Join(readOnlyDir, "test.txt")
-	err := atomicWriteFile(path, []byte("hello"), 0644)
+	err := atomicWriteFile(path, []byte("hello"), 0o644)
 	assert.Error(t, err, "should fail writing to read-only directory")
 }
 
@@ -1517,7 +1534,7 @@ func TestSetupModels_NoModelsEndpoint(t *testing.T) {
 	origRegistry := model.ProviderRegistry
 	model.ProviderRegistry["test-no-endpoint"] = model.ProviderSpec{
 		ID: "test-no-endpoint", Name: "Test No Endpoint", EnvVar: "TEST_KEY",
-		ChatEndpoint: "https://api.example.com/v1/chat/completions",
+		ChatEndpoint:   "https://api.example.com/v1/chat/completions",
 		ModelsEndpoint: "", APIFormat: "openai",
 		SupportsCLI: true, WizardReady: true,
 	}
@@ -1548,7 +1565,7 @@ func TestSetupComplete_WithFakePiBinary(t *testing.T) {
 
 	model.Agents = map[string]*model.Agent{}
 	model.AgentList = []*model.Agent{}
-	service.DB.Exec("DELETE FROM agents")
+	_, _ = service.DB.Exec("DELETE FROM agents")
 
 	body := map[string]any{
 		"provider":        "openai",
@@ -1582,12 +1599,10 @@ func TestWritePiConfigFiles_MkdirAllFailure(t *testing.T) {
 	// Create a read-only directory and set HOME to a path under it
 	tmpDir := t.TempDir()
 	readOnlyDir := filepath.Join(tmpDir, "readonly")
-	require.NoError(t, os.MkdirAll(readOnlyDir, 0555))
-	defer os.Chmod(readOnlyDir, 0755) // restore for cleanup
+	require.NoError(t, os.MkdirAll(readOnlyDir, 0o555))
+	defer func() { _ = os.Chmod(readOnlyDir, 0o755) }() // restore for cleanup
 
-	origHome := os.Getenv("HOME")
-	os.Setenv("HOME", filepath.Join(readOnlyDir, "user"))
-	defer os.Setenv("HOME", origHome)
+	t.Setenv("HOME", filepath.Join(readOnlyDir, "user"))
 
 	spec := model.FindProviderSpec("openai")
 	require.NotNil(t, spec)
@@ -1600,7 +1615,7 @@ func TestWritePiConfigFiles_MkdirAllFailure(t *testing.T) {
 	}
 
 	// Should not panic — best-effort write
-	writePiConfigFiles(req, spec)
+	writePiConfigFiles(req)
 }
 
 // TestWritePiConfigFiles_AuthWriteFailure tests the path where auth.json
@@ -1608,9 +1623,7 @@ func TestWritePiConfigFiles_MkdirAllFailure(t *testing.T) {
 func TestWritePiConfigFiles_AuthWriteFailure(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	origHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpDir)
-	defer os.Setenv("HOME", origHome)
+	t.Setenv("HOME", tmpDir)
 
 	spec := model.FindProviderSpec("openai")
 	require.NotNil(t, spec)
@@ -1624,12 +1637,12 @@ func TestWritePiConfigFiles_AuthWriteFailure(t *testing.T) {
 
 	// Create the .pi/agent dir then make it read-only to cause write failure
 	piDir := filepath.Join(tmpDir, ".pi", "agent")
-	require.NoError(t, os.MkdirAll(piDir, 0755))
-	require.NoError(t, os.Chmod(piDir, 0555))
-	defer os.Chmod(piDir, 0755) // restore for cleanup
+	require.NoError(t, os.MkdirAll(piDir, 0o755))
+	require.NoError(t, os.Chmod(piDir, 0o555))
+	defer func() { _ = os.Chmod(piDir, 0o755) }() // restore for cleanup
 
 	// Should not panic — best-effort write
-	writePiConfigFiles(req, spec)
+	writePiConfigFiles(req)
 }
 
 // ---------- reinitSummarizer empty API key path ----------
@@ -2170,7 +2183,7 @@ func TestWritePiModelsJSON_OpenAIFormat(t *testing.T) {
 	}
 
 	piConfigDir := filepath.Join(tmpDir, ".pi", "agent")
-	require.NoError(t, os.MkdirAll(piConfigDir, 0755))
+	require.NoError(t, os.MkdirAll(piConfigDir, 0o755))
 
 	writePiModelsJSON(piConfigDir, req)
 
@@ -2216,7 +2229,7 @@ func TestWritePiModelsJSON_AnthropicFormat(t *testing.T) {
 	}
 
 	piConfigDir := filepath.Join(tmpDir, ".pi", "agent")
-	require.NoError(t, os.MkdirAll(piConfigDir, 0755))
+	require.NoError(t, os.MkdirAll(piConfigDir, 0o755))
 
 	writePiModelsJSON(piConfigDir, req)
 
@@ -2254,7 +2267,7 @@ func TestWritePiModelsJSON_SameSummarizeModel(t *testing.T) {
 	}
 
 	piConfigDir := filepath.Join(tmpDir, ".pi", "agent")
-	require.NoError(t, os.MkdirAll(piConfigDir, 0755))
+	require.NoError(t, os.MkdirAll(piConfigDir, 0o755))
 
 	writePiModelsJSON(piConfigDir, req)
 
@@ -2287,7 +2300,7 @@ func TestWritePiModelsJSON_EmptySummarizeModel(t *testing.T) {
 	}
 
 	piConfigDir := filepath.Join(tmpDir, ".pi", "agent")
-	require.NoError(t, os.MkdirAll(piConfigDir, 0755))
+	require.NoError(t, os.MkdirAll(piConfigDir, 0o755))
 
 	writePiModelsJSON(piConfigDir, req)
 
@@ -2310,7 +2323,7 @@ func TestWritePiModelsJSON_MergesExisting(t *testing.T) {
 	defer os.Setenv("HOME", origHome)
 
 	piConfigDir := filepath.Join(tmpDir, ".pi", "agent")
-	require.NoError(t, os.MkdirAll(piConfigDir, 0755))
+	require.NoError(t, os.MkdirAll(piConfigDir, 0o755))
 
 	existingData := map[string]any{
 		"providers": map[string]any{
@@ -2321,7 +2334,7 @@ func TestWritePiModelsJSON_MergesExisting(t *testing.T) {
 		},
 	}
 	existingJSON, _ := json.Marshal(existingData)
-	require.NoError(t, os.WriteFile(filepath.Join(piConfigDir, "models.json"), existingJSON, 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(piConfigDir, "models.json"), existingJSON, 0o644))
 
 	req := setupCompleteRequest{
 		Provider:  "openai",
@@ -2356,9 +2369,6 @@ func TestWritePiConfigFiles_CustomURL(t *testing.T) {
 	os.Setenv("HOME", tmpDir)
 	defer os.Setenv("HOME", origHome)
 
-	spec := model.FindProviderSpec("openai")
-	require.NotNil(t, spec)
-
 	req := setupCompleteRequest{
 		Provider:       "openai",
 		CustomURL:      "https://api.deepseek.com/v1/chat/completions",
@@ -2369,7 +2379,7 @@ func TestWritePiConfigFiles_CustomURL(t *testing.T) {
 		AgentID:        "custom-deepseek",
 	}
 
-	writePiConfigFiles(req, spec)
+	writePiConfigFiles(req)
 
 	modelsPath := filepath.Join(tmpDir, ".pi", "agent", "models.json")
 	data, err := os.ReadFile(modelsPath)
