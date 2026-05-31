@@ -898,9 +898,13 @@ func TestWritePiConfigFiles(t *testing.T) {
 	data, err := os.ReadFile(authPath)
 	require.NoError(t, err)
 
-	var authData map[string]string
+	var authData map[string]any
 	require.NoError(t, json.Unmarshal(data, &authData))
-	assert.Equal(t, "sk-test-key-123", authData["OPENAI_API_KEY"])
+	// Pi expects structured format: { "provider": { "type": "api_key", "key": "..." } }
+	entry, ok := authData["openai"].(map[string]any)
+	require.True(t, ok, "auth.json should have 'openai' key with object value")
+	assert.Equal(t, "api_key", entry["type"])
+	assert.Equal(t, "sk-test-key-123", entry["key"])
 
 	// Verify settings.json was written
 	settingsPath := filepath.Join(tmpDir, ".pi", "agent", "settings.json")
@@ -953,9 +957,6 @@ func TestReinitSummarizer_AnthropicFormat(t *testing.T) {
 	// Save the original summarizer to restore later
 	origSummarizer := summarizer
 
-	// Insert an agent API key into DB for the reinit to read
-	require.NoError(t, service.SaveAgentAPIKey(service.DB, "anthropic-test", "anthropic", "", "sk-ant-test-key"))
-
 	req := setupCompleteRequest{
 		Provider:       "anthropic",
 		CustomURL:      "",
@@ -1007,7 +1008,7 @@ func TestReinitSummarizer_UnknownFormat(t *testing.T) {
 	assert.Equal(t, origSummarizer, summarizer)
 }
 
-// TestReinitSummarizer_NoAPIKey tests the path where API key is empty after loading.
+// TestReinitSummarizer_NoAPIKey tests the path where API key is empty.
 func TestReinitSummarizer_NoAPIKey(t *testing.T) {
 	_, teardown := setupAgentTestEnv(t)
 	defer teardown()
@@ -1017,7 +1018,7 @@ func TestReinitSummarizer_NoAPIKey(t *testing.T) {
 	req := setupCompleteRequest{
 		Provider:       "openai",
 		CustomURL:      "",
-		APIKey:         "test-key",
+		APIKey:         "", // empty key
 		Model:          "gpt-4o",
 		SummarizeModel: "gpt-4o-mini",
 		AgentID:        "no-key-agent",
@@ -1026,10 +1027,9 @@ func TestReinitSummarizer_NoAPIKey(t *testing.T) {
 	spec := model.FindProviderSpec("openai")
 	require.NotNil(t, spec)
 
-	// Don't save any API key — LoadAgentAPIKey will fail
 	reinitSummarizer(req, spec)
 
-	// Should not have changed the summarizer
+	// Summarizer should NOT have changed (no key available)
 	assert.Equal(t, origSummarizer, summarizer)
 }
 
@@ -1040,9 +1040,6 @@ func TestReinitSummarizer_NoAPIKey(t *testing.T) {
 func TestConfigureSummarizeBackend_CustomURLOverride(t *testing.T) {
 	_, teardown := setupAgentTestEnv(t)
 	defer teardown()
-
-	// Set up: save an API key so reinitSummarizer can read it
-	require.NoError(t, service.SaveAgentAPIKey(service.DB, "custom-url-agent", "openai", "https://custom.api.com/v1/chat/completions", "sk-test-key"))
 
 	origSummarizer := summarizer
 	defer func() { summarizer = origSummarizer }()
@@ -1487,9 +1484,12 @@ func TestWritePiConfigFiles_HomeDirError(t *testing.T) {
 	data, err := os.ReadFile(authPath)
 	require.NoError(t, err)
 
-	var authData map[string]string
+	var authData map[string]any
 	require.NoError(t, json.Unmarshal(data, &authData))
-	assert.Equal(t, "sk-ant-key", authData["ANTHROPIC_API_KEY"])
+	entry, ok := authData["anthropic"].(map[string]any)
+	require.True(t, ok, "auth.json should have 'anthropic' key with object value")
+	assert.Equal(t, "api_key", entry["type"])
+	assert.Equal(t, "sk-ant-key", entry["key"])
 }
 
 // ---------- atomicWriteFile error path ----------
@@ -1639,8 +1639,9 @@ func TestWritePiConfigFiles_AuthWriteFailure(t *testing.T) {
 
 // ---------- reinitSummarizer empty API key path ----------
 
-// TestReinitSummarizer_EmptyAPIKey tests the path where LoadAgentAPIKey returns
-// an empty apiKey string.
+// TestReinitSummarizer_EmptyAPIKey tests the path where req.APIKey is empty.
+// Since reinitSummarizer now reads directly from req.APIKey, empty key means
+// no summarizer change.
 func TestReinitSummarizer_EmptyAPIKey(t *testing.T) {
 	_, teardown := setupAgentTestEnv(t)
 	defer teardown()
@@ -1648,28 +1649,48 @@ func TestReinitSummarizer_EmptyAPIKey(t *testing.T) {
 	origSummarizer := summarizer
 	defer func() { summarizer = origSummarizer }()
 
-	// Save an API key, then manually set it to empty in DB
-	require.NoError(t, service.SaveAgentAPIKey(service.DB, "empty-key-agent", "openai", "", "test-key"))
-	// Manually update the encrypted key to something that decrypts to empty
-	// Actually this is hard to do since encryption is involved.
-	// Instead, let's test the case where the agent ID doesn't match any key.
-
 	req := setupCompleteRequest{
 		Provider:       "openai",
 		CustomURL:      "",
-		APIKey:         "test-key",
+		APIKey:         "", // empty key in request
 		Model:          "gpt-4o",
 		SummarizeModel: "gpt-4o-mini",
-		AgentID:        "nonexistent-key-agent",
+		AgentID:        "empty-key-agent",
 	}
 
 	spec := model.FindProviderSpec("openai")
 	require.NotNil(t, spec)
 
-	// LoadAgentAPIKey will fail (no rows), so it should return early
 	reinitSummarizer(req, spec)
 
-	// Summarizer should not have changed
+	// Summarizer should NOT have changed — no key available
+	assert.Equal(t, origSummarizer, summarizer)
+}
+
+// TestReinitSummarizer_NoKeyAtAll tests that when request key is empty,
+// the summarizer is not changed.
+func TestReinitSummarizer_NoKeyAtAll(t *testing.T) {
+	_, teardown := setupAgentTestEnv(t)
+	defer teardown()
+
+	origSummarizer := summarizer
+	defer func() { summarizer = origSummarizer }()
+
+	req := setupCompleteRequest{
+		Provider:       "openai",
+		CustomURL:      "",
+		APIKey:         "", // No key in request
+		Model:          "gpt-4o",
+		SummarizeModel: "gpt-4o-mini",
+		AgentID:        "no-key-at-all-agent",
+	}
+
+	spec := model.FindProviderSpec("openai")
+	require.NotNil(t, spec)
+
+	reinitSummarizer(req, spec)
+
+	// Should not have changed the summarizer — no key available at all
 	assert.Equal(t, origSummarizer, summarizer)
 }
 
@@ -1685,7 +1706,6 @@ func TestReinitSummarizer_CustomURL(t *testing.T) {
 	defer func() { summarizer = origSummarizer }()
 
 	customURL := "https://custom.api.com/v1/chat/completions"
-	require.NoError(t, service.SaveAgentAPIKey(service.DB, "reinit-custom-agent", "openai", customURL, "sk-test-key"))
 
 	req := setupCompleteRequest{
 		Provider:       "openai",
@@ -1704,4 +1724,143 @@ func TestReinitSummarizer_CustomURL(t *testing.T) {
 	// Summarizer should be set (not the original)
 	assert.NotNil(t, summarizer)
 	assert.NotEqual(t, origSummarizer, summarizer)
+}
+
+// ---------- validateCustomURL extended tests ----------
+
+func TestValidateCustomURL_AnthropicValid(t *testing.T) {
+	result := validateCustomURL("https://api.anthropic.com/v1/messages", "anthropic")
+	assert.Empty(t, result, "valid anthropic URL should pass validation")
+}
+
+func TestValidateCustomURL_AnthropicInvalid(t *testing.T) {
+	result := validateCustomURL("https://api.anthropic.com/v1/chat/completions", "anthropic")
+	assert.Equal(t, "CustomURLAnthropicFormat", result, "anthropic URL should end with /v1/messages")
+}
+
+func TestValidateCustomURL_OpenAIValid(t *testing.T) {
+	result := validateCustomURL("https://api.openai.com/v1/chat/completions", "openai")
+	assert.Empty(t, result, "valid openai URL should pass validation")
+}
+
+func TestValidateCustomURL_OpenAIInvalid(t *testing.T) {
+	result := validateCustomURL("https://api.openai.com/v1/messages", "openai")
+	assert.Equal(t, "CustomURLOpenAIFormat", result, "openai URL should end with /chat/completions")
+}
+
+func TestValidateCustomURL_EmptyURL(t *testing.T) {
+	result := validateCustomURL("", "openai")
+	assert.Empty(t, result, "empty URL should pass (no validation needed)")
+}
+
+// ---------- ServeSetupVerify with anthropic custom URL ----------
+
+func TestSetupVerify_AnthropicCustomURL(t *testing.T) {
+	_, teardown := setupAgentTestEnv(t)
+	defer teardown()
+
+	body := map[string]any{
+		"provider":   "",
+		"custom_url": "https://api.anthropic.com/v1/messages",
+		"api_format": "anthropic",
+		"api_key":    "sk-ant-test-key",
+		"model":      "claude-sonnet-4-20250514",
+	}
+	req := newRequest(t, http.MethodPost, "/api/setup/verify", body)
+	withAuthCookie(req, model.SessionToken)
+	w := callHandler(ServeSetupVerify, req)
+
+	// In test env, EmbeddedAgentPath() returns "" → 404
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+// ---------- ServeSetupComplete with custom URL anthropic ----------
+
+func TestSetupComplete_CustomURLAnthropic(t *testing.T) {
+	_, teardown := setupAgentTestEnv(t)
+	defer teardown()
+
+	model.Agents = map[string]*model.Agent{}
+	model.AgentList = []*model.Agent{}
+	service.DB.Exec("DELETE FROM agents")
+
+	origSummarizer := summarizer
+	defer func() { summarizer = origSummarizer }()
+
+	body := map[string]any{
+		"provider":        "",
+		"custom_url":      "https://api.anthropic.com/v1/messages",
+		"api_format":      "anthropic",
+		"api_key":         "sk-ant-test-key",
+		"model":           "claude-sonnet-4-20250514",
+		"summarize_model": "claude-3-5-haiku-20241022",
+		"agent_name":      "Custom Anthropic",
+		"agent_id":        "custom-anthropic",
+	}
+	req := newRequest(t, http.MethodPost, "/api/setup/complete", body)
+	withAuthCookie(req, model.SessionToken)
+	w := callHandler(ServeSetupComplete, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.True(t, resp["success"].(bool))
+
+	// Verify agent was created with "anthropic" provider
+	var count int
+	service.DB.QueryRow("SELECT COUNT(*) FROM agent_api_keys WHERE agent_id = ? AND provider = ?", "custom-anthropic", "anthropic").Scan(&count)
+	assert.Equal(t, 1, count)
+
+	// Verify summarize backend was configured with anthropic format
+	assert.Equal(t, "anthropic", model.ConfigInstance.Summarize.API.Format)
+}
+
+// ---------- ServeSetupComplete with invalid custom URL ----------
+
+func TestSetupComplete_InvalidCustomURLOpenAI(t *testing.T) {
+	_, teardown := setupAgentTestEnv(t)
+	defer teardown()
+
+	model.Agents = map[string]*model.Agent{}
+	model.AgentList = []*model.Agent{}
+	service.DB.Exec("DELETE FROM agents")
+
+	body := map[string]any{
+		"provider":   "",
+		"custom_url": "https://api.example.com/v1/invalid",
+		"api_key":    "test-key",
+		"model":      "test-model",
+		"agent_name": "Invalid URL",
+		"agent_id":   "invalid-url",
+	}
+	req := newRequest(t, http.MethodPost, "/api/setup/complete", body)
+	withAuthCookie(req, model.SessionToken)
+	w := callHandler(ServeSetupComplete, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestSetupComplete_InvalidCustomURLAnthropic(t *testing.T) {
+	_, teardown := setupAgentTestEnv(t)
+	defer teardown()
+
+	model.Agents = map[string]*model.Agent{}
+	model.AgentList = []*model.Agent{}
+	service.DB.Exec("DELETE FROM agents")
+
+	body := map[string]any{
+		"provider":   "",
+		"custom_url": "https://api.example.com/v1/invalid",
+		"api_format": "anthropic",
+		"api_key":    "test-key",
+		"model":      "test-model",
+		"agent_name": "Invalid Anthropic URL",
+		"agent_id":   "invalid-anthropic-url",
+	}
+	req := newRequest(t, http.MethodPost, "/api/setup/complete", body)
+	withAuthCookie(req, model.SessionToken)
+	w := callHandler(ServeSetupComplete, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
