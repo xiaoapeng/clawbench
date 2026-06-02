@@ -38,7 +38,8 @@ func ServeSessionResume(w http.ResponseWriter, r *http.Request) {
 	// Check session exists and belongs to project
 	var sessionProjectPath string
 	var deleted int
-	err := service.DBRead.QueryRow(
+	err := service.DBRead.QueryRowContext(
+		r.Context(),
 		"SELECT project_path, deleted FROM chat_sessions WHERE id = ?",
 		req.SessionID,
 	).Scan(&sessionProjectPath, &deleted)
@@ -61,7 +62,8 @@ func ServeSessionResume(w http.ResponseWriter, r *http.Request) {
 	if deleted == 1 {
 		if model.SessionMaxCount > 0 {
 			var count int
-			err = service.DBRead.QueryRow(
+			err = service.DBRead.QueryRowContext(
+				r.Context(),
 				"SELECT COUNT(*) FROM chat_sessions WHERE project_path = ? AND deleted = 0 AND session_type = 'chat'",
 				sessionProjectPath,
 			).Scan(&count)
@@ -80,7 +82,8 @@ func ServeSessionResume(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Restore the session
-		_, err = service.DB.Exec(
+		_, err = service.DB.ExecContext(
+			r.Context(),
 			"UPDATE chat_sessions SET deleted = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
 			req.SessionID,
 		)
