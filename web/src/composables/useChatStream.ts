@@ -167,40 +167,61 @@ export function useChatStream(options: UseChatStreamOptions) {
 
         if (!data.running) {
           stopPolling()
-          messages.value = latestMsgs
-          currentSessionId.value = data.sessionId || currentSessionId.value
-          // Only render and scroll when panel is visible
-          if (isOpen.value) {
-            onRenderNeeded(true)
-            onScrollBottom(true)
-          }
-          loading.value = false
-          onMessage()
-          onStreamEnd?.('done')
-          if (!isOpen.value) {
-            const lastMsg = messages.value[messages.value.length - 1]
-            if (lastMsg?.role === 'assistant') {
-              onToast(gt('chat.stream.aiReplied'), { icon: '🤖', duration: 5000, onClick: () => onOpen() })
-              onNotification(gt('chat.stream.aiReplied'), {
-                body: gt('chat.stream.clickToViewReply'),
-                onClick: () => onOpen()
-              })
+          // Use onLoadHistory() for the final load — it handles the full render
+          // pipeline (KaTeX, annotations, etc.) correctly for completed messages,
+          // and properly manages session state (model sync, expandedTools, etc.)
+          // This avoids the flickering caused by directly replacing messages.value
+          // which destroys and rebuilds the entire Vue component tree.
+          onLoadHistory().finally(() => {
+            loading.value = false
+            onMessage()
+            onStreamEnd?.('done')
+            if (!isOpen.value) {
+              const lastMsg = messages.value[messages.value.length - 1]
+              if (lastMsg?.role === 'assistant') {
+                onToast(gt('chat.stream.aiReplied'), { icon: '🤖', duration: 5000, onClick: () => onOpen() })
+                onNotification(gt('chat.stream.aiReplied'), {
+                  body: gt('chat.stream.clickToViewReply'),
+                  onClick: () => onOpen()
+                })
+              }
             }
-          }
+          })
           return
         }
-        // Session still running — update the streaming message with latest content
-        // so the user sees progress even while polling (not stuck on stale content)
+        // Session still running — incremental update: only mutate the streaming
+        // assistant message's blocks in place to avoid destroying/rebuilding the
+        // entire Vue component tree (which causes severe UI flickering every 2s).
         const lastAssistant = latestMsgs.findLast(m => m.role === 'assistant')
-        if (lastAssistant) {
+        const existingStreaming = messages.value.find((m: any) => m.role === 'assistant' && m.streaming)
+
+        if (lastAssistant && existingStreaming) {
+          // Update blocks in place — Vue tracks array mutations on reactive proxies,
+          // so ContentBlocks.vue picks up the change without a full component rebuild.
+          existingStreaming.blocks = lastAssistant.blocks
+          if (lastAssistant.metadata) existingStreaming.metadata = lastAssistant.metadata
+          if (lastAssistant.cancelled) existingStreaming.cancelled = lastAssistant.cancelled
+        } else if (lastAssistant && !existingStreaming) {
+          // No existing streaming message (shouldn't normally happen after
+          // forceCleanupStreamingState, but handle gracefully) — push new one
           lastAssistant.streaming = true
+          messages.value.push(lastAssistant)
         }
-        messages.value = latestMsgs
+
+        // Add any new non-streaming messages that appeared (e.g., queued user messages)
+        const existingIds = new Set(messages.value.map((m: any) => m.id).filter(Boolean))
+        for (const msg of latestMsgs) {
+          if (msg.id && !existingIds.has(msg.id) && msg !== lastAssistant) {
+            messages.value.push(msg)
+          }
+        }
+
         currentSessionId.value = data.sessionId || currentSessionId.value
-        // Only render and scroll when panel is visible
+        // Incremental render via debounce — same as the SSE streaming path.
+        // NOT onRenderNeeded(true) which triggers full pipeline (KaTeX, annotations)
+        // and causes flickering during streaming.
         if (isOpen.value) {
-          onRenderNeeded(true)
-          onScrollBottom()
+          debouncedRender()
         }
       } catch (err) {
         console.error('Polling error:', err)
@@ -321,6 +342,8 @@ export function useChatStream(options: UseChatStreamOptions) {
       } else {
         blocks.push({ type: 'thinking', text: data.text })
       }
+      // Trigger debounced render for inline thinking content during streaming
+      debouncedRender()
       // Skip scroll when panel not visible
       if (isOpen.value) {
         onScrollBottom()
@@ -564,14 +587,26 @@ export function useChatStream(options: UseChatStreamOptions) {
       if (streamTimeout) { clearTimeout(streamTimeout); streamTimeout = null }
       if (!guard()) return
       disconnectStream()
-      // Backend reported error (e.g. session not running) — reload from DB for final state
+      // Check if this is an sse_busy error — another client is already consuming
+      // the SSE stream. In this case, do NOT call onLoadHistory() because:
+      // 1. loadHistory() sees data.running=true → sets loading=true → calls
+      //    connectStream() again → gets sse_busy again → infinite loop
+      // 2. The competing onLoadHistory() and onerror's forceCleanupStreamingState()
+      //    cause loading to oscillate between true/false → cancel button flickers
+      // Instead, let onerror handle the fallback to pollUntilDone() which reads
+      // from DB incrementally without re-attempting SSE.
+      let errorData: any
+      try { errorData = JSON.parse(e.data) } catch { /* ignore parse failure */ }
+      if (errorData?.reason === 'sse_busy') {
+        // sse_busy is expected for second clients — skip onLoadHistory to avoid
+        // the reconnection loop. onerror will fall back to polling.
+        return
+      }
+      // Non-sse_busy errors (e.g. session not running) — reload from DB for final state
       onLoadHistory().catch(() => {
         if (!guard()) return
-        let data: any
-        try { data = JSON.parse(e.data) } catch { console.warn('SSE error: invalid JSON, skipping'); return }
-        streamingMsg.content = `${gt('chat.stream.errorPrefix')} ${data.error}`
-        const errorBlock = { type: 'error', text: data.error }
-        if (data.reason) errorBlock.reason = data.reason
+        const errorBlock = { type: 'error', text: errorData?.error || 'Unknown error' }
+        if (errorData?.reason) errorBlock.reason = errorData.reason
         streamingMsg.blocks = [errorBlock]
         _forceCleanupStreamingState(messages.value, { onRenderNeeded, onExtractScheduledTasks })
         loading.value = false
@@ -596,7 +631,12 @@ export function useChatStream(options: UseChatStreamOptions) {
         // Non-recoverable error (404, 403, server shutdown) or max retries —
         // fall back to polling which will detect the terminal state
         reconnect.reset() // Clear reconnect state before falling back to polling
-        forceCleanupStreamingState()
+        // Do NOT call forceCleanupStreamingState() here — it deletes the
+        // streaming flag, which makes pollUntilDone's incremental update
+        // unable to find the streaming message. Instead, keep the streaming
+        // message alive and let pollUntilDone update it incrementally.
+        // Only set loading=false momentarily — pollUntilDone will manage it.
+        loading.value = true  // Keep loading true — session is still running
         pollUntilDone()
       }
     }
