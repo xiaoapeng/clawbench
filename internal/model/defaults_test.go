@@ -515,7 +515,7 @@ func TestApplyDefaults_AutoPasswordEntropy(t *testing.T) {
 
 	// Verify it's valid hex
 	for _, c := range pwd {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 			t.Errorf("auto-generated password contains non-hex char %q, ISS-269", c)
 			break
 		}
