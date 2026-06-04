@@ -45,6 +45,11 @@
               {{ t('file.header.lineNumbers') }}
               <span v-if="showLineNumbers" class="wrap-check">✓</span>
             </button>
+            <button v-if="!isMarkdownRendered" class="dropdown-item" @click="handleToggleStickyScroll">
+              <Pin :size="14" />
+              {{ t('file.header.stickyScroll') }}
+              <span v-if="stickyScroll" class="wrap-check">✓</span>
+            </button>
             <a v-if="!isAppMode" class="dropdown-item" :href="'/api/local-file/' + encodeURIComponent(file.path) + '?download=1'" :download="file.name" @click="menuOpen = false">
               <Download :size="14" />
               {{ t('common.download') }}
@@ -71,7 +76,7 @@
 <script setup>
 import { computed, ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { List, Search, MoreVertical, Code2, Download, Trash2, GitBranch, TextWrap, Hash, RotateCw } from 'lucide-vue-next'
+import { List, Search, MoreVertical, Code2, Download, Trash2, GitBranch, TextWrap, Hash, RotateCw, Pin } from 'lucide-vue-next'
 import { getFileType } from '@/utils/fileType.ts'
 import { useAppMode } from '@/composables/useAppMode.ts'
 
@@ -82,8 +87,9 @@ const props = defineProps({
     searchOpen: Boolean,
     wordWrap: Boolean,
     showLineNumbers: Boolean,
+    stickyScroll: Boolean,
 })
-const emit = defineEmits(['delete', 'toggleView', 'showDetails', 'openGitHistory', 'toggleToc', 'toggleSearch', 'openAsText', 'toggleWordWrap', 'toggleLineNumbers', 'refresh'])
+const emit = defineEmits(['delete', 'toggleView', 'showDetails', 'openGitHistory', 'toggleToc', 'toggleSearch', 'openAsText', 'toggleWordWrap', 'toggleLineNumbers', 'toggleStickyScroll', 'refresh'])
 
 const { isAppMode } = useAppMode()
 const { t } = useI18n()
@@ -127,22 +133,6 @@ const hasToc = computed(() => {
     return true
 })
 
-const badgeLabel = computed(() => {
-    if (!props.file) return ''
-    return getFileType(props.file.name)?.label || 'TXT'
-})
-
-const badgeColor = computed(() => {
-    if (!props.file) return '#8b8b8b'
-    return getFileType(props.file.name)?.color || '#8b8b8b'
-})
-
-const badgeStyle = computed(() => ({
-    background: badgeColor.value + '22',
-    color: badgeColor.value,
-    border: `1px solid ${badgeColor.value}44`,
-}))
-
 function handleToggleView() {
     menuOpen.value = false
     emit('toggleView')
@@ -156,6 +146,11 @@ function handleToggleWordWrap() {
 function handleToggleLineNumbers() {
     menuOpen.value = false
     emit('toggleLineNumbers')
+}
+
+function handleToggleStickyScroll() {
+    menuOpen.value = false
+    emit('toggleStickyScroll')
 }
 
 function handleOpenAsText() {
@@ -204,7 +199,7 @@ onBeforeUnmount(() => {
     display: flex;
     align-items: center;
     gap: 4px;
-    padding: 2px 6px;
+    padding: 2px 4px 2px 6px;
     background: var(--bg-secondary);
     border: none;
     font-size: 12px;
@@ -219,16 +214,6 @@ onBeforeUnmount(() => {
     align-items: center;
     gap: 4px;
     min-width: 0;
-}
-
-.lang-badge {
-    font-size: 11px;
-    font-weight: 700;
-    padding: 3px 8px;
-    border-radius: 5px;
-    flex-shrink: 0;
-    font-family: monospace;
-    letter-spacing: 0.5px;
 }
 
 .file-path-hint {
@@ -256,19 +241,17 @@ onBeforeUnmount(() => {
 .header-actions {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     margin-left: auto;
     flex-shrink: 0;
+    padding-right: 8px;
 }
 
 .file-header-btn {
-    margin-left: auto;
-    padding: 0;
-    width: 26px;
-    height: 26px;
+    padding: 6px;
     border: none;
-    border-radius: 50%;
-    background: var(--bg-tertiary);
+    border-radius: 4px;
+    background: transparent;
     font-size: 11px;
     cursor: pointer;
     color: var(--text-secondary);
@@ -278,7 +261,7 @@ onBeforeUnmount(() => {
     justify-content: center;
 }
 .file-header-btn:hover {
-    background: var(--bg-secondary);
+    background: var(--bg-tertiary);
     color: var(--accent-color);
 }
 .file-header-btn svg {
@@ -295,8 +278,7 @@ onBeforeUnmount(() => {
     color: var(--text-secondary);
 }
 .file-header-btn.active {
-    background: var(--accent-color);
-    color: #fff;
+    color: var(--accent-color);
 }
 
 /* Dropdown */
