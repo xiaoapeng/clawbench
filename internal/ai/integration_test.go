@@ -116,9 +116,9 @@ func requireCodexEnv(t *testing.T) {
 	}
 }
 
-// collectEvents reads all events from the channel until it closes or timeout.
+// collectAllEvents reads all events from the channel until it closes or timeout.
 // Returns the collected events slice.
-func collectEvents(t *testing.T, ch <-chan StreamEvent, timeout time.Duration) []StreamEvent {
+func collectAllEvents(t *testing.T, ch <-chan StreamEvent, timeout time.Duration) []StreamEvent {
 	t.Helper()
 	var events []StreamEvent
 	timer := time.NewTimer(timeout)
@@ -213,7 +213,7 @@ func TestIntegration_Claude_NewSession(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	events := collectEvents(t, ch, 90*time.Second)
+	events := collectAllEvents(t, ch, 90*time.Second)
 
 	requireEventSequence(t, events, "content", "metadata")
 	content := concatContent(events)
@@ -246,7 +246,7 @@ func TestIntegration_Codebuddy_NewSession(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	events := collectEvents(t, ch, 90*time.Second)
+	events := collectAllEvents(t, ch, 90*time.Second)
 
 	requireEventSequence(t, events, "content", "metadata")
 	content := concatContent(events)
@@ -278,7 +278,7 @@ func TestIntegration_Gemini_NewSession(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	events := collectEvents(t, ch, 90*time.Second)
+	events := collectAllEvents(t, ch, 90*time.Second)
 
 	contentEvents := findEvents(events, "content")
 	if len(contentEvents) == 0 {
@@ -314,7 +314,7 @@ func TestIntegration_OpenCode_NewSession(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	events := collectEvents(t, ch, 90*time.Second)
+	events := collectAllEvents(t, ch, 90*time.Second)
 
 	requireEventSequence(t, events, "content", "metadata")
 	content := concatContent(events)
@@ -343,7 +343,7 @@ func TestIntegration_Codex_NewSession(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	events := collectEvents(t, ch, 90*time.Second)
+	events := collectAllEvents(t, ch, 90*time.Second)
 
 	requireEventSequence(t, events, "content", "metadata")
 	content := concatContent(events)
@@ -374,7 +374,7 @@ func TestIntegration_Claude_StreamEvents(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	events := collectEvents(t, ch, 90*time.Second)
+	events := collectAllEvents(t, ch, 90*time.Second)
 
 	// Claude with --include-partial-messages should produce incremental content deltas
 	contentEvents := findEvents(events, "content")
@@ -405,7 +405,7 @@ func TestIntegration_Codebuddy_StreamEvents(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	events := collectEvents(t, ch, 90*time.Second)
+	events := collectAllEvents(t, ch, 90*time.Second)
 
 	contentEvents := findEvents(events, "content")
 	assert.NotEmpty(t, contentEvents, "should have content events")
@@ -434,7 +434,7 @@ func TestIntegration_Gemini_StreamEvents(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	events := collectEvents(t, ch, 90*time.Second)
+	events := collectAllEvents(t, ch, 90*time.Second)
 
 	contentEvents := findEvents(events, "content")
 	if len(contentEvents) == 0 {
@@ -466,7 +466,7 @@ func TestIntegration_OpenCode_StreamEvents(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	events := collectEvents(t, ch, 90*time.Second)
+	events := collectAllEvents(t, ch, 90*time.Second)
 
 	// OpenCode may produce thinking or content events (or both)
 	thinkingEvents := findEvents(events, "thinking")
@@ -496,7 +496,7 @@ func TestIntegration_Codex_StreamEvents(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	events := collectEvents(t, ch, 90*time.Second)
+	events := collectAllEvents(t, ch, 90*time.Second)
 
 	contentEvents := findEvents(events, "content")
 	assert.NotEmpty(t, contentEvents, "should have content events")
@@ -531,7 +531,7 @@ func TestIntegration_Claude_ResumeSession(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	events1 := collectEvents(t, ch1, 90*time.Second)
+	events1 := collectAllEvents(t, ch1, 90*time.Second)
 	// Verify first conversation completed normally
 	doneEvents1 := findEvents(events1, "metadata")
 	require.NotEmpty(t, doneEvents1, "first conversation should complete with metadata event")
@@ -548,7 +548,7 @@ func TestIntegration_Claude_ResumeSession(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	events2 := collectEvents(t, ch2, 90*time.Second)
+	events2 := collectAllEvents(t, ch2, 90*time.Second)
 	requireEventSequence(t, events2, "content", "metadata")
 	content := concatContent(events2)
 	assert.NotEmpty(t, content, "should receive content in resumed session")
@@ -556,6 +556,283 @@ func TestIntegration_Claude_ResumeSession(t *testing.T) {
 	// Note: "done" event should now be forwarded by AutoResumeBackend
 	doneEvents2 := findEvents(events2, "done")
 	assert.NotEmpty(t, doneEvents2, "should receive 'done' event in resumed session")
+}
+
+// --- 3a. Claude Session Resume Deep Tests ---
+
+// TestIntegration_Claude_MultiTurnResume verifies that Claude can maintain context
+// across three turns in the same session: new → resume → resume again.
+// This exercises the --resume flag being passed multiple times with the same
+// session ID, and the CLI's ability to accumulate conversation history.
+func TestIntegration_Claude_MultiTurnResume(t *testing.T) {
+	requireCLIAvailable(t, "claude")
+	backend, err := NewBackend("claude")
+	require.NoError(t, err)
+
+	sessionID := newSessionID()
+
+	// Turn 1: new session — ask Claude to remember a number
+	ctx1, cancel1 := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel1()
+
+	ch1, err := backend.ExecuteStream(ctx1, ChatRequest{
+		Prompt:    "记住数字42，稍后我会问你。只回复OK",
+		SessionID: sessionID,
+		WorkDir:   testWorkDir(),
+	})
+	require.NoError(t, err)
+
+	events1 := collectAllEvents(t, ch1, 90*time.Second)
+	meta1 := findEvents(events1, "metadata")
+	require.NotEmpty(t, meta1, "turn 1 should complete with metadata event")
+
+	// Verify metadata contains a session ID (Claude echoes back --session-id)
+	assert.NotEmpty(t, meta1[0].Meta.SessionID, "turn 1 metadata should contain session ID")
+
+	// Turn 2: resume — ask what number was remembered
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel2()
+
+	ch2, err := backend.ExecuteStream(ctx2, ChatRequest{
+		Prompt:    "我之前让你记住的数字是什么？只回答数字",
+		SessionID: sessionID,
+		WorkDir:   testWorkDir(),
+		Resume:    true,
+	})
+	require.NoError(t, err)
+
+	events2 := collectAllEvents(t, ch2, 90*time.Second)
+	requireEventSequence(t, events2, "content", "metadata")
+	content2 := concatContent(events2)
+	assert.NotEmpty(t, content2, "turn 2 should receive content")
+
+	// Turn 2 metadata should still have session ID
+	meta2 := findEvents(events2, "metadata")
+	require.NotEmpty(t, meta2, "turn 2 should have metadata event")
+	assert.NotEmpty(t, meta2[0].Meta.SessionID, "turn 2 metadata should contain session ID")
+
+	// Turn 3: resume again — ask for the number a second time
+	ctx3, cancel3 := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel3()
+
+	ch3, err := backend.ExecuteStream(ctx3, ChatRequest{
+		Prompt:    "再告诉我一次那个数字",
+		SessionID: sessionID,
+		WorkDir:   testWorkDir(),
+		Resume:    true,
+	})
+	require.NoError(t, err)
+
+	events3 := collectAllEvents(t, ch3, 90*time.Second)
+	requireEventSequence(t, events3, "content", "metadata")
+	content3 := concatContent(events3)
+	assert.NotEmpty(t, content3, "turn 3 should receive content")
+
+	// Verify done events on all resumed turns
+	doneEvents2 := findEvents(events2, "done")
+	assert.NotEmpty(t, doneEvents2, "turn 2 should receive 'done' event")
+	doneEvents3 := findEvents(events3, "done")
+	assert.NotEmpty(t, doneEvents3, "turn 3 should receive 'done' event")
+}
+
+// TestIntegration_Claude_ResumeSessionIDConsistency verifies that the session ID
+// remains consistent across a new session and its resumed continuation.
+// Claude uses the ClawBench UUID directly as --session-id / --resume, so the
+// metadata.SessionID in both rounds should match the original UUID.
+func TestIntegration_Claude_ResumeSessionIDConsistency(t *testing.T) {
+	requireCLIAvailable(t, "claude")
+	backend, err := NewBackend("claude")
+	require.NoError(t, err)
+
+	sessionID := newSessionID()
+
+	// Phase 1: new session
+	ctx1, cancel1 := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel1()
+
+	ch1, err := backend.ExecuteStream(ctx1, ChatRequest{
+		Prompt:    "说一个字：好",
+		SessionID: sessionID,
+		WorkDir:   testWorkDir(),
+	})
+	require.NoError(t, err)
+
+	events1 := collectAllEvents(t, ch1, 90*time.Second)
+	meta1 := findEvents(events1, "metadata")
+	require.NotEmpty(t, meta1, "first conversation should complete with metadata event")
+	firstSessionID := meta1[0].Meta.SessionID
+	assert.NotEmpty(t, firstSessionID, "metadata should contain session ID")
+
+	// Phase 2: resume session with same session ID
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel2()
+
+	ch2, err := backend.ExecuteStream(ctx2, ChatRequest{
+		Prompt:    "再说一个字：是",
+		SessionID: sessionID,
+		WorkDir:   testWorkDir(),
+		Resume:    true,
+	})
+	require.NoError(t, err)
+
+	events2 := collectAllEvents(t, ch2, 90*time.Second)
+	meta2 := findEvents(events2, "metadata")
+	require.NotEmpty(t, meta2, "resumed session should complete with metadata event")
+	resumedSessionID := meta2[0].Meta.SessionID
+	assert.NotEmpty(t, resumedSessionID, "resumed metadata should contain session ID")
+
+	// The session ID in metadata should match between the original and resumed rounds
+	assert.Equal(t, firstSessionID, resumedSessionID,
+		"session ID should remain consistent across resume — Claude uses ClawBench UUID directly")
+}
+
+// TestIntegration_Claude_ResumeAfterCancel verifies that a session can be resumed
+// after being cancelled mid-stream. This simulates the real-world scenario where
+// a user cancels a long-running response and then sends a new message to continue.
+//
+// The test flow:
+//  1. Start a new session and cancel after receiving some content
+//  2. Resume the same session ID — Claude should still have the initial context
+//
+// Note: After cancellation, the CLI process is killed, so the session state
+// depends on what the CLI persisted before the kill signal. Claude CLI persists
+// conversation state incrementally, so a resume after cancel should work.
+func TestIntegration_Claude_ResumeAfterCancel(t *testing.T) {
+	requireCLIAvailable(t, "claude")
+	backend, err := NewBackend("claude")
+	require.NoError(t, err)
+
+	sessionID := newSessionID()
+
+	// Phase 1: new session with a simple prompt, let it complete normally
+	// (we use a simple prompt to ensure the session is established in Claude's state)
+	ctx1, cancel1 := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel1()
+
+	ch1, err := backend.ExecuteStream(ctx1, ChatRequest{
+		Prompt:    "记住数字7，只回复OK",
+		SessionID: sessionID,
+		WorkDir:   testWorkDir(),
+	})
+	require.NoError(t, err)
+
+	events1 := collectAllEvents(t, ch1, 90*time.Second)
+	meta1 := findEvents(events1, "metadata")
+	require.NotEmpty(t, meta1, "first conversation should complete with metadata event")
+
+	// Phase 2: cancel a second prompt mid-stream
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel2()
+
+	ch2, err := backend.ExecuteStream(ctx2, ChatRequest{
+		Prompt:    "现在从1数到100，每个数字一行",
+		SessionID: sessionID,
+		WorkDir:   testWorkDir(),
+		Resume:    true,
+	})
+	require.NoError(t, err)
+
+	// Collect at least one content event, then cancel
+	var events2 []StreamEvent
+	cancelled := false
+	timer := time.NewTimer(90 * time.Second)
+	defer timer.Stop()
+	for {
+		select {
+		case event, ok := <-ch2:
+			if !ok {
+				goto phase2Done
+			}
+			events2 = append(events2, event)
+			if !cancelled && event.Type == "content" {
+				cancelled = true
+				cancel2()
+			}
+		case <-timer.C:
+			t.Log("phase 2: timeout waiting for content")
+			goto phase2Done
+		}
+	}
+phase2Done:
+	contentEvents2 := findEvents(events2, "content")
+	assert.NotEmpty(t, contentEvents2, "should have received content before cancel in phase 2")
+	t.Logf("phase 2: cancelled after %d events, %d content events", len(events2), len(contentEvents2))
+
+	// Phase 3: resume the session after cancellation
+	// Claude should remember the number 7 from phase 1 even though phase 2 was cancelled
+	ctx3, cancel3 := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel3()
+
+	ch3, err := backend.ExecuteStream(ctx3, ChatRequest{
+		Prompt:    "我之前让你记住的数字是什么？只回答数字",
+		SessionID: sessionID,
+		WorkDir:   testWorkDir(),
+		Resume:    true,
+	})
+	require.NoError(t, err)
+
+	events3 := collectAllEvents(t, ch3, 90*time.Second)
+	requireEventSequence(t, events3, "content", "metadata")
+	content3 := concatContent(events3)
+	assert.NotEmpty(t, content3, "should receive content in resumed session after cancel")
+
+	// Best-effort: check if the response contains "7"
+	// AI responses are non-deterministic, but with a clean resume the model
+	// should recall the number from the first turn
+	if !strings.Contains(content3, "7") {
+		t.Logf("claude did not recall number 7 after cancel+resume — AI behavior is non-deterministic; content: %s", truncate(content3, 300))
+	}
+}
+
+// TestIntegration_Claude_ResumeMetadataCapture verifies that the metadata event
+// from a Claude resumed session contains the expected fields: SessionID, Model,
+// and token usage (InputTokens/OutputTokens). These fields are critical for
+// the handler's session capture logic (writing external_session_id to DB).
+func TestIntegration_Claude_ResumeMetadataCapture(t *testing.T) {
+	requireCLIAvailable(t, "claude")
+	backend, err := NewBackend("claude")
+	require.NoError(t, err)
+
+	sessionID := newSessionID()
+
+	// Phase 1: new session
+	ctx1, cancel1 := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel1()
+
+	ch1, err := backend.ExecuteStream(ctx1, ChatRequest{
+		Prompt:    "说一个字：好",
+		SessionID: sessionID,
+		WorkDir:   testWorkDir(),
+	})
+	require.NoError(t, err)
+
+	events1 := collectAllEvents(t, ch1, 90*time.Second)
+	meta1 := findEvents(events1, "metadata")
+	require.NotEmpty(t, meta1, "should have metadata event from new session")
+	assert.NotEmpty(t, meta1[0].Meta.SessionID, "new session metadata should have SessionID")
+	assert.NotEmpty(t, meta1[0].Meta.Model, "new session metadata should have Model")
+
+	// Phase 2: resume session
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel2()
+
+	ch2, err := backend.ExecuteStream(ctx2, ChatRequest{
+		Prompt:    "再说一个字：是",
+		SessionID: sessionID,
+		WorkDir:   testWorkDir(),
+		Resume:    true,
+	})
+	require.NoError(t, err)
+
+	events2 := collectAllEvents(t, ch2, 90*time.Second)
+	meta2 := findEvents(events2, "metadata")
+	require.NotEmpty(t, meta2, "should have metadata event from resumed session")
+	assert.NotEmpty(t, meta2[0].Meta.SessionID, "resumed session metadata should have SessionID")
+	assert.NotEmpty(t, meta2[0].Meta.Model, "resumed session metadata should have Model")
+
+	// Token usage should be present (non-zero) in both rounds
+	assert.NotZero(t, meta1[0].Meta.InputTokens, "new session should report input token usage")
+	assert.NotZero(t, meta2[0].Meta.InputTokens, "resumed session should report input token usage")
 }
 
 func TestIntegration_Codebuddy_ResumeSession(t *testing.T) {
@@ -576,7 +853,7 @@ func TestIntegration_Codebuddy_ResumeSession(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	events1 := collectEvents(t, ch1, 90*time.Second)
+	events1 := collectAllEvents(t, ch1, 90*time.Second)
 	doneEvents1 := findEvents(events1, "metadata")
 	require.NotEmpty(t, doneEvents1, "first conversation should complete with metadata event")
 
@@ -592,7 +869,7 @@ func TestIntegration_Codebuddy_ResumeSession(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	events2 := collectEvents(t, ch2, 90*time.Second)
+	events2 := collectAllEvents(t, ch2, 90*time.Second)
 	requireEventSequence(t, events2, "content", "metadata")
 	content := concatContent(events2)
 	assert.NotEmpty(t, content, "should receive content in resumed session")
@@ -617,7 +894,7 @@ func TestIntegration_OpenCode_ResumeSession(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	events1 := collectEvents(t, ch1, 90*time.Second)
+	events1 := collectAllEvents(t, ch1, 90*time.Second)
 	sessionID := extractSessionID(events1)
 	require.NotEmpty(t, sessionID, "should capture OpenCode session ID (ses_xxx)")
 	assert.True(t, strings.HasPrefix(sessionID, "ses_"),
@@ -638,7 +915,7 @@ func TestIntegration_OpenCode_ResumeSession(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	events2 := collectEvents(t, ch2, 90*time.Second)
+	events2 := collectAllEvents(t, ch2, 90*time.Second)
 	requireEventSequence(t, events2, "content", "metadata")
 	content := concatContent(events2)
 	assert.NotEmpty(t, content, "should receive content in resumed session")
@@ -660,7 +937,7 @@ func TestIntegration_Codex_ResumeSession(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	events1 := collectEvents(t, ch1, 90*time.Second)
+	events1 := collectAllEvents(t, ch1, 90*time.Second)
 	sessionID := extractSessionID(events1)
 	require.NotEmpty(t, sessionID, "should capture Codex thread ID")
 	// Codex thread_id is a UUID format, not "thread_xxx" prefix
@@ -681,7 +958,7 @@ func TestIntegration_Codex_ResumeSession(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	events2 := collectEvents(t, ch2, 90*time.Second)
+	events2 := collectAllEvents(t, ch2, 90*time.Second)
 	requireEventSequence(t, events2, "content", "metadata")
 	content := concatContent(events2)
 	assert.NotEmpty(t, content, "should receive content in resumed session")
@@ -860,7 +1137,7 @@ func TestIntegration_InvalidWorkDir(t *testing.T) {
 			}
 
 			// If no error from ExecuteStream, the stream should contain warning/error
-			events := collectEvents(t, ch, 30*time.Second)
+			events := collectAllEvents(t, ch, 30*time.Second)
 			hasError := len(findEvents(events, "error")) > 0
 			hasWarning := len(findEvents(events, "warning")) > 0
 			assert.True(t, hasError || hasWarning,
@@ -919,7 +1196,7 @@ func TestIntegration_AutoResume_ExitPlanMode(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	events := collectEvents(t, ch, 200*time.Second)
+	events := collectAllEvents(t, ch, 200*time.Second)
 
 	// Check if ExitPlanMode was triggered
 	resumeSplitEvents := findEvents(events, "resume_split")
@@ -984,7 +1261,7 @@ func TestIntegration_Claude_SystemPromptInjection(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	events := collectEvents(t, ch, 90*time.Second)
+	events := collectAllEvents(t, ch, 90*time.Second)
 	requireEventSequence(t, events, "content", "metadata")
 
 	// Verify the stream completed successfully with metadata (which means CLI args were valid)
@@ -1015,7 +1292,7 @@ func TestIntegration_Codebuddy_SystemPromptInjection(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	events := collectEvents(t, ch, 90*time.Second)
+	events := collectAllEvents(t, ch, 90*time.Second)
 	requireEventSequence(t, events, "content", "metadata")
 
 	// Verify the stream completed successfully with metadata (which means CLI args were valid)
@@ -1049,7 +1326,7 @@ func TestIntegration_Gemini_SystemPromptInjection(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	events := collectEvents(t, ch, 90*time.Second)
+	events := collectAllEvents(t, ch, 90*time.Second)
 	requireEventSequence(t, events, "content", "metadata")
 
 	// Check that system instructions were injected into the prompt (raw_output or args)
@@ -1083,7 +1360,7 @@ func TestIntegration_OpenCode_SystemPromptInjection(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	events := collectEvents(t, ch, 90*time.Second)
+	events := collectAllEvents(t, ch, 90*time.Second)
 	requireEventSequence(t, events, "content", "metadata")
 
 	// Best-effort check
@@ -1113,7 +1390,7 @@ func TestIntegration_Codex_SystemPromptInjection(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	events := collectEvents(t, ch, 90*time.Second)
+	events := collectAllEvents(t, ch, 90*time.Second)
 	requireEventSequence(t, events, "content", "metadata")
 
 	// Best-effort check
@@ -1140,7 +1417,7 @@ func TestIntegration_Qoder_NewSession(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	events := collectEvents(t, ch, 90*time.Second)
+	events := collectAllEvents(t, ch, 90*time.Second)
 
 	requireEventSequence(t, events, "content", "metadata")
 	content := concatContent(events)
@@ -1172,7 +1449,7 @@ func TestIntegration_Qoder_StreamEvents(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	events := collectEvents(t, ch, 90*time.Second)
+	events := collectAllEvents(t, ch, 90*time.Second)
 
 	contentEvents := findEvents(events, "content")
 	assert.NotEmpty(t, contentEvents, "should have content events")
@@ -1204,7 +1481,7 @@ func TestIntegration_Qoder_ResumeSession(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	events1 := collectEvents(t, ch1, 90*time.Second)
+	events1 := collectAllEvents(t, ch1, 90*time.Second)
 	doneEvents1 := findEvents(events1, "metadata")
 	require.NotEmpty(t, doneEvents1, "first conversation should complete with metadata event")
 
@@ -1220,7 +1497,7 @@ func TestIntegration_Qoder_ResumeSession(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	events2 := collectEvents(t, ch2, 90*time.Second)
+	events2 := collectAllEvents(t, ch2, 90*time.Second)
 	requireEventSequence(t, events2, "content", "metadata")
 	content := concatContent(events2)
 	assert.NotEmpty(t, content, "should receive content in resumed session")
@@ -1249,7 +1526,7 @@ func TestIntegration_Qoder_SystemPromptInjection(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	events := collectEvents(t, ch, 90*time.Second)
+	events := collectAllEvents(t, ch, 90*time.Second)
 	requireEventSequence(t, events, "content", "metadata")
 
 	// Best-effort check — AI compliance is non-deterministic
@@ -1284,7 +1561,7 @@ func TestIntegration_VeCLI_NewSession(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	events := collectEvents(t, ch, 90*time.Second)
+	events := collectAllEvents(t, ch, 90*time.Second)
 
 	// VeCLI may fail due to API auth issues; skip gracefully
 	contentEvents := findEvents(events, "content")
@@ -1325,7 +1602,7 @@ func TestIntegration_VeCLI_StreamEvents(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	events := collectEvents(t, ch, 90*time.Second)
+	events := collectAllEvents(t, ch, 90*time.Second)
 
 	contentEvents := findEvents(events, "content")
 	if len(contentEvents) == 0 {
@@ -1385,7 +1662,7 @@ func TestIntegration_VeCLI_SystemPromptInjection(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	events := collectEvents(t, ch, 90*time.Second)
+	events := collectAllEvents(t, ch, 90*time.Second)
 
 	contentEvents := findEvents(events, "content")
 	if len(contentEvents) == 0 {
@@ -1417,7 +1694,7 @@ func TestIntegration_DeepSeek_NewSession(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	events := collectEvents(t, ch, 150*time.Second)
+	events := collectAllEvents(t, ch, 150*time.Second)
 
 	requireEventSequence(t, events, "content", "metadata")
 	content := concatContent(events)
@@ -1453,7 +1730,7 @@ func TestIntegration_DeepSeek_StreamEvents(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	events := collectEvents(t, ch, 150*time.Second)
+	events := collectAllEvents(t, ch, 150*time.Second)
 
 	contentEvents := findEvents(events, "content")
 	assert.NotEmpty(t, contentEvents, "should have content events")
@@ -1483,7 +1760,7 @@ func TestIntegration_DeepSeek_ResumeSession(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	events1 := collectEvents(t, ch1, 150*time.Second)
+	events1 := collectAllEvents(t, ch1, 150*time.Second)
 	sessionID := extractSessionID(events1)
 	require.NotEmpty(t, sessionID, "should capture DeepSeek session ID from session_capture event")
 
@@ -1502,7 +1779,7 @@ func TestIntegration_DeepSeek_ResumeSession(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	events2 := collectEvents(t, ch2, 150*time.Second)
+	events2 := collectAllEvents(t, ch2, 150*time.Second)
 	requireEventSequence(t, events2, "content", "metadata")
 	content := concatContent(events2)
 	assert.NotEmpty(t, content, "should receive content in resumed session")
@@ -1547,7 +1824,7 @@ func TestIntegration_DeepSeek_SystemPromptInjection(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	events := collectEvents(t, ch, 150*time.Second)
+	events := collectAllEvents(t, ch, 150*time.Second)
 	requireEventSequence(t, events, "content", "metadata")
 
 	// Verify the stream completed successfully with metadata (which means CLI args were valid)

@@ -5,6 +5,7 @@
       <div class="chat-action-group">
         <span class="chat-group-label" :title="t('chat.actions.session')">
           <MessageSquare :size="12" />
+          {{ t('chat.actions.session') }}
         </span>
         <button class="chat-action-btn" :class="{ 'has-unread': chatUnread, 'has-running': chatRunning }"
           @click="$emit('open-session-tab', 'sessions')"
@@ -27,13 +28,7 @@
         @click="$emit('toggle-auto-speech')"
         :title="t('chat.actions.autoSpeech')">
         <Volume2 :size="14" />
-      </button>
-      <!-- Model & thinking chip — opens modal -->
-      <button class="chat-action-btn model-chip clickable"
-        @click.stop="showModelModal = true"
-        :title="t('chat.actions.switchModel') + ' · ' + currentModelName">
-        <Cpu :size="14" />
-        <span class="chat-action-label">{{ currentModelName }}</span>
+        <span class="chat-action-label">{{ t('chat.actions.autoSpeech') }}</span>
       </button>
     </div>
     <!-- Input container -->
@@ -98,8 +93,9 @@
           <!-- Normal mode: paper plane (send) -->
           <Send v-else :size="16" />
         </button>
-        <button v-if="loading" class="chat-stop-btn" :class="{ primed: stopPrimed }" @click="handleStopClick" :title="stopPrimed ? t('chat.input.confirmStop') : t('chat.input.stopGenerating')">
-          <Square :size="16" fill="currentColor" />
+        <button v-if="loading" class="chat-stop-btn" :class="{ primed: stopPrimed, cancelling: cancelling }" @click="handleStopClick" :title="stopPrimed ? t('chat.input.confirmStop') : t('chat.input.stopGenerating')" :disabled="cancelling">
+          <Loader2 v-if="cancelling" class="spin-icon" :size="16" />
+          <Square v-else :size="16" fill="currentColor" />
         </button>
       </div>
       <!-- Teleported attach menu (avoids overflow:hidden clipping) -->
@@ -157,23 +153,61 @@
           ⚙️ {{ t('chat.quickSend.edit') }}
         </button>
       </PopupMenu>
-      <!-- Model selection modal -->
-      <ModelModal
-        :show="showModelModal"
+      <!-- Session settings modal -->
+      <SessionSettingModal
+        :show="showSettingsModal"
         :agent-id="currentAgentId"
-        @update:show="showModelModal = $event"
+        :initial-tab="settingsModalInitialTab"
+        @update:show="showSettingsModal = $event"
         @switch-model="handleSwitchModel"
         @switch-thinking-effort="handleSwitchThinkingEffort"
+        @switch-mode="handleSwitchMode"
+        @switch-transport="handleSwitchTransport"
       />
       <QuickSendDialog :open="props.active && quickSendStore.showEditDialog.value" @close="quickSendStore.showEditDialog.value = false" />
-      <!-- @ command autocomplete menu -->
-      <PopupMenu v-model:show="showAtMenu" :target-element="textareaRef" :max-width="260" :max-height="200" :menu-items-count="atMenuItems.length">
+      <!-- @ command autocomplete menu (ClawBench built-in) -->
+      <PopupMenu v-model:show="showAtMenu" :target-element="textareaRef" anchor="left" :max-width="260" :max-height="200" :menu-items-count="atMenuItems.length">
         <div class="at-menu-title">{{ t('chat.atCommand.title') }}</div>
         <button v-for="cmd in atMenuItems" :key="cmd.key" class="at-menu-item" @mousedown.prevent="handleAtSelect(cmd)">
           <span class="at-menu-label">{{ cmd.label }}</span>
           <span class="at-menu-desc">{{ cmd.description }}</span>
         </button>
       </PopupMenu>
+      <!-- Slash command autocomplete menu (ACP backend commands — only in acp-stdio transport) -->
+      <PopupMenu v-if="isACPTransport && availableCommands.length > 0" v-model:show="showSlashMenu" :target-element="textareaRef" anchor="left" :max-width="300" :max-height="240" :menu-items-count="slashMenuItems.length">
+        <div class="at-menu-title">{{ t('chat.slashCommand.title') }}</div>
+        <button v-for="cmd in slashMenuItems" :key="cmd.key" class="at-menu-item" @mousedown.prevent="handleSlashSelect(cmd)">
+          <span class="at-menu-label slash-label">{{ cmd.label }}</span>
+          <span class="at-menu-desc">{{ cmd.description }}</span>
+        </button>
+      </PopupMenu>
+      <!-- ACP session resume drawer -->
+      <AcpSessionDrawer
+        :open="showAcpSessionDrawer"
+        :agent-id="currentAgentId"
+        @close="showAcpSessionDrawer = false"
+        @select="handleAcpSessionSelect"
+      />
+    </div>
+    <!-- Session info bar (model + mode + thinking + transport) -->
+    <div class="chat-session-info" v-if="currentModelName || showModeInfo || showThinkingInfo || showTransportInfo || showResumeIcon">
+      <span class="session-info-model" @click.stop="openSettingsModal('model')"><Cpu :size="11" />{{ currentModelName }}</span>
+      <template v-if="showModeInfo">
+        <span class="session-info-divider"></span>
+        <span class="session-info-mode" @click.stop="openSettingsModal('mode')"><Compass :size="11" />{{ currentModeName }}</span>
+      </template>
+      <template v-if="showThinkingInfo">
+        <span class="session-info-divider"></span>
+        <span class="session-info-thinking" @click.stop="openSettingsModal('thinking')"><Brain :size="11" />{{ currentThinkingEffortName }}</span>
+      </template>
+      <template v-if="showTransportInfo">
+        <span class="session-info-divider"></span>
+        <span class="session-info-transport" @click.stop="openSettingsModal('transport')"><Cable :size="11" />{{ currentTransport }}</span>
+      </template>
+      <template v-if="showResumeIcon">
+        <span class="session-info-divider"></span>
+        <span class="session-info-resume" @click.stop="openResumeDrawer" :title="t('chat.acpSession.title')"><RotateCcw :size="11" /></span>
+      </template>
     </div>
   </div>
 </template>
@@ -181,18 +215,41 @@
 <script setup>
 import { ref, computed, nextTick, watch, onBeforeUnmount, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { MessageSquare, List, Plus, Trash2, Volume2, Upload, Paperclip, FileImage, FileText, Folder, XCircle, Inbox, Send, Square, Cpu, Check, Brain, Zap } from 'lucide-vue-next'
+import { MessageSquare, List, Plus, Trash2, Volume2, Upload, Paperclip, FileImage, FileText, Folder, XCircle, Inbox, Send, Square, Settings, Zap, Loader2, Cpu, Compass, Brain, Cable, RotateCcw } from 'lucide-vue-next'
 import { baseName } from '@/utils/path.ts'
 import { computeRecentReferencedFiles, computeHasFileGroups, computeAttachMenuItemCount } from '@/utils/chatInputUtils.ts'
 import PopupMenu from '@/components/common/PopupMenu.vue'
 import QuickSendDialog from '@/components/chat/QuickSendDialog.vue'
-import ModelModal from '@/components/chat/ModelModal.vue'
+import SessionSettingModal from '@/components/chat/SessionSettingModal.vue'
 import { createStopButtonMachine } from '@/utils/stopButtonMachine.ts'
 import { useDialog } from '@/composables/useDialog.ts'
 import { useQuickSend } from '@/composables/useQuickSend'
 import { useChatKeyboard } from '@/composables/useChatKeyboard'
+import { useSessionIdentity } from '@/composables/useSessionIdentity'
+import { useAgents, agentCanResume } from '@/composables/useAgents'
+import AcpSessionDrawer from '@/components/chat/AcpSessionDrawer.vue'
 
 const { t } = useI18n()
+const { availableCommands, availableModes, availableThinkingEfforts, currentThinkingEffortName, currentTransport: sessionTransport } = useSessionIdentity()
+const { supportsDualTransport, hasThinkingEffortLevels } = useAgents()
+
+// isACP: true when the current agent supports ACP (has acpCommand).
+// Used for mode chips, thinking effort chips — these are ACP features
+// that apply regardless of the current session's transport mode.
+const isACP = computed(() => supportsDualTransport(props.currentAgentId || ''))
+
+// isACPTransport: true when the current session is using ACP transport.
+// Slash commands are only available in ACP transport mode — even if the
+// agent supports dual transport, CLI sessions don't have slash commands.
+const isACPTransport = computed(() => {
+  if (sessionTransport.value) return sessionTransport.value === 'acp-stdio'
+  return props.currentTransport === 'acp-stdio'
+})
+
+const showModeInfo = computed(() => availableModes.value.length > 0 && isACP.value)
+const showThinkingInfo = computed(() => isACP.value && (availableThinkingEfforts.value.length > 0 || hasThinkingEffortLevels(props.currentAgentId || '')))
+const showTransportInfo = computed(() => supportsDualTransport(props.currentAgentId || '') || !isACP.value)
+const showResumeIcon = computed(() => props.currentAgentId && agentCanResume(props.currentAgentId))
 const dialog = useDialog()
 const quickSendStore = useQuickSend()
 const { items: quickSendItems, fetchItems } = quickSendStore
@@ -208,7 +265,7 @@ const placeholderHints = computed(() => {
   if (quickSendItems.value.length > 0) {
     hints.push(t('chat.input.placeholderQuickSend'))
   }
-  hints.push(t('chat.input.placeholderAtCommand'))
+  hints.push(t('chat.input.placeholderCommand'))
   return hints
 })
 
@@ -259,6 +316,8 @@ const props = defineProps({
   currentModelId: String,
   currentModelName: String,
   currentThinkingEffort: String,
+  currentModeName: String,
+  currentTransport: String,
   currentAgentId: String,
   active: Boolean,
 })
@@ -279,6 +338,9 @@ const emit = defineEmits([
   'delete-session',
   'switch-model',
   'switch-thinking-effort',
+  'switch-mode',
+  'switch-transport',
+  'acp-session-loaded',
 ])
 
 const inputText = ref('')
@@ -290,29 +352,69 @@ const showAttachMenu = ref(false)
 const attachMenuRef = ref(null)
 const showQuickMenu = ref(false)
 const sendBtnRef = ref(null)
-const showModelModal = ref(false)
+const showSettingsModal = ref(false)
+const settingsModalInitialTab = ref('model')
+
+function openSettingsModal(tab) {
+  settingsModalInitialTab.value = tab
+  showSettingsModal.value = true
+}
 
 // ── @ command autocomplete ──
 const showAtMenu = ref(false)
-const atCommands = [
-  { key: '@chatsearch', label: '@chatsearch', description: t('chat.atCommand.chatsearchDesc') },
-  { key: '@task', label: '@task', description: t('chat.atCommand.taskDesc') },
-]
+const showAcpSessionDrawer = ref(false)
+const atCommands = computed(() => {
+  return [
+    { key: '@chatsearch', label: '@chatsearch', description: t('chat.atCommand.chatsearchDesc') },
+    { key: '@task', label: '@task', description: t('chat.atCommand.taskDesc') },
+  ]
+})
+
+// ── Slash command autocomplete (ACP backend commands) ──
+const showSlashMenu = ref(false)
 
 const atMenuItems = computed(() => {
   const text = inputText.value
   if (!text.startsWith('@')) return []
-  const query = text.toLowerCase()
-  return atCommands.filter(cmd => cmd.key.startsWith(query))
+  const query = text.toLowerCase().slice(1) // strip leading '@'
+  const cmds = atCommands.value // unwrap computed ref
+  if (!query) return cmds // empty query → show all
+  return cmds.filter(cmd => cmd.key.toLowerCase().includes(query))
+})
+
+const slashMenuItems = computed(() => {
+  const text = inputText.value
+  if (!text.startsWith('/')) return []
+  const query = text.toLowerCase().slice(1) // strip leading '/'
+  if (!query) return availableCommands.value.map(cmd => ({
+    key: '/' + cmd.name,
+    label: '/' + cmd.name,
+    description: cmd.description,
+    inputHint: cmd.inputHint || '',
+  }))
+  return availableCommands.value
+    .filter(cmd => cmd.name.toLowerCase().includes(query))
+    .map(cmd => ({
+      key: '/' + cmd.name,
+      label: '/' + cmd.name,
+      description: cmd.description,
+      inputHint: cmd.inputHint || '',
+    }))
 })
 
 // Directly control menu visibility from inputText changes
 watch(inputText, () => {
   const text = inputText.value
-  const shouldShow = text.startsWith('@')
+  // @ command menu
+  const shouldShowAt = text.startsWith('@')
     && !text.includes(' ')
     && atMenuItems.value.length > 0
-  showAtMenu.value = shouldShow
+  showAtMenu.value = shouldShowAt
+  // Slash command menu
+  const shouldShowSlash = text.startsWith('/')
+    && !text.includes(' ')
+    && slashMenuItems.value.length > 0
+  showSlashMenu.value = shouldShowSlash
 })
 
 function handleAtSelect(cmd) {
@@ -324,14 +426,35 @@ function handleAtSelect(cmd) {
   })
 }
 
+function handleSlashSelect(cmd) {
+  inputText.value = cmd.key + ' '
+  showSlashMenu.value = false
+  nextTick(() => {
+    const el = textareaRef.value
+    if (el) el.focus()
+  })
+}
+
+function openResumeDrawer() {
+  showAcpSessionDrawer.value = true
+}
+
+function handleAcpSessionSelect(sessionId) {
+  emit('acp-session-loaded', sessionId)
+}
+
 // Keyboard detection for iOS (no adjustResize) — activates visualViewport monitoring
 // when textarea is focused so App.vue can compensate the layout.
 const chatKeyboard = useChatKeyboard()
 
 // Stop button two-click confirmation state
 const stopPrimed = ref(false)
+const cancelling = ref(false)
 const stopMachine = createStopButtonMachine({
-  onConfirm: () => emit('cancel'),
+  onConfirm: () => {
+    cancelling.value = true
+    emit('cancel')
+  },
   onPrimeReset: () => { stopPrimed.value = false },
 })
 
@@ -427,10 +550,11 @@ function onTextareaBlur() {
   if (!inputText.value.trim()) {
     startPlaceholderRotation()
   }
-  // Close @ command menu when textarea loses focus (clicking menu items uses
+  // Close @ and / command menus when textarea loses focus (clicking menu items uses
   // @mousedown.prevent so blur won't fire for those interactions)
   nextTick(() => {
     showAtMenu.value = false
+    showSlashMenu.value = false
   })
 }
 
@@ -605,10 +729,19 @@ function handleSwitchThinkingEffort(level) {
   emit('switch-thinking-effort', level)
 }
 
+function handleSwitchMode(mode) {
+  emit('switch-mode', mode)
+}
+
+function handleSwitchTransport(transport) {
+  emit('switch-transport', transport)
+}
+
 // Menu mutual exclusion: opening one closes the others
-watch(showAttachMenu, (v) => { if (v) { showQuickMenu.value = false; showModelModal.value = false } })
-watch(showQuickMenu, (v) => { if (v) { showAttachMenu.value = false; showModelModal.value = false } })
-watch(showModelModal, (v) => { if (v) { showAttachMenu.value = false; showQuickMenu.value = false } })
+watch(showAttachMenu, (v) => { if (v) { showQuickMenu.value = false; showSettingsModal.value = false; showSlashMenu.value = false } })
+watch(showQuickMenu, (v) => { if (v) { showAttachMenu.value = false; showSettingsModal.value = false; showSlashMenu.value = false } })
+watch(showSettingsModal, (v) => { if (v) { showAttachMenu.value = false; showQuickMenu.value = false; showSlashMenu.value = false } })
+watch(showSlashMenu, (v) => { if (v) { showAttachMenu.value = false; showQuickMenu.value = false; showSettingsModal.value = false } })
 
 onMounted(() => {
   fetchItems()
@@ -616,11 +749,12 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  clearTimeout(stopPrimeTimer)
+  stopMachine.destroy()
   if (quickSendPressTimer) {
     clearTimeout(quickSendPressTimer)
     quickSendPressTimer = null
   }
+
   stopPlaceholderRotation()
 })
 
@@ -628,6 +762,7 @@ onBeforeUnmount(() => {
 watch(() => props.loading, (val) => {
   if (!val) {
     stopPrimed.value = false
+    cancelling.value = false
     stopMachine.reset()
   }
 })
@@ -655,6 +790,60 @@ defineExpose({
   margin: 0 8px 8px;
   padding-top: 8px;
   border-top: 1px solid var(--border-color, #e5e5e5);
+}
+
+/* Session info bar (model + mode + thinking + transport, below input box) */
+.chat-session-info {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  padding: 4px 8px 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-muted, #999);
+  overflow: hidden;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.session-info-model,
+.session-info-mode,
+.session-info-thinking,
+.session-info-transport,
+.session-info-resume {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.session-info-model:active,
+.session-info-mode:active,
+.session-info-thinking:active,
+.session-info-transport:active,
+.session-info-resume:active {
+  color: var(--accent-color, #0066cc);
+}
+
+.session-info-model svg,
+.session-info-mode svg,
+.session-info-thinking svg,
+.session-info-transport svg,
+.session-info-resume svg {
+  flex-shrink: 0;
+}
+
+.session-info-divider {
+  flex-shrink: 0;
+  width: 1px;
+  height: 10px;
+  background: var(--border-color, #e5e5e5);
 }
 
 /* Top action bar (above input box, compact) */
@@ -694,12 +883,15 @@ defineExpose({
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    gap: 3px;
     padding: 5px 6px 5px 8px;
     color: var(--text-muted, #999);
     background: var(--bg-tertiary, #f0f0f0);
     pointer-events: none;
     user-select: none;
     border-right: 1px solid var(--border-color, #e5e5e5);
+    font-size: 11px;
+    line-height: 1.3;
 }
 
 .chat-action-group .chat-action-btn:last-child {
@@ -834,11 +1026,6 @@ defineExpose({
 
 .chat-action-btn svg {
   flex-shrink: 0;
-}
-
-.chat-action-label {
-  font-size: 11px;
-  line-height: 1.3;
 }
 
 /* Unified input container */
@@ -1159,6 +1346,15 @@ defineExpose({
   animation: stop-heartbeat 0.8s ease-in-out infinite;
 }
 
+/* Stop button — cancelling (API request in flight): spinner, dimmed */
+.chat-stop-btn.cancelling {
+  background: color-mix(in srgb, var(--danger-color, #dc3545) 25%, transparent);
+  color: color-mix(in srgb, #fff 50%, var(--danger-color, #dc3545));
+  cursor: wait;
+  animation: none;
+  transform: none;
+}
+
 /* Pressed in primed state: scale feedback */
 .chat-stop-btn.primed:active {
   transform: scale(1.0);
@@ -1170,19 +1366,20 @@ defineExpose({
   50%      { box-shadow: 0 0 0 8px rgba(220, 53, 69, 0); }
 }
 
-/* Model switcher chip */
-.model-chip {
-  font-variant-numeric: tabular-nums;
-  flex-shrink: 1;
-  min-width: 0;
-  overflow: hidden;
+.spin-icon {
+  animation: spin 0.8s linear infinite;
 }
 
-.model-chip .chat-action-label {
-  overflow-x: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
 }
+
+.chat-action-label {
+  font-size: 11px;
+  line-height: 1.3;
+}
+
 
 </style>
 
@@ -1191,7 +1388,7 @@ defineExpose({
 /* Attach menu content styles */
 .attach-menu-group-title {
   padding: 4px 10px 1px;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text-muted, #999);
   font-weight: 500;
   letter-spacing: 0.3px;
@@ -1201,12 +1398,12 @@ defineExpose({
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
+  padding: 8px 14px;
   width: 100%;
   border: none;
   background: none;
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
   white-space: nowrap;
   text-align: left;
@@ -1219,13 +1416,13 @@ defineExpose({
 
 .attach-menu-item svg {
   flex-shrink: 0;
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
 }
 
 .attach-menu-item-name {
   font-family: monospace;
-  font-size: 11px;
+  font-size: 12px;
   min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
@@ -1240,7 +1437,7 @@ defineExpose({
 
 .attach-menu-item-count {
   margin-left: auto;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text-muted, #999);
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
@@ -1311,57 +1508,6 @@ defineExpose({
   margin: 3px 6px;
 }
 
-/* Model switcher menu content styles */
-.model-menu-title {
-  padding: 4px 10px 1px;
-  font-size: 10px;
-  color: var(--text-muted, #999);
-  font-weight: 500;
-  letter-spacing: 0.3px;
-}
-
-.model-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  width: 100%;
-  border: none;
-  background: none;
-  color: var(--text-primary);
-  font-size: 12px;
-  cursor: pointer;
-  white-space: nowrap;
-  text-align: left;
-}
-
-.model-menu-item:hover {
-  background: var(--accent-color, #0066cc);
-  color: #fff;
-}
-
-.model-menu-item.active {
-  color: var(--accent-color, #0066cc);
-  font-weight: 500;
-}
-
-.model-menu-item.active:hover {
-  color: #fff;
-}
-
-.model-menu-item svg {
-  flex-shrink: 0;
-  width: 14px;
-  height: 14px;
-}
-
-.model-menu-check-spacer {
-  display: inline-block;
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-}
-
 /* @ command autocomplete menu styles */
 .at-menu-title {
   padding: 6px 12px;
@@ -1398,6 +1544,14 @@ defineExpose({
 
 :root[data-theme="dark"] .at-menu-label {
   color: #a78bfa;
+}
+
+.at-menu-label.slash-label {
+  color: #0ea5e9;
+}
+
+:root[data-theme="dark"] .at-menu-label.slash-label {
+  color: #38bdf8;
 }
 
 .at-menu-desc {

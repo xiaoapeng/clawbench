@@ -6,6 +6,9 @@ import (
 	"net/http"
 	"strings"
 
+	acp "github.com/coder/acp-go-sdk"
+
+	"clawbench/internal/ai"
 	"clawbench/internal/model"
 	"clawbench/internal/service"
 )
@@ -15,6 +18,10 @@ func ServeAgentSubRoutes(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
 	if strings.HasSuffix(path, "/refresh-models") && r.Method == http.MethodPost {
 		ServeAgentRefreshModels(w, r)
+		return
+	}
+	if strings.HasSuffix(path, "/acp-sessions") && r.Method == http.MethodGet {
+		ServeACPSessions(w, r)
 		return
 	}
 	writeLocalizedErrorf(w, r, http.StatusNotFound, "NotFound")
@@ -33,6 +40,7 @@ func ServeAgents(w http.ResponseWriter, r *http.Request) {
 	writeLocalizedErrorf(w, r, http.StatusMethodNotAllowed, "MethodNotAllowed")
 }
 
+//nolint:gocyclo // serveAgentsGet fan-outs across ACP/CLI transport branches
 func serveAgentsGet(w http.ResponseWriter, _ *http.Request) {
 	configMutex.RLock()
 	agents := make([]*model.Agent, len(model.AgentList))
@@ -40,9 +48,70 @@ func serveAgentsGet(w http.ResponseWriter, _ *http.Request) {
 	defaultAgent := model.GetDefaultAgentID()
 	configMutex.RUnlock()
 
+	// Attach cached ACP mode/thinking/commands state to each agent.
+	// This lets the frontend populate mode chips and slash commands without
+	// extra API calls. State comes from the AgentCapabilityRegistry (agent-level)
+	// so it persists across connection lifecycle.
+	type acpState struct {
+		Mode         *ai.ModeState             `json:"modeState,omitempty"`
+		Effort       *ai.ThinkingEffortState   `json:"thinkingEffortState,omitempty"`
+		Commands     []ai.AvailableCommandInfo `json:"commands,omitempty"`
+		ModelList    *ai.ModelListState        `json:"modelListState,omitempty"`
+		Plan         *ai.PlanState             `json:"planState,omitempty"`
+		LoadSession  bool                      `json:"loadSession"`
+		ListSessions bool                      `json:"listSessions"`
+	}
+	states := make(map[string]*acpState, len(agents))
+	reg := ai.GetAgentCapabilityRegistry()
+	for _, a := range agents {
+		if a.SupportsACP() {
+			// ACP agents: populate from AgentCapabilityRegistry
+			agentCap := reg.Get(a.ID)
+			if agentCap == nil || !agentCap.HasData() {
+				// Agent supports ACP but pool hasn't been initialized yet.
+				// Still include a minimal state so the frontend can show
+				// loadSession/listSessions capabilities from DB.
+				loadSession := reg.GetLoadSession(a.ID)
+				listSessions := reg.GetListSessions(a.ID)
+				if loadSession || listSessions {
+					states[a.ID] = &acpState{LoadSession: loadSession, ListSessions: listSessions}
+				}
+				continue
+			}
+
+			var ms *ai.ModeState
+			var es *ai.ThinkingEffortState
+			var cmds []ai.AvailableCommandInfo
+			var ml *ai.ModelListState
+
+			ms = reg.GetModeState(a.ID, "")
+			es = reg.GetThinkingEffortState(a.ID, "")
+			cmds = reg.GetCommands(a.ID)
+			ml = reg.GetModelListState(a.ID, "")
+
+			// When ACP provides a model list, override the agent's Models
+			// so the frontend SessionSettingModal shows ACP models instead of CLI-discovered ones.
+			if ml != nil && len(ml.Models) > 0 {
+				a.Models = ml.Models
+			}
+
+			if ms != nil || es != nil || len(cmds) > 0 || ml != nil {
+				states[a.ID] = &acpState{
+					Mode: ms, Effort: es, Commands: cmds, ModelList: ml,
+					LoadSession: reg.GetLoadSession(a.ID), ListSessions: reg.GetListSessions(a.ID),
+				}
+			}
+			// Even without mode/effort/commands/model, include LoadSession/ListSessions
+			if states[a.ID] == nil && (reg.GetLoadSession(a.ID) || reg.GetListSessions(a.ID)) {
+				states[a.ID] = &acpState{LoadSession: reg.GetLoadSession(a.ID), ListSessions: reg.GetListSessions(a.ID)}
+			}
+		}
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"agents":       agents,
 		"defaultAgent": defaultAgent,
+		"acpStates":    states,
 	})
 }
 
@@ -109,8 +178,31 @@ func serveAgentsPatch(w http.ResponseWriter, r *http.Request) { //nolint:gocogni
 		agent.PreferredThinkingEffort = level
 	}
 
+	// Validate and apply transport (only for agents that support ACP)
+	if v, exists := patch["transport"]; exists {
+		transport, _ := v.(string)
+		spec := model.FindSpecByBackend(agent.Backend)
+		hasACP := spec != nil && spec.AcpCommand != ""
+		oldTransport := agent.Transport
+		switch {
+		case transport == "cli":
+			agent.Transport = "cli"
+		case transport == "acp-stdio" && hasACP:
+			agent.Transport = "acp-stdio"
+		default:
+			writeLocalizedErrorf(w, r, http.StatusBadRequest, "InvalidTransport")
+			return
+		}
+		// When switching from ACP to CLI, close all ACP connections for this agent
+		if oldTransport == "acp-stdio" && agent.Transport == "cli" {
+			mgr := ai.GetACPConnManager()
+			mgr.CloseConnsByAgentID(agentID)
+			slog.Info("closed ACP connections after transport switch to CLI", "agent", agentID)
+		}
+	}
+
 	// Persist to database
-	if err := service.PatchAgent(service.DB, agentID, agent.PreferredModel, agent.PreferredThinkingEffort); err != nil {
+	if err := service.PatchAgent(service.DB, agentID, agent.PreferredModel, agent.PreferredThinkingEffort, agent.Transport); err != nil {
 		writeLocalizedErrorf(w, r, http.StatusInternalServerError, "InternalError")
 		return
 	}
@@ -219,11 +311,6 @@ func ServeAgentRefreshModels(w http.ResponseWriter, r *http.Request) {
 		slog.Warn("failed to persist model refresh to DB", "agent", agentID, "error", err)
 	}
 
-	// Update cache file
-	if err := model.WriteModelCache(model.ModelCacheDir, agent.Backend, models); err != nil {
-		slog.Warn("failed to write model cache after refresh", "backend", agent.Backend, "error", err)
-	}
-
 	writeJSON(w, http.StatusOK, map[string]any{
 		"models": models,
 	})
@@ -233,4 +320,154 @@ func ServeAgentRefreshModels(w http.ResponseWriter, r *http.Request) {
 // and returns the corresponding ProviderSpec.
 func findProviderSpecForAgent(agentID string) *model.ProviderSpec {
 	return service.FindProviderSpecForAgent(agentID)
+}
+
+// ServeACPSessions handles GET /api/agents/{id}/acp-sessions — lists ACP sessions
+// for an agent that supports LoadSession + ListSessions.
+//
+//nolint:gocyclo // ServeACPSessions has multiple sequential checks and branches for ACP capability validation; restructuring would reduce readability
+func ServeACPSessions(w http.ResponseWriter, r *http.Request) {
+	// Extract agent ID from path: /api/agents/{id}/acp-sessions
+	path := strings.TrimPrefix(r.URL.Path, "/api/agents/")
+	agentID := strings.TrimSuffix(path, "/acp-sessions")
+
+	if agentID == "" || strings.Contains(agentID, "/") {
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "InvalidRequestBody")
+		return
+	}
+
+	configMutex.RLock()
+	agent, ok := model.Agents[agentID]
+	configMutex.RUnlock()
+
+	if !ok {
+		writeLocalizedErrorf(w, r, http.StatusNotFound, "AgentNotFound")
+		return
+	}
+
+	if !agent.SupportsACP() {
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "InvalidRequestBody")
+		return
+	}
+
+	reg := ai.GetAgentCapabilityRegistry()
+
+	// Try to get an existing alive connection first.
+	mgr := ai.GetACPConnManager()
+	conn := mgr.GetConnByAgentID(agentID)
+
+	// If no alive connection exists, try to spawn one to discover capabilities.
+	// This solves the chicken-and-egg problem: GetListSessions is only populated
+	// after Initialize, which requires spawning a connection. We use EnsureAlive
+	// which spawns without creating a session.
+	if conn == nil {
+		conn = mgr.GetOrCreateConnNoSession(r.Context(), agent)
+	}
+
+	// Check capabilities — they may have been populated by the EnsureAlive
+	// call above (via spawnLocked → Initialize), or from DB persistence.
+	loadSession := reg.GetLoadSession(agentID)
+	listSessions := reg.GetListSessions(agentID)
+
+	// If neither capability is supported, return 501
+	if !loadSession && !listSessions {
+		writeLocalizedErrorf(w, r, http.StatusNotImplemented, "NotImplemented")
+		return
+	}
+
+	// If ListSessions is not supported, return 501 — the drawer shows
+	// "not supported" message. The user can still use @resume with a
+	// known session ID if LoadSession is supported.
+	if !listSessions {
+		writeLocalizedErrorf(w, r, http.StatusNotImplemented, "NotImplemented")
+		return
+	}
+
+	// We know the agent supports ListSessions but couldn't get a connection.
+	if conn == nil {
+		slog.Warn("handler: failed to spawn ACP connection for ListSessions", "agent", agentID)
+		writeLocalizedErrorf(w, r, http.StatusServiceUnavailable, "ServiceUnavailable")
+		return
+	}
+
+	cursor := r.URL.Query().Get("cursor")
+	var cursorPtr *string
+	if cursor != "" {
+		cursorPtr = &cursor
+	}
+
+	sessions, nextCursor, err := conn.ListSessions(r.Context(), cursorPtr)
+	if err != nil {
+		slog.Error("handler: ListSessions failed", "agent", agentID, "error", err)
+		writeLocalizedErrorf(w, r, http.StatusInternalServerError, "InternalError")
+		return
+	}
+
+	// Filter out ACP sessions that already exist in ClawBench's session manager.
+	// Each loaded ACP session has source_session_id = "acp:{acpSessionId}".
+	// Active sessions: user already has this conversation — don't show it.
+	// Soft-deleted sessions: will be hard-deleted and recreated on load,
+	// so also don't show them to avoid confusion.
+	if len(sessions) > 0 {
+		acpSessionIDs := make([]string, len(sessions))
+		for i, s := range sessions {
+			acpSessionIDs[i] = string(s.SessionId)
+		}
+		existingACP := findExistingACPSessions(acpSessionIDs)
+		filtered := make([]acp.SessionInfo, 0, len(sessions))
+		for _, s := range sessions {
+			if !existingACP["acp:"+string(s.SessionId)] {
+				filtered = append(filtered, s)
+			}
+		}
+		sessions = filtered
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"sessions":   sessions,
+		"nextCursor": nextCursor,
+	})
+}
+
+// findExistingACPSessions returns a set of source_session_id values
+// (formatted as "acp:{acpSessionId}") for ACP sessions that already
+// exist in ClawBench's session manager (active or soft-deleted).
+// This is used to filter out already-loaded sessions from the ACP
+// session list displayed in the @resume drawer.
+func findExistingACPSessions(acpSessionIDs []string) map[string]bool {
+	if len(acpSessionIDs) == 0 {
+		return nil
+	}
+	// Build IN clause placeholders
+	placeholders := ""
+	sourceIDs := make([]any, len(acpSessionIDs))
+	for i, sid := range acpSessionIDs {
+		if i > 0 {
+			placeholders += ","
+		}
+		placeholders += "?"
+		sourceIDs[i] = "acp:" + sid
+	}
+
+	result := make(map[string]bool)
+	rows, err := service.DBRead.Query( //nolint:noctx // background DB query, no request context available in this helper
+		"SELECT source_session_id FROM chat_sessions WHERE source_session_id IN ("+placeholders+")",
+		sourceIDs...,
+	)
+	if err != nil {
+		slog.Warn("handler: failed to query existing ACP sessions for filtering", "error", err)
+		return result
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var sourceID string
+		if err := rows.Scan(&sourceID); err == nil {
+			result[sourceID] = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		slog.Warn("handler: error iterating ACP session rows", "error", err)
+	}
+	return result
 }

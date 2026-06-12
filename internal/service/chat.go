@@ -7,9 +7,12 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 
+	"clawbench/internal/ai"
 	"clawbench/internal/model"
+	"clawbench/internal/summarize"
 )
 
 // GetChatHistory retrieves all chat messages for a given project path, backend, and session.
@@ -137,6 +140,26 @@ func GetMessagesBySessionID(sessionID string) ([]model.ChatMessage, error) {
 	return scanMessages(rows, sessionID)
 }
 
+// ExtractPlainText extracts plain text from content that may be block-format JSON
+// (e.g. {"blocks":[{"type":"text","text":"hello"}]}) or plain text.
+// Returns the original content unchanged if it's not block-format JSON.
+func ExtractPlainText(content string) string {
+	if !strings.HasPrefix(content, `{"blocks":`) {
+		return content
+	}
+	var wrapper struct {
+		Blocks []model.ContentBlock `json:"blocks"`
+	}
+	if json.Unmarshal([]byte(content), &wrapper) != nil {
+		return content
+	}
+	text := summarize.ExtractTextFromBlocks(wrapper.Blocks)
+	if text == "" {
+		return content
+	}
+	return text
+}
+
 // AddChatMessage adds a message to the chat history for a given project path, backend, and session.
 func AddChatMessage(projectPath, backend, sessionID, role, content string, files []string, streaming bool, fallbackTitle string) (int64, error) {
 	// Guard: reject messages to soft-deleted sessions
@@ -182,7 +205,7 @@ func AddChatMessage(projectPath, backend, sessionID, role, content string, files
 		var count int
 		err = tx.QueryRow("SELECT COUNT(*) FROM chat_history WHERE session_id = ?", sessionID).Scan(&count)
 		if err == nil && count == 1 {
-			title := content
+			title := ExtractPlainText(content)
 			if len(files) > 0 && title == "" {
 				title = fallbackTitle
 			}
@@ -487,35 +510,80 @@ func UpdateSessionModel(sessionID, modelID string) error {
 	return err
 }
 
-// GetSessionThinkingEffort returns the thinking effort level for a session, or empty string if not set.
-func GetSessionThinkingEffort(sessionID string) string {
-	var effort string
-	err := DBRead.QueryRow("SELECT thinking_effort FROM chat_sessions WHERE id = ? AND deleted = 0", sessionID).Scan(&effort)
-	if err != nil {
-		return ""
-	}
-	return effort
-}
-
-// UpdateSessionThinkingEffort updates the thinking_effort field for a session.
-func UpdateSessionThinkingEffort(sessionID, effort string) error {
-	_, err := DB.Exec("UPDATE chat_sessions SET thinking_effort = ? WHERE id = ?", effort, sessionID)
+// UpdateSessionTransport updates the transport field for a session.
+func UpdateSessionTransport(sessionID, transport string) error {
+	_, err := DB.Exec("UPDATE chat_sessions SET transport = ? WHERE id = ?", transport, sessionID)
 	return err
 }
 
-// GetLatestUserModel returns the most recent model and thinking effort the user
-// explicitly chose for the given agent+project. Returns ("", "") if no user
-// preference exists (caller should fall back to agent defaults).
-// Used by scheduled tasks to respect the user's global model preference.
-func GetLatestUserModel(agentID, projectPath string) (modelID, thinkingEffort string) {
-	err := DBRead.QueryRow(
-		"SELECT model, thinking_effort FROM chat_sessions WHERE agent_id = ? AND project_path = ? AND deleted = 0 AND model != '' ORDER BY updated_at DESC LIMIT 1",
-		agentID, projectPath,
-	).Scan(&modelID, &thinkingEffort)
+// GetSessionTransport returns the transport for a session, or empty string if not set.
+func GetSessionTransport(sessionID string) string {
+	var transport string
+	err := DBRead.QueryRow("SELECT COALESCE(transport, '') FROM chat_sessions WHERE id = ? AND deleted = 0", sessionID).Scan(&transport)
 	if err != nil {
-		return "", ""
+		return ""
 	}
-	return modelID, thinkingEffort
+	return transport
+}
+
+// GetSessionAutoApprove returns whether auto-approve mode is enabled for a session.
+func GetSessionAutoApprove(sessionID string) bool {
+	var val int
+	err := DBRead.QueryRow("SELECT auto_approve FROM chat_sessions WHERE id = ? AND deleted = 0", sessionID).Scan(&val)
+	if err != nil {
+		return false
+	}
+	return val == 1
+}
+
+// UpdateSessionAutoApprove updates the auto_approve flag for a session.
+func UpdateSessionAutoApprove(sessionID string, enabled bool) error {
+	val := 0
+	if enabled {
+		val = 1
+	}
+	_, err := DB.Exec("UPDATE chat_sessions SET auto_approve = ? WHERE id = ?", val, sessionID)
+	return err
+}
+
+// SaveMetadata persists message metadata to the chat_metadata table.
+// This enables SQL-based analytical queries (token usage, cost, model stats)
+// while the same metadata remains embedded in chat_history.content JSON for
+// backward compatibility with the frontend.
+func SaveMetadata(messageID int64, meta *ai.Metadata) error {
+	if messageID <= 0 || meta == nil {
+		return nil
+	}
+	isError := 0
+	if meta.IsError {
+		isError = 1
+	}
+	_, err := DB.Exec(`
+		INSERT OR REPLACE INTO chat_metadata
+			(message_id, mode, thinking_effort, transport, model, input_tokens, output_tokens,
+			 duration_ms, wall_ms, cost_usd, stop_reason, is_error, error_message)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		messageID, meta.Mode, meta.ThinkingEffort, meta.Transport, meta.Model,
+		meta.InputTokens, meta.OutputTokens, meta.DurationMs, meta.WallMs,
+		meta.CostUSD, meta.StopReason, isError, meta.ErrorMessage,
+	)
+	return err
+}
+
+// GetLatestUserModel returns the most recent model the user explicitly chose
+// for the given agent+project. Returns "" if no user preference exists
+// (caller should fall back to agent defaults).
+// Used by scheduled tasks to respect the user's global model preference.
+func GetLatestUserModel(agentID, projectPath string) string {
+	var modelID string
+	err := DBRead.QueryRow(
+		"SELECT model FROM chat_sessions WHERE agent_id = ? AND project_path = ? AND deleted = 0 AND model != '' ORDER BY updated_at DESC LIMIT 1",
+		agentID, projectPath,
+	).Scan(&modelID)
+	if err != nil {
+		return ""
+	}
+	return modelID
 }
 
 // CreateSession creates a new chat session and returns its ID.
@@ -536,7 +604,26 @@ func CreateSession(projectPath, backend, title, agentID, modelName, agentSource,
 	if err != nil {
 		return "", err
 	}
+	slog.Info("session created",
+		slog.String("session", sessionID),
+		slog.String("backend", backend),
+		slog.String("agent", agentID),
+		slog.String("type", sessionType),
+		slog.String("source", agentSource))
 	return sessionID, nil
+}
+
+// UpdateSessionSourceID sets the source_session_id for a chat session.
+// Used by acp-load to track the ACP session origin (format: "acp:{acpSessionId}").
+func UpdateSessionSourceID(sessionID, sourceSessionID string) error {
+	_, err := DB.Exec("UPDATE chat_sessions SET source_session_id = ? WHERE id = ?", sourceSessionID, sessionID)
+	return err
+}
+
+// UpdateSessionTitle updates the title of a chat session.
+func UpdateSessionTitle(sessionID, title string) error {
+	_, err := DB.Exec("UPDATE chat_sessions SET title = ? WHERE id = ?", title, sessionID)
+	return err
 }
 
 // DeleteSession soft-deletes a chat session.
@@ -545,8 +632,11 @@ func CreateSession(projectPath, backend, title, agentID, modelName, agentSource,
 // since all message queries are scoped to sessions, and deleted sessions are excluded.
 // Data remains for RAG search but is hidden from UI; purged by cleanup worker after retention period.
 func DeleteSession(projectPath, backend, sessionID string) error {
-	// Soft-delete the session record, update timestamp to mark deletion time
-	_, err := DB.Exec("UPDATE chat_sessions SET deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE project_path = ? AND backend = ? AND id = ?", projectPath, backend, sessionID)
+	// Soft-delete the session record, update timestamp to mark deletion time.
+	// backend param kept for API compatibility but not used in WHERE —
+	// session ID (UUID) is already unique; filtering by backend could cause
+	// silent no-op when the client sends a wrong/empty backend value.
+	_, err := DB.Exec("UPDATE chat_sessions SET deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE project_path = ? AND id = ?", projectPath, sessionID)
 	return err
 }
 
@@ -642,23 +732,24 @@ func GetSessionTitlesBatchIncludeDeleted(sessionIDs []string) (map[string]string
 
 // SessionInfo contains session metadata for the chat view.
 type SessionInfo struct {
-	Title          string
-	Backend        string
-	AgentID        string
-	Model          string
-	ThinkingEffort string
-	ProjectPath    string // populated by GetSessionFullInfo only
+	Title       string
+	Backend     string
+	AgentID     string
+	Model       string
+	Transport   string
+	AutoApprove bool
+	ProjectPath string // populated by GetSessionFullInfo only
 }
 
-// GetSessionInfo fetches session metadata (title, backend, agent_id, model, thinking_effort)
-// in a single query instead of 5 separate queries.
+// GetSessionInfo fetches session metadata (title, backend, agent_id, model, transport)
+// in a single query instead of separate queries.
 func GetSessionInfo(sessionID string) (*SessionInfo, error) {
 	info := &SessionInfo{}
 	err := DBRead.QueryRow(
-		`SELECT title, backend, agent_id, model, thinking_effort
+		`SELECT title, backend, agent_id, model, COALESCE(transport, '')
 		 FROM chat_sessions WHERE id = ? AND deleted = 0`,
 		sessionID,
-	).Scan(&info.Title, &info.Backend, &info.AgentID, &info.Model, &info.ThinkingEffort)
+	).Scan(&info.Title, &info.Backend, &info.AgentID, &info.Model, &info.Transport)
 	if err != nil {
 		return nil, err
 	}
@@ -672,10 +763,10 @@ func GetSessionInfo(sessionID string) (*SessionInfo, error) {
 func GetSessionFullInfo(sessionID string) *SessionInfo {
 	info := &SessionInfo{}
 	err := DBRead.QueryRow(
-		`SELECT backend, project_path, title, agent_id, model, thinking_effort
+		`SELECT backend, project_path, title, agent_id, model, COALESCE(transport, ''), auto_approve
 		 FROM chat_sessions WHERE id = ? AND deleted = 0`,
 		sessionID,
-	).Scan(&info.Backend, &info.ProjectPath, &info.Title, &info.AgentID, &info.Model, &info.ThinkingEffort)
+	).Scan(&info.Backend, &info.ProjectPath, &info.Title, &info.AgentID, &info.Model, &info.Transport, &info.AutoApprove)
 	if err != nil {
 		return nil
 	}
@@ -713,12 +804,29 @@ func UpdateStreamingMessage(projectPath, backend, sessionID, content string) err
 
 // FinalizeStreamingMessage marks the streaming assistant message as complete and updates its content.
 // Also marks the message as unindexed (indexed=0) so the RAG indexer picks it up.
-func FinalizeStreamingMessage(projectPath, backend, sessionID, content string) error {
-	_, err := DB.Exec(
+// Returns the message ID of the finalized message (0 if not found).
+func FinalizeStreamingMessage(projectPath, backend, sessionID, content string) (int64, error) {
+	result, err := DB.Exec(
 		"UPDATE chat_history SET content = ?, streaming = 0, indexed = 0 WHERE project_path = ? AND backend = ? AND session_id = ? AND role = 'assistant' AND streaming = 1",
 		content, projectPath, backend, sessionID,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		return 0, nil
+	}
+	// Look up the message ID for the just-finalized row
+	var msgID int64
+	err = DBRead.QueryRow(
+		"SELECT id FROM chat_history WHERE project_path = ? AND backend = ? AND session_id = ? AND role = 'assistant' AND streaming = 0 ORDER BY id DESC LIMIT 1",
+		projectPath, backend, sessionID,
+	).Scan(&msgID)
+	if err != nil {
+		return 0, nil //nolint:nilerr // message finalized but ID lookup failed — non-fatal
+	}
+	return msgID, nil
 }
 
 // GetStreamingMessageID returns the ID of the finalized assistant message for a session.
@@ -754,7 +862,13 @@ func SaveRawResponse(sessionID, backend string, messageID int64, rawOutput strin
 // UpdateExternalSessionID sets the external session ID for a ClawBench session.
 func UpdateExternalSessionID(sessionID, externalID string) error {
 	_, err := DB.Exec("UPDATE chat_sessions SET external_session_id = ? WHERE id = ?", externalID, sessionID)
-	return err
+	if err != nil {
+		return err
+	}
+	slog.Info("external_session_id updated",
+		slog.String("session", sessionID),
+		slog.String("external_session_id", externalID))
+	return nil
 }
 
 // GetExternalSessionID returns the external session ID for a ClawBench session.
@@ -883,6 +997,27 @@ func PurgeDeletedData(sessionIDs []string) (sessionsPurged int64, messagesPurged
 		return 0, 0, err
 	}
 	return sessionsPurged, messagesPurged, nil
+}
+
+// HardDeleteSession removes a session and all its associated data regardless
+// of deletion status. Used by ACP LoadSession to clean up existing sessions
+// before recreating them with fresh replay data.
+// Deletes in order: ai_raw_responses → chat_history → task_executions → chat_sessions.
+func HardDeleteSession(sessionID string) error {
+	tx, err := DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	_, _ = tx.Exec("DELETE FROM ai_raw_responses WHERE session_id = ?", sessionID)
+	_, _ = tx.Exec("DELETE FROM chat_history WHERE session_id = ?", sessionID)
+	_, _ = tx.Exec("DELETE FROM task_executions WHERE session_id = ?", sessionID)
+	_, err = tx.Exec("DELETE FROM chat_sessions WHERE id = ?", sessionID)
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // enrichMessagesWithSummaries populates the Summary field for assistant messages

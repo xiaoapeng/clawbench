@@ -200,6 +200,33 @@ describe('parseAssistantContent', () => {
     })
     expect(parseAssistantContent(content).blocks).toHaveLength(4)
   })
+
+  // ── {"blocks":null} guard (fcfb228c regression test) ──
+
+  it('treats {"blocks":null} as empty blocks instead of rendering as text', () => {
+    const result = parseAssistantContent('{"blocks":null}')
+    expect(result.blocks).toEqual([])
+    expect(result.metadata).toBeNull()
+  })
+
+  it('preserves metadata when blocks is null', () => {
+    const result = parseAssistantContent('{"blocks":null,"metadata":{"model":"gpt-4"}}')
+    expect(result.blocks).toEqual([])
+    expect(result.metadata).toEqual({ model: 'gpt-4' })
+  })
+
+  it('preserves cancelled flag when blocks is null', () => {
+    const result = parseAssistantContent('{"blocks":null,"cancelled":true}')
+    expect(result.blocks).toEqual([])
+    expect(result.cancelled).toBe(true)
+  })
+
+  it('preserves both metadata and cancelled when blocks is null', () => {
+    const result = parseAssistantContent('{"blocks":null,"metadata":{"wallMs":100},"cancelled":true}')
+    expect(result.blocks).toEqual([])
+    expect(result.metadata).toEqual({ wallMs: 100 })
+    expect(result.cancelled).toBe(true)
+  })
 })
 
 // ── toolCallSummary ──
@@ -297,6 +324,15 @@ describe('toolCallSummary', () => {
 
   it('ignores non-string first value', () => {
     expect(toolCallSummary({ input: { count: 42 } })).toBe('')
+  })
+
+  it('returns empty when input is a string (partial JSON from streaming)', () => {
+    expect(toolCallSummary({ input: '{' })).toBe('')
+    expect(toolCallSummary({ input: '{"command":"ls"}' })).toBe('')
+  })
+
+  it('returns empty when input is an array', () => {
+    expect(toolCallSummary({ input: ['a', 'b'] })).toBe('')
   })
 })
 

@@ -18,19 +18,21 @@
       <div v-if="loading" class="session-loading">{{ t('common.loading') }}</div>
       <div v-else-if="sessions.length === 0" class="session-empty">{{ t('session.noSessions') }}</div>
       <template v-else>
-        <div
+        <SwipeToDeleteRow
           v-for="session in sessionsWithStatus"
           :key="session.id"
-          class="session-item"
-          :class="{ active: session.id === currentSessionId, running: session.running }"
-          @click="selectSession(session.id, session.backend)"
+          @delete="deleteSession(session.id)"
         >
-          <div class="session-item-main">
+          <div
+            class="session-item"
+            :class="{ active: session.id === currentSessionId, running: session.running }"
+            @click="selectSession(session.id, session.backend)"
+          >
+            <span v-if="session.unreadCount > 0 || session.pendingApproval" class="session-item-badge"></span>
+            <span v-if="session.running" class="session-running-line"></span>
             <div class="session-item-info">
               <div class="session-item-header">
                 <span class="session-item-title">{{ session.title }}</span>
-                <span v-if="session.unreadCount > 0" class="session-item-unread">{{ session.unreadCount }}</span>
-                <span v-if="session.running" class="session-running-dot"></span>
               </div>
               <div class="session-item-meta">
                 <span class="session-item-time">{{ formatRelativeTime(session.updatedAt) }}</span>
@@ -40,11 +42,8 @@
                 <span v-if="session.model" class="session-item-model">{{ session.model }}</span>
               </div>
             </div>
-            <button class="session-item-delete" @click.stop="deleteSession(session.id)" :title="t('common.delete')">
-              <Trash2 :size="14" />
-            </button>
           </div>
-        </div>
+        </SwipeToDeleteRow>
         <div ref="sentinelRef" class="session-list-sentinel"></div>
         <div v-if="loadingMore" class="session-loading-more">{{ t('common.loading') }}</div>
         <div v-else-if="!hasMore && sessions.length > 0" class="session-list-end"></div>
@@ -84,10 +83,11 @@
 
 <script setup>
 import { useI18n } from 'vue-i18n'
-import { Bot, Plus, Trash2 } from 'lucide-vue-next'
+import { Bot, Plus } from 'lucide-vue-next'
 import { ref, watch, computed, onUnmounted, nextTick } from 'vue'
 import BottomSheet from '@/components/common/BottomSheet.vue'
 import ModalDialog from '@/components/common/ModalDialog.vue'
+import SwipeToDeleteRow from '@/components/git/SwipeToDeleteRow.vue'
 import { useAgents } from '@/composables/useAgents'
 import { useDialog } from '@/composables/useDialog.ts'
 import { useSessionIdentity } from '@/composables/useSessionIdentity.ts'
@@ -121,8 +121,8 @@ const sessionCount = computed(() => store.state.sessionCount)
 const sessionMaxCount = computed(() => store.state.sessionMaxCount)
 const sessionPct = computed(() => sessionMaxCount.value > 0 ? Math.min((sessionCount.value / sessionMaxCount.value) * 100, 100) : 0)
 const sessionBarColor = computed(() => {
-  if (sessionPct.value >= 80) return '#ef4444'
-  if (sessionPct.value >= 60) return '#f59e0b'
+  if (sessionCount.value >= sessionMaxCount.value && sessionMaxCount.value > 0) return '#ef4444'
+  if (sessionPct.value >= 80) return '#f59e0b'
   return 'var(--accent-color, #0066cc)'
 })
 
@@ -245,13 +245,16 @@ function createSession(agentId) {
 }
 
 async function deleteSession(sessionId) {
-  if (!await dialog.confirm(t('session.confirmDelete'), { dangerous: true })) return
+  const isRunning = props.runningSessionIds.has(sessionId)
+  const confirmMsg = isRunning ? t('session.confirmDeleteRunning') : t('session.confirmDelete')
+  if (!await dialog.confirm(confirmMsg, { dangerous: true })) return
   const session = sessions.value.find(s => s.id === sessionId)
   emit('delete', sessionId, session?.backend)
-  // Optimistic local removal — no API reload needed while drawer is open.
-  // Next open will do a full loadSessions() to catch any changes made while closed.
-  sessions.value = sessions.value.filter(s => s.id !== sessionId)
-  if (store.state.sessionCount > 0) store.state.sessionCount--
+  // No optimistic removal — the delete is async (cancel + API call) and emit
+  // doesn't await the parent handler. If the API fails, an optimistic removal
+  // would make the session vanish then reappear on next load. Instead, rely on
+  // useChatSession.deleteSession to refresh state via loadSessionsOnce/switchSession
+  // on success, and leave the list unchanged on failure.
 }
 
 function addSessionLocally(session) {
@@ -261,13 +264,16 @@ function addSessionLocally(session) {
   sessions.value = [session, ...sessions.value]
 }
 
-// Load from API when the drawer opens. While the drawer is open, local
-// mutations (delete, create) update the sessions array directly — no reload
-// needed. The next open will do a full loadSessions() to catch any changes
-// that happened while the drawer was closed.
+// Load from API when the drawer opens. Also reload when sessionCount changes
+// while the drawer is open (e.g. after a successful delete).
 watch(() => props.open, async (val) => {
   if (val) {
     await Promise.all([loadSessions(), loadAgents()])
+  }
+})
+watch(() => store.state.sessionCount, async () => {
+  if (props.open) {
+    await loadSessions()
   }
 })
 
@@ -283,8 +289,8 @@ onUnmounted(() => {
 .session-list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 6px;
+  gap: 0;
+  padding: 0;
   min-height: 0;
   overflow-y: auto;
   flex: 1;
@@ -309,31 +315,29 @@ onUnmounted(() => {
 }
 
 .session-item {
-  padding: 8px 10px;
-  border-radius: 6px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border-color, #dee2e6);
   cursor: pointer;
   transition: background 0.15s;
-  border: 1px solid transparent;
 }
 
-.session-item:hover {
-  background: var(--bg-secondary, #f8f9fa);
+@media (hover: hover) {
+  .session-item:hover {
+    background: var(--bg-secondary, #f8f9fa);
+  }
 }
 
 .session-item.active {
   background: var(--accent-bg, rgba(0, 102, 204, 0.1));
-  border-color: var(--accent-color, #0066cc);
-}
-
-.session-item-main {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  border-left: 3px solid var(--accent-color, #0066cc);
+  padding-left: 9px;
 }
 
 .session-item-info {
-  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -360,40 +364,63 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  padding-right: 28px;
 }
 
 .session-item.active .session-item-title {
   color: var(--accent-color, #0066cc);
 }
 
-.session-item-unread {
-  font-size: 9px;
-  padding: 1px 5px;
-  border-radius: 8px;
-  font-weight: 600;
-  background: var(--accent-color, #0066cc);
-  color: #fff;
-  flex-shrink: 0;
-  min-width: 14px;
-  text-align: center;
-}
-
-.session-running-dot {
-  width: 6px;
-  height: 6px;
+.session-item-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  background: #22c55e;
-  flex-shrink: 0;
-  animation: pulse 1.5s infinite;
+  background: var(--accent-color, #0066cc);
 }
 
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+.session-running-line {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  overflow: hidden;
+}
+
+.session-running-line::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -40%;
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, #22c55e, transparent);
+  animation: scan-line 2s ease-in-out infinite;
+}
+
+@keyframes scan-line {
+  0% { left: -40%; }
+  100% { left: 100%; }
 }
 
 .session-item.running {
   background: rgba(34, 197, 94, 0.05);
+}
+
+/* SwipeToDeleteRow integration */
+:deep(.swipe-to-delete) {
+  border-radius: 0;
+}
+
+:deep(.swipe-delete-content) {
+  border-radius: 0;
+}
+
+:deep(.swipe-delete-bg) {
+  border-radius: 0;
 }
 
 .session-item-time {
@@ -444,27 +471,6 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.session-item-delete {
-  width: 22px;
-  height: 22px;
-  border: none;
-  background: none;
-  font-size: 16px;
-  color: var(--text-muted, #999);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
-  transition: all 0.15s;
-  flex-shrink: 0;
-}
-
-.session-item-delete:hover {
-  color: #dc3545;
-  background: var(--bg-tertiary, #f0f0f0);
 }
 
 .session-counter {
