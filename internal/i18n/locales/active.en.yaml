@@ -39,6 +39,7 @@ MessageIdRequired: messageId required
 InvalidRequest: Invalid request
 SessionBackendNotFound: Session backend not found
 FileNotFoundShort: File not found
+BrokenSymlink: "Broken symlink: target not found ({{.Target}})"
 DirectoryNotFound: Directory not found
 InvalidFilePath: Invalid file path
 FileTooLargeOrInvalid: File too large or invalid form

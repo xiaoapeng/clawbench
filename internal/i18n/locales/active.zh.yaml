@@ -39,6 +39,7 @@ MessageIdRequired: 消息ID为必填项
 InvalidRequest: 无效的请求
 SessionBackendNotFound: 会话后端未找到
 FileNotFoundShort: 文件未找到
+BrokenSymlink: "符号链接损坏：目标未找到 ({{.Target}})"
 DirectoryNotFound: 目录未找到
 InvalidFilePath: 无效的文件路径
 FileTooLargeOrInvalid: 文件过大或格式无效
