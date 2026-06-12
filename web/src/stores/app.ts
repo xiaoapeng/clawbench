@@ -255,7 +255,7 @@ async function loadFiles(dir = ''): Promise<void> {
     }
 }
 
-async function selectFile(path: string, isImageFile = false, isAudioFile = false, addToHistory = true, forceText = false): Promise<void> {
+async function selectFile(path: string, isImageFile = false, isAudioFile = false, addToHistory = true, forceText = false): Promise<boolean> {
     const key = 'clawbenchLastFile_' + state.projectRoot
     if (key !== 'clawbenchLastFile_') localStorage.setItem(key, path)
 
@@ -383,10 +383,12 @@ async function selectFile(path: string, isImageFile = false, isAudioFile = false
         } else {
             state.currentFile = data
         }
+        return true
     } catch (err) {
         // Don't replace currentFile — keep the previously opened file visible.
         // Show the error as a toast bubble instead.
         useToast().show((err as Error).message, { type: 'error', icon: '⚠️' })
+        return false
     }
 }
 

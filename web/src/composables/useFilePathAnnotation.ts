@@ -411,14 +411,14 @@ export function resolveRelativePath(href: string, baseDir: string): string {
  * If the file doesn't exist, shows a toast and does not navigate to a potentially
  * non-existent directory (fixes issue #166).
  */
-export async function openFilePath(resolvedPath: string): Promise<void> {
+export async function openFilePath(resolvedPath: string): Promise<boolean> {
     // Check if path is a directory
     try {
         const resp = await fetch(`/api/dir?path=${encodeURIComponent(resolvedPath)}`)
         if (resp.ok) {
             await store.navigateToDir(resolvedPath)
             window.dispatchEvent(new CustomEvent('open-file-manager'))
-            return
+            return true
         }
     } catch {
         // Ignore, fall through to open as file
@@ -441,12 +441,12 @@ export async function openFilePath(resolvedPath: string): Promise<void> {
                 const { useToast } = await import('@/composables/useToast')
                 const { gt } = await import('@/composables/useLocale')
                 useToast().show(gt('file.toast.fileNotFound'), { type: 'error', icon: '⚠️', duration: 2000 })
-                return
+                return false
             }
         }
     } catch {
         // Batch-exists check failed — proceed with selectFile as best-effort
     }
 
-    store.selectFile(resolvedPath)
+    return await store.selectFile(resolvedPath)
 }

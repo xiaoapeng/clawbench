@@ -754,13 +754,13 @@ async function handleSelectFile(path) {
 }
 
 async function handleBrowseSelectFile(path) {
-    await store.selectFile(path)
-    activeTab.value = 'viewer'
+    const ok = await store.selectFile(path)
+    if (ok) activeTab.value = 'viewer'
 }
 
 async function handleTaskOpenFile(filePath) {
-    await store.selectFile(filePath)
-    switchTab('viewer')
+    const ok = await store.selectFile(filePath)
+    if (ok) switchTab('viewer')
 }
 
 function onTaskCardClick(taskId) {

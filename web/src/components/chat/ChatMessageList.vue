@@ -248,8 +248,8 @@ async function handleChatClick(event) {
         }
       } else if (filePath) {
         // Open directory
-        openFilePath(filePath)
-        chatUI.navigateToFileViewer?.()
+        const ok = await openFilePath(filePath)
+        if (ok) chatUI.navigateToFileViewer?.()
       }
     }
     return
@@ -277,15 +277,15 @@ async function handleChatClick(event) {
     event.stopPropagation()
     const filePath = btn.getAttribute('data-file-path')
     if (filePath) {
-      openFilePath(filePath)
-      chatUI.navigateToFileViewer?.()
+      const ok = await openFilePath(filePath)
+      if (ok) chatUI.navigateToFileViewer?.()
     }
     return
   }
 
-  handleDblClick(event, (href) => {
-    openFilePath(href)
-    chatUI.navigateToFileViewer?.()
+  handleDblClick(event, async (href) => {
+    const ok = await openFilePath(href)
+    if (ok) chatUI.navigateToFileViewer?.()
   })
 }
 

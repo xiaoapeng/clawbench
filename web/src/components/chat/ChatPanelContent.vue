@@ -250,10 +250,10 @@ const theme = inject('theme', ref('light'))
 const switchTab = inject('switchTab', () => {})
 const { openFilePath } = useFilePathAnnotation()
 
-function handleFileTagClick(filePath) {
+async function handleFileTagClick(filePath) {
     if (filePath) {
-        openFilePath(filePath)
-        switchTab('viewer')
+        const ok = await openFilePath(filePath)
+        if (ok) switchTab('viewer')
     }
 }
 
@@ -776,10 +776,10 @@ function findToolBlock({ msgId, blockIdx }) {
   return (block && block.type === 'tool_use') ? block : null
 }
 
-function handleFileOpenInOverlay(filePath) {
+async function handleFileOpenInOverlay(filePath) {
   toolDetailOverlay.value.show = false
-  openFilePath(filePath)
-  switchTab('viewer')
+  const ok = await openFilePath(filePath)
+  if (ok) switchTab('viewer')
 }
 
 // Wire up WS event handler for session_update
