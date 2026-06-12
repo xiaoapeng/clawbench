@@ -384,7 +384,9 @@ async function selectFile(path: string, isImageFile = false, isAudioFile = false
             state.currentFile = data
         }
     } catch (err) {
-        state.currentFile = { path, name: baseName(path), error: (err as Error).message }
+        // Don't replace currentFile — keep the previously opened file visible.
+        // Show the error as a toast bubble instead.
+        useToast().show((err as Error).message, { type: 'error', icon: '⚠️' })
     }
 }
 
