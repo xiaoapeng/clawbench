@@ -11,13 +11,6 @@ export interface GestureCallbacks {
   onPinchZoom?: (delta: number) => void
   onGestureHint?: (symbol: string) => void
   onTouchScroll?: (deltaY: number) => void
-  /**
-   * Called on a single tap (not double-tap). Should return true if there was
-   * an active selection that was cleared, so the gesture handler can
-   * preventDefault on the touchend to stop the synthetic mousedown from
-   * re-activating xterm selection and blocking the system context menu dismiss.
-   */
-  onSingleTap?: () => boolean
 }
 
 type Direction = 'up' | 'down' | 'left' | 'right'
@@ -384,14 +377,6 @@ export function useTerminalGestures(
         lastTapTime = now
         lastTapX = touch.clientX
         lastTapY = touch.clientY
-        // Single tap — notify so e.g. selection can be cleared. If the
-        // callback reports it cleared a selection, preventDefault on the
-        // touchend to stop the synthetic mousedown from re-activating xterm
-        // selection and blocking the Android system context menu dismiss.
-        const hadSelection = callbacks.onSingleTap?.()
-        if (hadSelection) {
-          preventNativeTouch(e)
-        }
       }
     }
   }
