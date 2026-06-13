@@ -68,7 +68,6 @@
         <div class="agent-option-detail">
           <span class="agent-option-name">
             {{ agent.name }}
-            <span v-if="isDefaultAgent(agent.id)" class="agent-default-badge">⭐</span>
           </span>
           <span class="agent-option-specialty">{{ agent.specialty }}</span>
           <div class="agent-option-tags">
@@ -76,7 +75,8 @@
             <span v-if="agentDefaultModelName(agent.id)" class="agent-tag model-tag">{{ agentDefaultModelName(agent.id) }}</span>
           </div>
         </div>
-        <button v-if="!isDefaultAgent(agent.id)" class="agent-set-default-btn" @click.stop="handleSetDefaultAgent(agent.id)" :title="t('session.setAsDefaultAgent')">
+        <span v-if="isDefaultAgent(agent.id)" class="agent-default-badge-pill">{{ t('chat.sessionSetting.defaultBadge') }}</span>
+        <button v-else class="agent-set-default-btn" @click.stop="handleSetDefaultAgent(agent.id)" :title="t('session.setAsDefaultAgent')">
           <Star :size="14" />
         </button>
       </button>
@@ -604,12 +604,6 @@ onUnmounted(() => {
   font-weight: 500;
 }
 
-.agent-default-badge {
-  font-size: 10px;
-  margin-left: 2px;
-  vertical-align: middle;
-}
-
 .agent-set-default-btn {
   flex-shrink: 0;
   display: flex;
@@ -624,6 +618,16 @@ onUnmounted(() => {
   cursor: pointer;
   opacity: 0.4;
   transition: opacity 0.15s, background 0.15s;
+}
+.agent-default-badge-pill {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent-color, #0066cc);
+  padding: 1px 5px;
+  border-radius: 3px;
+  white-space: nowrap;
 }
 .agent-set-default-btn:hover {
   opacity: 1;
