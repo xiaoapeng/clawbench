@@ -133,12 +133,13 @@ export function useTerminalTabs(
 
     const tab = tabs.value[idx]
 
-    // Save sessionId before sendClose clears it
+    // Save sessionId and wsOpen before sendClose clears them
     const sessionId = tab.session.sessionId as unknown as string
+    const wasOpen = tab.session.wsOpen as unknown as boolean
 
     // Kill PTY: send WS close message, or fall back to HTTP API if WS is disconnected
     tab.session.sendClose()
-    if (sessionId && !tab.session.wsOpen) {
+    if (sessionId && !wasOpen) {
       // WS was already closed — sendClose couldn't reach the backend.
       // Use HTTP API to kill the orphaned PTY session.
       opts.onCloseSessionViaHttp?.(sessionId)
@@ -255,10 +256,11 @@ export function useTerminalTabs(
   function disposeAll() {
     for (const tab of tabs.value) {
       const sessionId = tab.session.sessionId as unknown as string
+      const wasOpen = tab.session.wsOpen as unknown as boolean
       tab.session.sendClose()
       // If WS was disconnected, sendClose couldn't reach the backend.
       // Use HTTP API to kill the PTY session.
-      if (sessionId && !tab.session.wsOpen) {
+      if (sessionId && !wasOpen) {
         opts.onCloseSessionViaHttp?.(sessionId)
       }
       if (tab.xterm) {
