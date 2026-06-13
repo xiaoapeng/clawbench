@@ -988,7 +988,7 @@ export default {
       summarizeBackend: '摘要后端',
       summarizeBackendDesc: '长文本转语音和定时任务的摘要处理方式',
       summarizeDisabled: '关闭',
-      summarizeSimple: '提取最终回答',
+      summarizeSimple: '提取结论',
       summarizeApi: 'API摘要',
       summarizeClaude: 'Claude',
       summarizeCodebuddy: 'CodeBuddy',

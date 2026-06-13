@@ -988,7 +988,7 @@ export default {
       summarizeBackend: 'Summarize Backend',
       summarizeBackendDesc: 'How to summarize long text before speech synthesis and task results',
       summarizeDisabled: 'Disabled',
-      summarizeSimple: 'Extract Final Answer',
+      summarizeSimple: 'Extract Conclusion',
       summarizeApi: 'API Summary',
       summarizeClaude: 'Claude',
       summarizeCodebuddy: 'CodeBuddy',

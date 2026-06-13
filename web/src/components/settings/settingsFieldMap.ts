@@ -147,7 +147,8 @@ export const categoryItems: Record<string, ItemSpec[]> = {
       { labelKey: 'settings.items.summarizeDeepseek', value: 'deepseek' },
       { labelKey: 'settings.items.summarizePi', value: 'pi' },
     ]},
-    { labelKey: 'settings.items.summarizeModel', descriptionKey: 'settings.items.summarizeModelDesc', key: 'summarize.model', type: 'text', source: 'server' },
+    { labelKey: 'settings.items.summarizeModel', descriptionKey: 'settings.items.summarizeModelDesc', key: 'summarize.model', type: 'text', source: 'server',
+      dependsOn: { key: 'summarize.backend', values: ['api', 'claude', 'codebuddy', 'gemini', 'opencode', 'codex', 'qoder', 'vecli', 'deepseek', 'pi'] } },
     // API sub-config (shown when backend is "api")
     { labelKey: 'settings.items.apiBaseUrl', descriptionKey: 'settings.items.apiBaseUrlDesc', key: 'summarize.api.base_url', type: 'text', source: 'server',
       dependsOn: { key: 'summarize.backend', value: 'api' }, sectionHeader: 'settings.items.apiHeader' },
