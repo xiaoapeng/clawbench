@@ -82,7 +82,7 @@
   <!-- Floating scroll buttons — outside scroll container, inside relative wrapper -->
   <!-- Floating scroll buttons — always at bottom -->
   <Transition name="scroll-fab">
-    <div v-if="scrolledUp || scrolledDown" class="scroll-fab-group scroll-fab-bottom">
+    <div v-if="scrolledUp || scrolledDown" ref="scrollFabRef" class="scroll-fab-group scroll-fab-bottom">
       <template v-if="scrolledUp">
         <button class="scroll-fab-btn" @click="scrollToTop" :title="t('chat.messageList.scrollToTop')">
           <ChevronsUp :size="18" />
@@ -106,7 +106,7 @@
 </template>
 
 <script setup>
-import { ref, nextTick, inject, computed, watch } from 'vue'
+import { ref, nextTick, inject, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ChevronUp, ChevronsUp, ArrowUp, ChevronsDown, ArrowDown } from 'lucide-vue-next'
 import ChatMessageItem from './ChatMessageItem.vue'
@@ -298,6 +298,7 @@ const isAtBottom = ref(true)
 // Only one group shows at a time — whichever direction the user last scrolled toward
 const scrolledUp = ref(false)
 const scrolledDown = ref(false)
+const scrollFabRef = ref(null)
 
 // Auto-hide timers for scroll buttons
 let scrollUpTimer = null
@@ -347,6 +348,24 @@ function handleScroll() {
     nextTick(() => { loadMorePending = false })
   }
 }
+
+// Hide scroll FAB on outside click
+function hideScrollFab() {
+  scrolledUp.value = false
+  scrolledDown.value = false
+  clearTimeout(scrollUpTimer)
+  clearTimeout(scrollDownTimer)
+}
+
+function onDocumentClick(e) {
+  if (!scrollFabRef.value) return
+  if (!scrollFabRef.value.contains(e.target)) {
+    hideScrollFab()
+  }
+}
+
+onMounted(() => document.addEventListener('click', onDocumentClick, true))
+onBeforeUnmount(() => document.removeEventListener('click', onDocumentClick, true))
 
 function scrollToBottom(force = false) {
   nextTick(() => {
