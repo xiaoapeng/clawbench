@@ -187,7 +187,6 @@ export const categoryItems: Record<string, ItemSpec[]> = {
   about: [
     { labelKey: 'settings.items.aboutServerVersion', descriptionKey: 'settings.items.aboutServerVersionDesc', key: 'serverVersion', type: 'info', source: 'server' },
     { labelKey: 'settings.items.aboutAppVersion', descriptionKey: 'settings.items.aboutAppVersionDesc', key: 'appVersion', type: 'info', source: 'local' },
-    { labelKey: 'settings.items.serverRestart', descriptionKey: 'settings.items.serverRestartDesc', key: 'restart', type: 'action', source: 'server' },
   ],
 }
 

@@ -198,9 +198,6 @@ async function handleUpdate(item: any, value: any) {
 }
 
 function handleClick(item: any) {
-  if (item.key === 'restart') {
-    emit('restartNeeded', [])
-  }
   if (item.key === 'reconfigureServer') {
     try {
       ;(window as any).AndroidNative?.showServerDialog?.()
