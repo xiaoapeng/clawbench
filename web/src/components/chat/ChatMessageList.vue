@@ -306,8 +306,7 @@ let lastScrollTop = 0
 const SCROLL_BUTTON_HIDE_DELAY = 3000
 
 const NEAR_BOTTOM_THRESHOLD = 60
-const SCROLL_BUTTON_TRIGGER = 300
-const SCROLL_DELTA_THRESHOLD = 300
+const SCROLL_BUTTON_TRIGGER = 200
 
 function handleScroll() {
   if (!messagesRef.value) return
@@ -322,9 +321,9 @@ function handleScroll() {
   lastScrollTop = el.scrollTop
 
   // Scrolled up (toward top): show top buttons, hide bottom
-  const shouldShowUp = scrollDelta < -SCROLL_DELTA_THRESHOLD && el.scrollTop > SCROLL_BUTTON_TRIGGER
+  const shouldShowUp = scrollDelta < 0 && el.scrollTop > SCROLL_BUTTON_TRIGGER
   // Scrolled down (toward bottom): show bottom buttons, hide top
-  const shouldShowDown = scrollDelta > SCROLL_DELTA_THRESHOLD && !nearBottom && distFromBottom > SCROLL_BUTTON_TRIGGER
+  const shouldShowDown = scrollDelta > 0 && !nearBottom && distFromBottom > SCROLL_BUTTON_TRIGGER
 
   if (shouldShowUp) {
     scrolledDown.value = false
