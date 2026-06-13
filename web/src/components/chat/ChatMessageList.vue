@@ -306,8 +306,8 @@ let lastScrollTop = 0
 const SCROLL_BUTTON_HIDE_DELAY = 3000
 
 const NEAR_BOTTOM_THRESHOLD = 60
-const SCROLL_BUTTON_TRIGGER = 500
-const SCROLL_DELTA_THRESHOLD = 50
+const SCROLL_BUTTON_TRIGGER = 300
+const SCROLL_DELTA_THRESHOLD = 300
 
 function handleScroll() {
   if (!messagesRef.value) return
