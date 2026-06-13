@@ -152,8 +152,23 @@ public class BackgroundService extends Service {
     // Must be static so startNativeEventWs() can set it before the Service is created.
     private static volatile boolean nativeWsNeeded = false;
 
+    // Terminal session count — updated by the WebView via WebAppInterface.
+    // Used to show the active terminal count in the foreground service notification.
+    private static volatile int terminalSessionCount = 0;
+
     public static boolean isRunning() {
         return isRunning;
+    }
+
+    /**
+     * Update the terminal session count (called from WebAppInterface JS bridge).
+     * Updates the foreground notification to show the current terminal count.
+     */
+    public static void setTerminalSessionCount(int count) {
+        terminalSessionCount = count;
+        if (isRunning && instance != null) {
+            instance.updateNotification(instance.forwardedPorts.size(), null);
+        }
     }
 
     /**
@@ -1103,20 +1118,26 @@ public class BackgroundService extends Service {
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
         );
 
-        String title;
+        String title = "ClawBench";
         String text;
         if (statusText != null) {
-            title = "ClawBench";
             text = statusText;
-        } else if (portCount > 0) {
-            title = "ClawBench";
-            text = portCount + " 个端口转发活跃";
-        } else if (nativeWsNeeded || nativeWsActive) {
-            title = "ClawBench";
-            text = "后台事件监听中";
         } else {
-            title = "ClawBench";
-            text = "后台服务即将停止";
+            // Build combined status text showing port forwards and terminal sessions
+            StringBuilder sb = new StringBuilder();
+            if (portCount > 0) {
+                sb.append(portCount).append(" 个端口转发");
+            }
+            int terms = terminalSessionCount;
+            if (terms > 0) {
+                if (sb.length() > 0) sb.append("，");
+                sb.append(terms).append(" 个终端");
+            }
+            if (nativeWsNeeded || nativeWsActive) {
+                if (sb.length() > 0) sb.append("，");
+                sb.append("后台事件监听中");
+            }
+            text = sb.length() > 0 ? sb.toString() : "后台服务即将停止";
         }
 
         return new NotificationCompat.Builder(this, CHANNEL_ID)

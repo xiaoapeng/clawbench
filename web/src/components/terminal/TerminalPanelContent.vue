@@ -375,6 +375,35 @@ const gestures = useTerminalGestures(
       if (gestureHintTimer) clearTimeout(gestureHintTimer)
       gestureHintTimer = setTimeout(() => { gestureHint.value = '' }, 600)
     },
+    onSingleTap: () => {
+      // Clear xterm selection and browser selection so the Android system
+      // context menu (copy/paste bar) is dismissed when tapping blank area.
+      // Return true if a selection was cleared so the gesture handler can
+      // preventDefault on the touchend (which stops the synthetic mousedown
+      // from reaching xterm — xterm's mousedown calls preventDefault which
+      // blocks the browser from closing the Android context menu).
+      const term = activeTab.value?.xterm
+      const hadXtermSelection = !!term?.hasSelection()
+      if (hadXtermSelection) {
+        term!.clearSelection()
+      }
+      const sel = window.getSelection()
+      const hadBrowserSelection = sel?.type === 'Range'
+      if (hadBrowserSelection) {
+        sel!.removeAllRanges()
+      }
+      // If any selection was cleared, also blur the xterm element to force
+      // the Android system to drop its selection UI / action bar.
+      if (hadXtermSelection || hadBrowserSelection) {
+        const xtermEl = term?.element
+        if (xtermEl && document.activeElement === xtermEl) {
+          xtermEl.blur()
+          // Re-focus after a tick so the terminal remains usable
+          requestAnimationFrame(() => term?.focus())
+        }
+      }
+      return hadXtermSelection || hadBrowserSelection
+    },
   },
 )
 
@@ -400,6 +429,16 @@ function disableVolumeKeys() {
 
 // Computed
 const canCreateMore = computed(() => tabs.value.length < maxSessions.value)
+
+// Sync terminal session count to Android notification
+watch(() => tabs.value.length, (count) => {
+  if (isAppMode.value) {
+    try {
+      const native = (window as any).AndroidNative
+      if (native?.setTerminalSessionCount) native.setTerminalSessionCount(count)
+    } catch { /* ignore */ }
+  }
+}, { immediate: true })
 
 const panelStyle = computed(() => ({
   '--keyboard-height': `${viewport.keyboardHeight.value}px`,

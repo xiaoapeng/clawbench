@@ -43,6 +43,7 @@ function setupGestures() {
   const hints: string[] = []
   const zoomDeltas: number[] = []
   const scrollDeltas: number[] = []
+  const singleTapCalls: number[] = []
   const gestures = useTerminalGestures(ref(el), {
     sendArrowUp: () => sent.push('up'),
     sendArrowDown: () => sent.push('down'),
@@ -54,10 +55,11 @@ function setupGestures() {
     onPinchZoom: (delta) => zoomDeltas.push(delta),
     onGestureHint: (symbol) => hints.push(symbol),
     onTouchScroll: (deltaY: number) => scrollDeltas.push(deltaY),
+    onSingleTap: () => { singleTapCalls.push(Date.now()); return false },
   })
   gestures.attach()
 
-  return { el, sent, hints, zoomDeltas, scrollDeltas, gestures }
+  return { el, sent, hints, zoomDeltas, scrollDeltas, singleTapCalls, gestures }
 }
 
 describe('useTerminalGestures', () => {
@@ -336,6 +338,67 @@ describe('useTerminalGestures — uncovered branches', () => {
     dispatchTouch(el, 'touchend', [], [makeTouch(63, 63)])
 
     expect(sent).toEqual(['tab'])
+  })
+
+  it('calls onSingleTap for a single tap but not for a double-tap', () => {
+    const { el, singleTapCalls } = setupGestures()
+
+    // Single tap
+    dispatchTouch(el, 'touchstart', [makeTouch(60, 60)])
+    dispatchTouch(el, 'touchend', [], [makeTouch(60, 60)])
+    expect(singleTapCalls.length).toBe(1)
+
+    // Double-tap (second tap within DOUBLE_TAP_MS)
+    dispatchTouch(el, 'touchstart', [makeTouch(62, 62)])
+    dispatchTouch(el, 'touchend', [], [makeTouch(62, 62)])
+    // onSingleTap should NOT be called for the second tap of a double-tap
+    expect(singleTapCalls.length).toBe(1)
+  })
+
+  it('preventDefaults on touchend when onSingleTap returns true (selection was cleared)', () => {
+    const el = document.createElement('div')
+    document.body.appendChild(el)
+    let tapCount = 0
+    const gestures = useTerminalGestures(ref(el), {
+      sendArrowUp: () => {},
+      sendArrowDown: () => {},
+      sendArrowLeft: () => {},
+      sendArrowRight: () => {},
+      sendPageUp: () => {},
+      sendPageDown: () => {},
+      sendTab: () => {},
+      onSingleTap: () => { tapCount++; return true },
+    })
+    gestures.attach()
+
+    dispatchTouch(el, 'touchstart', [makeTouch(60, 60)])
+    const touchEnd = dispatchTouch(el, 'touchend', [], [makeTouch(60, 60)])
+
+    expect(tapCount).toBe(1)
+    expect(touchEnd.preventDefault).toHaveBeenCalled()
+  })
+
+  it('does not preventDefault on touchend when onSingleTap returns false (no selection)', () => {
+    const el = document.createElement('div')
+    document.body.appendChild(el)
+    let tapCount = 0
+    const gestures = useTerminalGestures(ref(el), {
+      sendArrowUp: () => {},
+      sendArrowDown: () => {},
+      sendArrowLeft: () => {},
+      sendArrowRight: () => {},
+      sendPageUp: () => {},
+      sendPageDown: () => {},
+      sendTab: () => {},
+      onSingleTap: () => { tapCount++; return false },
+    })
+    gestures.attach()
+
+    dispatchTouch(el, 'touchstart', [makeTouch(60, 60)])
+    const touchEnd = dispatchTouch(el, 'touchend', [], [makeTouch(60, 60)])
+
+    expect(tapCount).toBe(1)
+    expect(touchEnd.preventDefault).not.toHaveBeenCalled()
   })
 
   it('handles touchstart with 3+ fingers gracefully', () => {

@@ -23,12 +23,14 @@ describe('TerminalPanel xterm selection defaults', () => {
 
   it('hides toolbar buttons whose actions are covered by gestures', () => {
     const source = readTerminalComponent('../terminal/TerminalPanelContent.vue')
-    const gestureMappedKeys = ['Esc', 'Tab', 'Page Up', 'Page Down', '↑', '↓', '←', '→']
+    const gestureMappedKeys = ['Tab', 'Page Up', 'Page Down', '↑', '↓', '←', '→']
 
     for (const title of gestureMappedKeys) {
       expect(source).toContain(`title="${title}"`)
     }
-    expect(source.match(/v-if="!gestures\.enabled\.value"/g)?.length).toBeGreaterThanOrEqual(4)
+    // Esc button is always visible (not hidden by gestures)
+    expect(source).toContain('title="Esc">Esc</button>')
+    expect(source.match(/v-if="!gestures\.enabled\.value"/g)?.length).toBeGreaterThanOrEqual(3)
     expect(source).toContain('v-show="!gestures.enabled.value" class="key-group"')
   })
 

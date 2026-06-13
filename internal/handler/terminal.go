@@ -80,8 +80,9 @@ func TerminalStatus(w http.ResponseWriter, r *http.Request) {
 	// No session ID — return all sessions
 	sessions := terminalMgr.AllSessionStatus()
 	writeJSON(w, http.StatusOK, map[string]any{
-		"enabled":  terminalMgr.IsEnabled(),
-		"sessions": sessions,
+		"enabled":       terminalMgr.IsEnabled(),
+		"sessions":      sessions,
+		"session_count": terminalMgr.SessionCount(),
 	})
 }
 
