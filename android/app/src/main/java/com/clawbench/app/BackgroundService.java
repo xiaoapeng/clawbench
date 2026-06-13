@@ -1134,8 +1134,9 @@ public class BackgroundService extends Service {
                 sb.append(terms).append(" 个终端");
             }
             if (nativeWsNeeded || nativeWsActive) {
-                if (sb.length() > 0) sb.append("，");
-                sb.append("后台事件监听中");
+                if (sb.length() == 0) {
+                    sb.append("消息监听中");
+                }
             }
             text = sb.length() > 0 ? sb.toString() : "后台服务即将停止";
         }
