@@ -321,7 +321,7 @@ function handleScroll() {
   lastScrollTop = el.scrollTop
 
   // Scrolled up (toward top): show top buttons, hide bottom
-  const shouldShowUp = scrollDelta < 0 && el.scrollTop > SCROLL_BUTTON_TRIGGER
+  const shouldShowUp = scrollDelta < 0 && distFromBottom > SCROLL_BUTTON_TRIGGER
   // Scrolled down (toward bottom): show bottom buttons, hide top
   const shouldShowDown = scrollDelta > 0 && !nearBottom && distFromBottom > SCROLL_BUTTON_TRIGGER
 
@@ -659,13 +659,14 @@ defineExpose({
   justify-content: center;
   width: 32px;
   height: 28px;
-  border: none;
   background: var(--bg-secondary);
   color: var(--text-secondary);
   box-shadow: var(--shadow-md);
+  border: 1px solid var(--border-color);
   cursor: pointer;
   transition: background 0.15s, color 0.15s, transform 0.15s;
   -webkit-tap-highlight-color: transparent;
+  margin: 0 -0.5px;
 }
 
 /* Left button: rounded on left, flat on right */
