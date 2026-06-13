@@ -298,6 +298,63 @@ describe('store', () => {
             expect(mockFetch).toHaveBeenCalledWith('/api/file/file.bin?forceText=1')
             vi.unstubAllGlobals()
         })
+
+        it('returns true for PDF files', async () => {
+            const result = await store.selectFile('/doc.pdf')
+            expect(result).toBe(true)
+            expect(store.state.currentFile?.isPdf).toBe(true)
+        })
+
+        it('returns true for image files', async () => {
+            const result = await store.selectFile('/photo.jpg')
+            expect(result).toBe(true)
+            expect(store.state.currentFile?.isImage).toBe(true)
+        })
+
+        it('returns true for audio files', async () => {
+            const result = await store.selectFile('/song.mp3')
+            expect(result).toBe(true)
+            expect(store.state.currentFile?.isAudio).toBe(true)
+        })
+
+        it('returns true for video files', async () => {
+            const result = await store.selectFile('/clip.mp4')
+            expect(result).toBe(true)
+            expect(store.state.currentFile?.isVideo).toBe(true)
+        })
+
+        it('returns true for unknown binary files', async () => {
+            const result = await store.selectFile('/archive.zip')
+            expect(result).toBe(true)
+            expect(store.state.currentFile?.isBinary).toBe(true)
+        })
+
+        it('returns true for too-large files', async () => {
+            const mockFetch = vi.fn().mockResolvedValue({
+                ok: false,
+                json: () => Promise.resolve({ msgKey: 'FileTooLarge' }),
+            })
+            vi.stubGlobal('fetch', mockFetch)
+
+            const result = await store.selectFile('/huge.ts')
+            expect(result).toBe(true)
+            expect(store.state.currentFile?.tooLarge).toBe(true)
+
+            vi.unstubAllGlobals()
+        })
+
+        it('returns false when API fetch fails', async () => {
+            const mockFetch = vi.fn().mockResolvedValue({
+                ok: false,
+                json: () => Promise.resolve({ error: 'not found' }),
+            })
+            vi.stubGlobal('fetch', mockFetch)
+
+            const result = await store.selectFile('/missing.ts')
+            expect(result).toBe(false)
+
+            vi.unstubAllGlobals()
+        })
     })
 
     // ── setProject ──
