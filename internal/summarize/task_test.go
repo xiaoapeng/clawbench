@@ -256,11 +256,11 @@ func TestExtractLastAnswerFromBlocks_MultipleToolUse(t *testing.T) {
 
 func TestExtractLastAnswerFromBlocks_NoToolUse(t *testing.T) {
 	blocks := []model.ContentBlock{
-		{Type: "text", Text: "First answer."},
-		{Type: "text", Text: "Second paragraph."},
+		{Type: "text", Text: "Short intro."},
+		{Type: "text", Text: "This is a much longer and more substantive answer that contains the actual content."},
 	}
 	result := ExtractLastAnswerFromBlocks(blocks)
-	assert.Equal(t, "First answer.", result) // falls back to first text block
+	assert.Equal(t, "This is a much longer and more substantive answer that contains the actual content.", result) // falls back to longest text block
 }
 
 func TestExtractLastAnswerFromBlocks_NoTextAfterToolUse(t *testing.T) {
@@ -269,7 +269,7 @@ func TestExtractLastAnswerFromBlocks_NoTextAfterToolUse(t *testing.T) {
 		{Type: "tool_use", Name: "Bash", ID: "1"},
 	}
 	result := ExtractLastAnswerFromBlocks(blocks)
-	assert.Equal(t, "Let me check.", result) // falls back to first text block
+	assert.Equal(t, "Let me check.", result) // falls back to longest (only) text block
 }
 
 func TestExtractLastAnswerFromBlocks_OnlyToolUse(t *testing.T) {
@@ -294,4 +294,21 @@ func TestExtractLastAnswerFromBlocks_SkipsThinking(t *testing.T) {
 	}
 	result := ExtractLastAnswerFromBlocks(blocks)
 	assert.Equal(t, "The result is 42.", result)
+}
+
+// Simulates the message 11578 pattern: intro → many tool_use/text pairs →
+// substantive answer → final AskUserQuestion with no trailing text.
+func TestExtractLastAnswerFromBlocks_LongAnswerBeforeTerminalToolUse(t *testing.T) {
+	longAnswer := "Now I have the complete picture. Here is the full analysis of the terminal reconnection bug. When the user switches away from the terminal view and comes back, the current directory path gets output again on top of what was already there. This is caused by the PTY sending a fresh prompt on reconnect."
+	blocks := []model.ContentBlock{
+		{Type: "text", Text: "我来查看一下终端重连逻辑，以理解这个问题。"},
+		{Type: "tool_use", Name: "Grep", ID: "1"},
+		{Type: "tool_use", Name: "Read", ID: "2"},
+		{Type: "text", Text: "Now let me check the handler."},
+		{Type: "tool_use", Name: "Read", ID: "3"},
+		{Type: "text", Text: longAnswer},
+		{Type: "tool_use", Name: "AskUserQuestion", ID: "4"},
+	}
+	result := ExtractLastAnswerFromBlocks(blocks)
+	assert.Equal(t, longAnswer, result) // picks the longest text block, not the intro
 }

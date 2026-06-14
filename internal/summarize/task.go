@@ -153,17 +153,24 @@ func ExtractLastAnswerFromBlocks(blocks []model.ContentBlock) string {
 			lastToolIdx = i
 		}
 	}
-	// Find first text block after the last tool_use
-	for i := lastToolIdx + 1; i < len(blocks); i++ {
-		if blocks[i].Type == "text" && blocks[i].Text != "" {
-			return blocks[i].Text
+	// Find first text block after the last tool_use (only if tool_use exists)
+	if lastToolIdx >= 0 {
+		for i := lastToolIdx + 1; i < len(blocks); i++ {
+			if blocks[i].Type == "text" && blocks[i].Text != "" {
+				return blocks[i].Text
+			}
 		}
 	}
-	// No text after last tool_use — fall back to first text block
+	// No text after last tool_use — fall back to the longest text block.
+	// This handles the case where the AI gives a substantive answer followed
+	// by a terminal tool_use (e.g. AskUserQuestion) with no trailing text.
+	// Falling back to the first text block would typically return the intro
+	// sentence ("Let me check...") rather than the actual answer.
+	var bestText string
 	for _, b := range blocks {
-		if b.Type == "text" && b.Text != "" {
-			return b.Text
+		if b.Type == "text" && b.Text != "" && utf8.RuneCountInString(b.Text) > utf8.RuneCountInString(bestText) {
+			bestText = b.Text
 		}
 	}
-	return ""
+	return bestText
 }

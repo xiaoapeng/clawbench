@@ -43,7 +43,8 @@ var (
 const responsePreviewMaxRunes = model.ResponsePreviewMaxRunes
 
 // EmitSessionEvent broadcasts a session_update event to connected clients.
-func EmitSessionEvent(sessionID, status string, hasNewMessages bool) {
+// toolName is optional and only used for "permission_pending" status.
+func EmitSessionEvent(sessionID, status string, hasNewMessages bool, toolName ...string) {
 	mgr := ws.GetManager()
 	if mgr == nil {
 		return
@@ -64,6 +65,11 @@ func EmitSessionEvent(sessionID, status string, hasNewMessages bool) {
 		if status == "completed" {
 			data.ResponsePreview = getSessionResponsePreview(sessionID)
 		}
+	}
+
+	// Include toolName for permission_pending events
+	if status == "permission_pending" && len(toolName) > 0 {
+		data.ToolName = toolName[0]
 	}
 
 	data.ProjectPath = GetSessionProjectPath(sessionID)
@@ -113,6 +119,21 @@ func getSessionResponsePreview(sessionID string) string {
 				}
 				return b.Text
 			}
+		}
+		// No text after last tool_use — fall back to the longest text block.
+		// Handles the case where the AI gives a substantive answer followed by
+		// a terminal tool_use (e.g. AskUserQuestion) with no trailing text.
+		var bestText string
+		for _, b := range content.Blocks {
+			if b.Type == "text" && b.Text != "" && utf8.RuneCountInString(b.Text) > utf8.RuneCountInString(bestText) {
+				bestText = b.Text
+			}
+		}
+		if bestText != "" {
+			if utf8.RuneCountInString(bestText) > responsePreviewMaxRunes {
+				return string([]rune(bestText)[:responsePreviewMaxRunes]) + "…"
+			}
+			return bestText
 		}
 	}
 	return ""
