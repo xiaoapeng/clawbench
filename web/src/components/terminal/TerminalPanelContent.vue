@@ -764,6 +764,8 @@ onMounted(async () => {
   if (props.active) {
     emit('open')
     enableVolumeKeys()
+    // Wait for v-for :ref callbacks to populate tabContainerRefs
+    await nextTick()
     const tab = activeTab.value
     if (tab) {
       const container = tabContainerRefs.get(tab.id)
