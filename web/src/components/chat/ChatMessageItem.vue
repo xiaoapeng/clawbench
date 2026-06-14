@@ -18,7 +18,7 @@
         :streaming="msg.streaming"
         :cancelled="msg.cancelled"
         :summary="msg.summary"
-        :showingSummary="isLastRound ? false : msg.showingSummary"
+        :showingSummary="msg.showingSummary"
         :renderTextBlock="renderTextBlock"
         :formatToolInput="formatToolInput"
         :toolCallSummary="toolCallSummary"
