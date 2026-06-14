@@ -82,14 +82,12 @@
 
       <!-- Main toolbar row -->
       <div class="main-toolbar-row">
-        <div class="toolbar-left-controls">
-          <button class="toolbar-btn modifier gesture-toggle" :class="{ active: gestures.enabled.value }" @click="gestures.toggle(); focusTerminal()" @contextmenu.prevent :title="t('terminal.gestures')">
-            <HandIcon :size="14" />
-          </button>
-          <button class="toolbar-btn modifier gesture-toggle symbol-toggle" :class="{ active: showSymbolBar }" @click="toggleSymbolBar()" @contextmenu.prevent :title="t('terminal.symbols')">
-            <HashIcon :size="14" />
-          </button>
-        </div>
+        <button class="toolbar-btn modifier gesture-toggle" :class="{ active: gestures.enabled.value }" @click="handleGestureToggle" @contextmenu.prevent :title="t('terminal.gestures')">
+          <HandIcon :size="14" />
+        </button>
+        <button class="toolbar-btn modifier gesture-toggle" :class="{ active: showSymbolBar }" @click="toggleSymbolBar()" @contextmenu.prevent :title="t('terminal.symbols')">
+          <HashIcon :size="14" />
+        </button>
         <div class="scroll-wrapper" :class="{ 'scroll-fade-left': toolbarScrollFade.left, 'scroll-fade-right': toolbarScrollFade.right }">
           <div ref="toolbarScrollRef" class="toolbar-scroll" @scroll="updateToolbarScrollFade">
           <!-- Group: Modifiers -->
@@ -158,7 +156,7 @@
       :cwd="tabMenuCwd"
       @close="handleTabMenuClose"
       @copy-path="handleTabMenuCopyPath"
-      @new-tab-here="handleTabMenuNewTabHere"
+      @close-all="handleTabMenuCloseAll"
     />
 
     <!-- Quick command edit dialog — only open when terminal tab is active -->
@@ -314,6 +312,12 @@ function handleSymbolClick(sym: string) {
 function toggleSymbolBar() {
   showSymbolBar.value = !showSymbolBar.value
   if (showSymbolBar.value) sortSymbolsByFreq()
+  focusTerminal()
+}
+
+function handleGestureToggle() {
+  gestures.toggle()
+  toast.show(gestures.enabled.value ? t('terminal.gesturesOn') : t('terminal.gesturesOff'), { type: 'info', duration: 1200 })
   focusTerminal()
 }
 
@@ -617,24 +621,8 @@ function handleTabMenuCopyPath() {
   // Already handled by TerminalTabMenu
 }
 
-function handleTabMenuNewTabHere() {
-  const cwd = tabMenuCwd.value
-  if (!canCreateMore.value) return
-  const tab = tabManager.createTab(cwd || undefined)
-  nextTick(() => {
-    const container = tabContainerRefs.get(tab.id)
-    if (container && !tab.container) {
-      mountTabToContainer(tab, container)
-    }
-    if (props.active && tab.session.connectionState === 'disconnected') {
-      tab.session.connect().then(() => {
-        tabManager.syncTabSessionId(tab.id)
-        requestAnimationFrame(() => {
-          try { tab.fitAddon?.fit() } catch { /* ignore */ }
-        })
-      }).catch(() => {})
-    }
-  })
+function handleTabMenuCloseAll() {
+  tabManager.disposeAll()
 }
 
 // Reconnect for a specific tab
@@ -1171,8 +1159,6 @@ defineExpose({ activate: () => {}, deactivate: () => {}, keyboardHeight: viewpor
 
 .symbol-bar {
   padding: 3px 6px 0;
-  margin-left: 6px;
-  margin-right: 6px;
   background: color-mix(in srgb, var(--text-primary) 3%, transparent);
   border-radius: 6px 6px 0 0;
 }
@@ -1230,21 +1216,7 @@ defineExpose({ activate: () => {}, deactivate: () => {}, keyboardHeight: viewpor
   gap: 2px;
 }
 
-.toolbar-left-controls {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  flex-shrink: 0;
-}
-
-.gesture-toggle { flex-shrink: 0; }
-
-.symbol-toggle.active {
-  /* When symbol bar is open, blend the # button with the symbol bar
-     so they appear as one connected panel */
-  border-radius: 0 0 6px 6px;
-  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
-}
+.gesture-toggle { flex-shrink: 0; margin-right: 2px; }
 
 .toolbar-scroll {
   display: flex;

@@ -6,8 +6,8 @@
     <button class="tab-menu-item" @click="handleCopyPath">
       {{ t('terminal.copyPath') }}
     </button>
-    <button class="tab-menu-item" @click="handleNewTabHere">
-      {{ t('terminal.newTabHere') }}
+    <button class="tab-menu-item danger" @click="handleCloseAll">
+      {{ t('terminal.closeAllTabs') }}
     </button>
   </PopupMenu>
 </template>
@@ -27,7 +27,7 @@ const emit = defineEmits<{
   'update:show': [value: boolean]
   close: []
   copyPath: []
-  newTabHere: []
+  closeAll: []
 }>()
 
 const { t } = useI18n()
@@ -45,9 +45,9 @@ function handleCopyPath() {
   emit('copyPath')
 }
 
-function handleNewTabHere() {
+function handleCloseAll() {
   emit('update:show', false)
-  emit('newTabHere')
+  emit('closeAll')
 }
 </script>
 
@@ -69,6 +69,15 @@ function handleNewTabHere() {
 
 .tab-menu-item:hover {
   background: var(--accent-color, #0066cc);
+  color: #fff;
+}
+
+.tab-menu-item.danger {
+  color: var(--color-red, #dc3545);
+}
+
+.tab-menu-item.danger:hover {
+  background: var(--color-red, #dc3545);
   color: #fff;
 }
 </style>

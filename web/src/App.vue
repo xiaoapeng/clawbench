@@ -224,21 +224,25 @@
     <Teleport to="body">
       <Transition name="dock-popup">
         <div v-if="overflowMenuOpen" class="dock-overflow-popup" :style="overflowPopupStyle" @keydown.escape="overflowMenuOpen = false">
-          <button class="dock-overflow-item" :class="{ active: activeTab === 'tasks', 'dock-slot4-selected': dockSlot4Tab === 'tasks' }" @click.stop="handleOverflowSelect('tasks')">
+          <button class="dock-overflow-item" :class="{ active: activeTab === 'tasks' }" @click.stop="handleOverflowSelect('tasks')">
             <CalendarClock :size="16" />
             <span>{{ t('nav.tasks') }}</span>
+            <Check v-if="dockSlot4Tab === 'tasks'" :size="14" class="dock-slot4-check" />
           </button>
-          <button class="dock-overflow-item" :class="{ active: activeTab === 'history', 'dock-slot4-selected': dockSlot4Tab === 'history' }" @click.stop="handleOverflowSelect('history')">
+          <button class="dock-overflow-item" :class="{ active: activeTab === 'history' }" @click.stop="handleOverflowSelect('history')">
             <GitBranch :size="16" />
             <span>{{ t('git.history.projectHistory') }}</span>
+            <Check v-if="dockSlot4Tab === 'history'" :size="14" class="dock-slot4-check" />
           </button>
-          <button v-if="!isSSHDisabled" class="dock-overflow-item" :class="{ active: activeTab === 'proxy', 'dock-slot4-selected': dockSlot4Tab === 'proxy' }" @click.stop="handleOverflowSelect('proxy')">
+          <button v-if="!isSSHDisabled" class="dock-overflow-item" :class="{ active: activeTab === 'proxy' }" @click.stop="handleOverflowSelect('proxy')">
             <EthernetPort :size="16" />
             <span>{{ t('nav.portForward') }}</span>
+            <Check v-if="dockSlot4Tab === 'proxy'" :size="14" class="dock-slot4-check" />
           </button>
-          <button v-if="!isTerminalDisabled" class="dock-overflow-item" :class="{ active: activeTab === 'terminal', 'dock-slot4-selected': dockSlot4Tab === 'terminal' }" @click.stop="handleOverflowSelect('terminal')">
+          <button v-if="!isTerminalDisabled" class="dock-overflow-item" :class="{ active: activeTab === 'terminal' }" @click.stop="handleOverflowSelect('terminal')">
             <TerminalIcon :size="16" />
             <span>{{ t('terminal.title') }}</span>
+            <Check v-if="dockSlot4Tab === 'terminal'" :size="14" class="dock-slot4-check" />
           </button>
           <div class="dock-overflow-divider"></div>
           <button class="dock-overflow-item" @click.stop="handleOverflowSettings">
@@ -258,7 +262,7 @@
 import { ref, computed, watch, onMounted, onUnmounted, provide, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSettingsConfig } from '@/composables/useSettingsConfig'
-import { MessageSquare, FolderOpen, FileText, GitBranch, EthernetPort, Terminal as TerminalIcon, CalendarClock, MoreHorizontal, Settings } from 'lucide-vue-next'
+import { MessageSquare, FolderOpen, FileText, GitBranch, EthernetPort, Terminal as TerminalIcon, CalendarClock, MoreHorizontal, Settings, Check } from 'lucide-vue-next'
 import AppHeader from './components/common/AppHeader.vue'
 import TabPanel from './components/common/TabPanel.vue'
 import WelcomeView from './components/WelcomeView.vue'
@@ -1454,13 +1458,9 @@ onUnmounted(() => {
     color: var(--accent-color);
 }
 
-.dock-overflow-item.dock-slot4-selected::after {
-    content: '';
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--accent-color);
+.dock-slot4-check {
     margin-left: auto;
+    color: var(--accent-color);
     flex-shrink: 0;
 }
 
