@@ -85,6 +85,7 @@ CustomURLUnrecognizedFormat: URL 路径须以 /chat/completions（OpenAI）或 /
 PushTaskCompleted: AI任务完成
 PushSessionEnded: AI会话已结束
 PushScheduledTaskDone: 计划任务已完成
+PushPermissionPending: 需要审批
 NotFound: 未找到
 PermissionNotFound: 未找到待审批的权限请求
 ACPSessionNotFound: 该会话在智能体端已不存在

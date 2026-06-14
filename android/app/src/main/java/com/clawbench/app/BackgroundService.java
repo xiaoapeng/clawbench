@@ -1483,12 +1483,12 @@ public class BackgroundService extends Service {
                     webSocket.send(ack.toString());
                 }
 
-                // Only notify for terminal states
+                // Only notify for terminal states and permission pending
                 String status = data.optString("status", "");
                 boolean shouldNotify = false;
 
                 if ("session_update".equals(event)
-                        && ("completed".equals(status) || "cancelled".equals(status))) {
+                        && ("completed".equals(status) || "cancelled".equals(status) || "permission_pending".equals(status))) {
                     shouldNotify = true;
                 } else if ("task_update".equals(event)
                         && ("completed".equals(status) || "failed".equals(status) || "cancelled".equals(status))) {
@@ -1553,7 +1553,11 @@ public class BackgroundService extends Service {
             if ("session_update".equals(eventType)) {
                 sessionId = data.optString("session_id", "");
                 String responsePreview = data.optString("response_preview", "");
-                if ("completed".equals(status)) {
+                if ("permission_pending".equals(status)) {
+                    title = "需要审批";
+                    String toolName = data.optString("tool_name", "");
+                    text = toolName.isEmpty() ? "AI请求操作许可" : toolName;
+                } else if ("completed".equals(status)) {
                     title = "AI 任务完成";
                     text = responsePreview.isEmpty() ? "AI会话已结束" : responsePreview;
                 } else {
@@ -1635,7 +1639,7 @@ public class BackgroundService extends Service {
             intent.setAction(android.content.Intent.ACTION_MAIN);
             intent.addCategory(android.content.Intent.CATEGORY_LAUNCHER);
             intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-            intent.putExtra("event_type", "session_update");
+            intent.putExtra("event_type", "permission_pending".equals(status) ? "permission_pending" : "session_update");
             if (sessionId != null && !sessionId.isEmpty()) {
                 intent.putExtra("session_id", sessionId);
             }
