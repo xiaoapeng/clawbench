@@ -308,6 +308,7 @@ const SCROLL_BUTTON_HIDE_DELAY = 3000
 
 const NEAR_BOTTOM_THRESHOLD = 60
 const SCROLL_BUTTON_TRIGGER = 200
+const SCROLL_DELTA_THRESHOLD = 10
 
 function handleScroll() {
   if (!messagesRef.value) return
@@ -320,6 +321,9 @@ function handleScroll() {
   // Determine scroll direction
   const scrollDelta = el.scrollTop - lastScrollTop
   lastScrollTop = el.scrollTop
+
+  // Ignore tiny scroll movements (e.g. finger tremor on mobile) to prevent accidental FAB appearance
+  if (Math.abs(scrollDelta) < SCROLL_DELTA_THRESHOLD) return
 
   // Scrolled up (toward top): show top buttons, hide bottom
   const shouldShowUp = scrollDelta < 0 && distFromBottom > SCROLL_BUTTON_TRIGGER
