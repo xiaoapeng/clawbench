@@ -12,7 +12,7 @@
           <template #item="{ element, index }">
             <button
               class="kcf-chip kcf-chip-selected"
-              @dblclick="removeAt(index)"
+              @click="removeAt(index)"
             >
               <span class="kcf-chip-label">{{ element.label }}</span>
             </button>

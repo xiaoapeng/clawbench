@@ -1176,7 +1176,7 @@ export default {
     keyConfigSelected: 'Selected',
     keyConfigAvailable: 'Available',
     keyConfigEmpty: 'Tap keys below to add to toolbar',
-    keyConfigRemoveHint: 'Double-tap to remove',
+    keyConfigRemoveHint: 'Tap to remove',
     keyConfigSaved: 'Config saved',
     keyConfigSaveFailed: 'Save failed',
     keyGroupModifier: 'Modifiers',
