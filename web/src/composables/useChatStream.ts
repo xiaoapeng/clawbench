@@ -5,7 +5,7 @@ import { gt } from '@/composables/useLocale'
 import { updateModeState, updateAvailableModes, updateCommandState, updateThinkingEffortState, updateAvailableThinkingEfforts, currentAgentId } from './useSessionIdentity'
 import { updateACPModelList } from './useAgents'
 import { updatePlanEntries } from './usePlanProgress'
-import { FILE_MODIFYING_TOOLS, findLastBlockOfType, forceCleanupStreamingState as _forceCleanupStreamingState } from '@/utils/chatStreamUtils.ts'
+import { FILE_MODIFYING_TOOLS, findLastBlockOfType, forceCleanupStreamingState as _forceCleanupStreamingState, recoverStreamingMsg, prepareQueueConsume } from '@/utils/chatStreamUtils.ts'
 
 export interface UseChatStreamOptions {
   messages: Ref<any[]>
@@ -323,10 +323,25 @@ export function useChatStream(options: UseChatStreamOptions) {
     }
     onScrollBottom()
 
-    // Guard: skip events if session changed or message was removed
+    // Guard: skip events if session changed or message was removed.
+    // When the streamingMsg was removed (e.g. by forceCleanupStreamingState
+    // during queue_done) but the session is still running, attempt to
+    // recover by finding or creating a new streaming message instead of
+    // silently dropping the event.
     const guard = () => {
       if (currentSessionId.value !== sessionId) return false
-      if (!messages.value.includes(streamingMsg)) return false
+      if (!messages.value.includes(streamingMsg)) {
+        // Streaming message was removed (queue_done cleanup, loadHistory replace,
+        // or forceCleanupStreamingState). If the session is still running, try to
+        // recover so events aren't lost.
+        const recovered = recoverStreamingMsg(messages.value, loading.value, currentBackend.value)
+        if (recovered) {
+          streamingMsg = recovered
+          onRenderNeeded()
+          return true
+        }
+        return false
+      }
       return true
     }
 
@@ -684,38 +699,17 @@ export function useChatStream(options: UseChatStreamOptions) {
       let data: any
       try { data = JSON.parse(e.data) } catch { console.warn('SSE queue_consume: invalid JSON, skipping'); return }
 
-      // Add user message bubble (DB message already persisted by backend).
-      // Deduplicate: if a local user message with the same content already exists
-      // (e.g. from sendMessageNow's optimistic push when data.running was true),
-      // skip pushing a duplicate. The existing local message will be replaced by
-      // the DB version when onLoadHistory runs after the final 'done' event.
+      // Finalize any stale streaming message before adding new messages.
+      // queue_done should have already cleaned it up, but if events arrive
+      // out of order or guard() let a stale one through, we must finalize
+      // it here to prevent the old AI reply from appearing above the new
+      // user message (wrong ordering).
       const userContent = data.text || ''
-      const userFiles = (data.files || []).map(p => ({ path: p }))
-      const existingUserMsg = messages.value.find(
-        (m: any) => m.role === 'user' && m.content === userContent && !m.id
+      const userFiles = (data.files || []).map((p: string) => p)
+      streamingMsg = prepareQueueConsume(
+        messages.value, userContent, userFiles, currentBackend.value,
+        { onRenderNeeded, onExtractScheduledTasks }
       )
-      if (!existingUserMsg) {
-        messages.value.push({
-          role: 'user',
-          content: userContent,
-          blocks: userContent ? [{ type: 'text', text: userContent }] : [],
-          files: userFiles,
-          createdAt: new Date().toISOString(),
-        })
-      }
-
-      // Create new streaming assistant placeholder
-      messages.value.push({
-        role: 'assistant',
-        content: '',
-        blocks: [],
-        streaming: true,
-        createdAt: new Date().toISOString(),
-        backend: currentBackend.value,
-      })
-      // Re-acquire from the reactive array so mutations go through
-      // Vue's reactive proxy (see connectStream for the same pattern)
-      streamingMsg = messages.value[messages.value.length - 1]
 
       // Skip render/scroll when panel not visible
       if (isOpen.value) {

@@ -81,7 +81,7 @@
       :messages="messages"
       :autoSpeechEnabled="autoSpeech.enabled.value"
       :currentSessionId="identity.currentSessionId.value"
-      :chatUnread="store.state.chatUnread"
+      :chatUnreadCount="store.state.chatUnreadCount"
       :chatRunning="store.state.chatRunning"
       :currentModelId="identity.currentModelId.value"
       :currentModelName="identity.currentModelName.value"
@@ -250,10 +250,10 @@ const theme = inject('theme', ref('light'))
 const switchTab = inject('switchTab', () => {})
 const { openFilePath } = useFilePathAnnotation()
 
-function handleFileTagClick(filePath) {
+async function handleFileTagClick(filePath) {
     if (filePath) {
-        openFilePath(filePath)
-        switchTab('viewer')
+        const ok = await openFilePath(filePath)
+        if (ok) switchTab('viewer')
     }
 }
 
@@ -776,10 +776,10 @@ function findToolBlock({ msgId, blockIdx }) {
   return (block && block.type === 'tool_use') ? block : null
 }
 
-function handleFileOpenInOverlay(filePath) {
+async function handleFileOpenInOverlay(filePath, lineStart) {
   toolDetailOverlay.value.show = false
-  openFilePath(filePath)
-  switchTab('viewer')
+  const ok = await openFilePath(filePath, lineStart)
+  if (ok) switchTab('viewer')
 }
 
 // Wire up WS event handler for session_update

@@ -48,6 +48,7 @@
       :blockRagResults="blockRagResults"
       :agents="agents"
       :shouldCollapse="isCollapsed(i, msg)"
+      :isLastRound="lastRoundIndices.has(i)"
       :staticBlockCache="staticBlockCache"
       :active="active"
       @toggle-tool="$emit('toggle-tool', $event)"
@@ -82,7 +83,7 @@
   <!-- Floating scroll buttons — outside scroll container, inside relative wrapper -->
   <!-- Floating scroll buttons — always at bottom -->
   <Transition name="scroll-fab">
-    <div v-if="scrolledUp || scrolledDown" class="scroll-fab-group scroll-fab-bottom">
+    <div v-if="scrolledUp || scrolledDown" ref="scrollFabRef" class="scroll-fab-group scroll-fab-bottom">
       <template v-if="scrolledUp">
         <button class="scroll-fab-btn" @click="scrollToTop" :title="t('chat.messageList.scrollToTop')">
           <ChevronsUp :size="18" />
@@ -106,7 +107,7 @@
 </template>
 
 <script setup>
-import { ref, nextTick, inject, computed, watch } from 'vue'
+import { ref, nextTick, inject, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ChevronUp, ChevronsUp, ArrowUp, ChevronsDown, ArrowDown } from 'lucide-vue-next'
 import ChatMessageItem from './ChatMessageItem.vue'
@@ -248,8 +249,8 @@ async function handleChatClick(event) {
         }
       } else if (filePath) {
         // Open directory
-        openFilePath(filePath)
-        chatUI.navigateToFileViewer?.()
+        const ok = await openFilePath(filePath)
+        if (ok) chatUI.navigateToFileViewer?.()
       }
     }
     return
@@ -276,16 +277,17 @@ async function handleChatClick(event) {
     event.preventDefault()
     event.stopPropagation()
     const filePath = btn.getAttribute('data-file-path')
+    const lineStart = btn.getAttribute('data-line-start')
     if (filePath) {
-      openFilePath(filePath)
-      chatUI.navigateToFileViewer?.()
+      const ok = await openFilePath(filePath, lineStart ? parseInt(lineStart, 10) : undefined)
+      if (ok) chatUI.navigateToFileViewer?.()
     }
     return
   }
 
-  handleDblClick(event, (href) => {
-    openFilePath(href)
-    chatUI.navigateToFileViewer?.()
+  handleDblClick(event, async (href) => {
+    const ok = await openFilePath(href)
+    if (ok) chatUI.navigateToFileViewer?.()
   })
 }
 
@@ -298,6 +300,7 @@ const isAtBottom = ref(true)
 // Only one group shows at a time — whichever direction the user last scrolled toward
 const scrolledUp = ref(false)
 const scrolledDown = ref(false)
+const scrollFabRef = ref(null)
 
 // Auto-hide timers for scroll buttons
 let scrollUpTimer = null
@@ -306,7 +309,8 @@ let lastScrollTop = 0
 const SCROLL_BUTTON_HIDE_DELAY = 3000
 
 const NEAR_BOTTOM_THRESHOLD = 60
-const SCROLL_BUTTON_TRIGGER = 120
+const SCROLL_BUTTON_TRIGGER = 200
+const SCROLL_DELTA_THRESHOLD = 10
 
 function handleScroll() {
   if (!messagesRef.value) return
@@ -320,8 +324,11 @@ function handleScroll() {
   const scrollDelta = el.scrollTop - lastScrollTop
   lastScrollTop = el.scrollTop
 
+  // Ignore tiny scroll movements (e.g. finger tremor on mobile) to prevent accidental FAB appearance
+  if (Math.abs(scrollDelta) < SCROLL_DELTA_THRESHOLD) return
+
   // Scrolled up (toward top): show top buttons, hide bottom
-  const shouldShowUp = scrollDelta < 0 && el.scrollTop > SCROLL_BUTTON_TRIGGER
+  const shouldShowUp = scrollDelta < 0 && distFromBottom > SCROLL_BUTTON_TRIGGER
   // Scrolled down (toward bottom): show bottom buttons, hide top
   const shouldShowDown = scrollDelta > 0 && !nearBottom && distFromBottom > SCROLL_BUTTON_TRIGGER
 
@@ -347,6 +354,24 @@ function handleScroll() {
     nextTick(() => { loadMorePending = false })
   }
 }
+
+// Hide scroll FAB on outside click
+function hideScrollFab() {
+  scrolledUp.value = false
+  scrolledDown.value = false
+  clearTimeout(scrollUpTimer)
+  clearTimeout(scrollDownTimer)
+}
+
+function onDocumentClick(e) {
+  if (!scrollFabRef.value) return
+  if (!scrollFabRef.value.contains(e.target)) {
+    hideScrollFab()
+  }
+}
+
+onMounted(() => document.addEventListener('click', onDocumentClick, true))
+onBeforeUnmount(() => document.removeEventListener('click', onDocumentClick, true))
 
 function scrollToBottom(force = false) {
   nextTick(() => {
@@ -659,13 +684,14 @@ defineExpose({
   justify-content: center;
   width: 32px;
   height: 28px;
-  border: none;
   background: var(--bg-secondary);
   color: var(--text-secondary);
   box-shadow: var(--shadow-md);
+  border: 1px solid var(--border-color);
   cursor: pointer;
   transition: background 0.15s, color 0.15s, transform 0.15s;
   -webkit-tap-highlight-color: transparent;
+  margin: 0 -0.5px;
 }
 
 /* Left button: rounded on left, flat on right */

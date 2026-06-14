@@ -67,7 +67,39 @@ vi.mock('@/utils/chatStreamUtils', () => ({
   FILE_MODIFYING_TOOLS: new Set(),
   findLastBlockOfType: (blocks: any[], type: string) =>
     [...blocks].reverse().find(b => b.type === type),
-  forceCleanupStreamingState: vi.fn(),
+  forceCleanupStreamingState: vi.fn((messages: any[]) => {
+    // Simplified mock: remove streaming flag from the first streaming assistant message
+    const msg = messages.find((m: any) => m.role === 'assistant' && m.streaming)
+    if (msg) delete msg.streaming
+  }),
+  recoverStreamingMsg: vi.fn((messages: any[], isLoading: boolean, currentBackend: string) => {
+    if (!isLoading) return undefined
+    const existing = messages.find((m: any) => m.role === 'assistant' && m.streaming)
+    if (existing) return existing
+    const newMsg = { role: 'assistant', content: '', blocks: [], streaming: true, createdAt: new Date().toISOString(), backend: currentBackend }
+    messages.push(newMsg)
+    return newMsg
+  }),
+  prepareQueueConsume: vi.fn((messages: any[], userContent: string, userFiles: string[], currentBackend: string) => {
+    // Finalize any stale streaming message
+    const streamingMsg = messages.find((m: any) => m.role === 'assistant' && m.streaming)
+    if (streamingMsg) delete streamingMsg.streaming
+    // Add user message (deduplicate)
+    const existingUserMsg = messages.find((m: any) => m.role === 'user' && m.content === userContent && !m.id)
+    if (!existingUserMsg) {
+      messages.push({
+        role: 'user',
+        content: userContent,
+        blocks: userContent ? [{ type: 'text', text: userContent }] : [],
+        files: userFiles.map(p => ({ path: p })),
+        createdAt: new Date().toISOString(),
+      })
+    }
+    // Create new streaming assistant placeholder
+    const newStreamingMsg = { role: 'assistant', content: '', blocks: [], streaming: true, createdAt: new Date().toISOString(), backend: currentBackend }
+    messages.push(newStreamingMsg)
+    return newStreamingMsg
+  }),
 }))
 
 vi.mock('@/composables/useLocale', () => ({
@@ -935,8 +967,35 @@ describe('useChatStream', () => {
       expect(textBlocks.length).toBe(0)
     })
 
-    it('should guard against events when streaming message was removed', () => {
+    it('should recover streaming message when it was removed but session is still running', () => {
       const options = createOptions()
+      options.loading.value = true
+      const { connectStream } = useChatStream(options)
+
+      connectStream('test-session-1')
+      const es = getLatestEs()
+      es.simulateOpen()
+
+      // Remove the streaming message from the array (simulates queue_done cleanup)
+      const idx = options.messages.value.findIndex(
+        (m: any) => m.role === 'assistant' && m.streaming
+      )
+      options.messages.value.splice(idx, 1)
+
+      // Content event should recover the streaming message instead of being dropped
+      es.simulate('content', { content: 'recovered content' })
+
+      // A new streaming message should have been created
+      const recoveredMsg = options.messages.value.find(
+        (m: any) => m.role === 'assistant' && m.streaming
+      )
+      expect(recoveredMsg).toBeDefined()
+      expect(recoveredMsg.blocks).toEqual([{ type: 'text', text: 'recovered content' }])
+    })
+
+    it('should drop events when streaming message was removed and session is not running', () => {
+      const options = createOptions()
+      options.loading.value = false
       const { connectStream } = useChatStream(options)
 
       connectStream('test-session-1')
@@ -949,7 +1008,7 @@ describe('useChatStream', () => {
       )
       options.messages.value.splice(idx, 1)
 
-      // Content event should be ignored
+      // Content event should be ignored (loading=false, no recovery)
       es.simulate('content', { content: 'should be ignored' })
 
       // No messages should have been added back
@@ -1478,7 +1537,7 @@ describe('useChatStream', () => {
       expect(options.onLoadHistory).not.toHaveBeenCalled()
     })
 
-    it('should not call onMessage or onStreamEnd when guard fails on done', async () => {
+    it('should still call onMessage and onStreamEnd when streaming message was removed but session is running', async () => {
       const options = createOptions()
       const { connectStream } = useChatStream(options)
 
@@ -1487,11 +1546,32 @@ describe('useChatStream', () => {
       const es = getLatestEs()
       es.simulateOpen()
 
-      // Remove the streaming message — guard fails
+      // Remove the streaming message — guard recovers it because loading=true
       const idx = options.messages.value.findIndex(
         (m: any) => m.role === 'assistant' && m.streaming
       )
       options.messages.value.splice(idx, 1)
+
+      es.simulate('done', {})
+
+      // Guard should have recovered the streaming message, so done proceeds normally
+      await vi.waitFor(() => {
+        expect(options.onMessage).toHaveBeenCalled()
+      })
+      expect(options.onStreamEnd).toHaveBeenCalledWith('done')
+    })
+
+    it('should not call onMessage or onStreamEnd when guard fails due to session change on done', async () => {
+      const options = createOptions()
+      const { connectStream } = useChatStream(options)
+
+      options.loading.value = true
+      connectStream('test-session-1')
+      const es = getLatestEs()
+      es.simulateOpen()
+
+      // Change session — guard fails because session ID doesn't match (no recovery)
+      options.currentSessionId.value = 'different-session'
 
       es.simulate('done', {})
 

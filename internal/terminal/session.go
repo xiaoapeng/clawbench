@@ -58,8 +58,10 @@ func generateSessionID() string {
 // NewSession creates a new terminal session by starting a PTY in the given directory.
 func NewSession(projectPath, cwd string, cfg TerminalConfig) (*Session, error) {
 	idleTimeout, err := time.ParseDuration(cfg.IdleTimeout)
-	if err != nil {
-		idleTimeout = 10 * time.Minute
+	if err != nil || idleTimeout == 0 {
+		// 0 = never timeout; PTY lives until process exits or user explicitly closes.
+		// Empty string or invalid values also default to never timing out.
+		idleTimeout = 0
 	}
 
 	ptmx, cmd, err := startPTY(cwd)
@@ -79,15 +81,17 @@ func NewSession(projectPath, cwd string, cfg TerminalConfig) (*Session, error) {
 		running:     true,
 	}
 
-	// Start idle timer (will be stopped when a client connects)
-	s.idleTimer = time.AfterFunc(s.idleTimeout, func() {
-		slog.Info(
-			"terminal: session idle timeout",
-			slog.String("project", s.projectPath),
-			slog.String("session", s.id),
-		)
-		s.Close()
-	})
+	// Start idle timer only when timeout is configured (will be stopped when a client connects)
+	if s.idleTimeout > 0 {
+		s.idleTimer = time.AfterFunc(s.idleTimeout, func() {
+			slog.Info(
+				"terminal: session idle timeout",
+				slog.String("project", s.projectPath),
+				slog.String("session", s.id),
+			)
+			s.Close()
+		})
+	}
 
 	// Start reading PTY output
 	ctx, cancel := context.WithCancel(context.Background())
@@ -227,7 +231,9 @@ func (s *Session) Connect(conn *websocket.Conn) error {
 	}
 
 	// Stop idle timer — we have a client now
-	s.idleTimer.Stop()
+	if s.idleTimer != nil {
+		s.idleTimer.Stop()
+	}
 
 	s.wsConn = conn
 
@@ -267,8 +273,8 @@ func (s *Session) Disconnect(conn *websocket.Conn) {
 		s.wsConn = nil
 	}
 
-	// Start idle timer if no clients are connected
-	if s.wsConn == nil && !s.closed {
+	// Start idle timer if no clients are connected and timeout is configured
+	if s.wsConn == nil && !s.closed && s.idleTimer != nil {
 		s.idleTimer.Stop()
 		s.idleTimer.Reset(s.idleTimeout)
 	}

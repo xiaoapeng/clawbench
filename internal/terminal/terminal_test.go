@@ -471,12 +471,44 @@ func TestNewSession_InvalidIdleTimeout(t *testing.T) {
 	}
 	defer session.Close()
 
-	// Should fall back to 10 minute default, session should still work
+	// Should fall back to 0 (never timeout) for invalid duration
 	session.mu.Lock()
 	timeout := session.idleTimeout
+	timerNil := session.idleTimer == nil
 	session.mu.Unlock()
-	if timeout != 10*time.Minute {
-		t.Errorf("expected 10m fallback for invalid duration, got %v", timeout)
+	if timeout != 0 {
+		t.Errorf("expected 0 (never timeout) fallback for invalid duration, got %v", timeout)
+	}
+	if !timerNil {
+		t.Error("expected nil idleTimer for invalid duration (never timeout)")
+	}
+}
+
+// --- NewSession with zero idle timeout (never timeout) ---
+
+func TestNewSession_ZeroIdleTimeout(t *testing.T) {
+	cfg := TerminalConfig{
+		IdleTimeout:  "0",
+		BufferLines:  100,
+		MaxLineBytes: 65536,
+		MaxBufferMB:  4,
+	}
+
+	session, err := NewSession("/tmp", "/tmp", cfg)
+	if err != nil {
+		t.Skipf("PTY not available in this environment: %v", err)
+	}
+	defer session.Close()
+
+	session.mu.Lock()
+	timeout := session.idleTimeout
+	timerNil := session.idleTimer == nil
+	session.mu.Unlock()
+	if timeout != 0 {
+		t.Errorf("expected 0 (never timeout), got %v", timeout)
+	}
+	if !timerNil {
+		t.Error("expected nil idleTimer for zero timeout (never timeout)")
 	}
 }
 
