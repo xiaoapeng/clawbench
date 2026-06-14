@@ -1,10 +1,12 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   FILE_MODIFYING_TOOLS,
   findLastBlockOfType,
   forceCleanupStreamingState,
-  recoverStreamingMsg,
-  prepareQueueConsume,
+  findStreamingMsg,
+  createPendingUserMessage,
+  consumePendingMessage,
+  syncPendingFromBackend,
 } from '@/utils/chatStreamUtils.ts'
 
 describe('FILE_MODIFYING_TOOLS', () => {
@@ -283,187 +285,201 @@ describe('forceCleanupStreamingState', () => {
   })
 })
 
-describe('recoverStreamingMsg', () => {
-  it('returns undefined when not loading', () => {
+describe('findStreamingMsg', () => {
+  it('finds streaming assistant message', () => {
+    const messages = [
+      { role: 'user', content: 'hi' },
+      { role: 'assistant', content: '', streaming: true },
+    ]
+    expect(findStreamingMsg(messages)).toBe(messages[1])
+  })
+
+  it('returns undefined when no streaming message', () => {
+    const messages = [
+      { role: 'user', content: 'hi' },
+      { role: 'assistant', content: 'done' },
+    ]
+    expect(findStreamingMsg(messages)).toBeUndefined()
+  })
+
+  it('returns undefined for empty array', () => {
+    expect(findStreamingMsg([])).toBeUndefined()
+  })
+
+  it('returns first streaming message when multiple exist', () => {
+    const messages = [
+      { role: 'assistant', content: 'a', streaming: true },
+      { role: 'assistant', content: 'b', streaming: true },
+    ]
+    expect(findStreamingMsg(messages)).toBe(messages[0])
+  })
+})
+
+describe('createPendingUserMessage', () => {
+  it('creates message with text and files', () => {
+    const msg = createPendingUserMessage('hello', ['/a.txt', '/b.txt'])
+    expect(msg.role).toBe('user')
+    expect(msg.content).toBe('hello')
+    expect(msg.blocks).toEqual([{ type: 'text', text: 'hello' }])
+    expect(msg.files).toEqual([{ path: '/a.txt' }, { path: '/b.txt' }])
+    expect(msg.pending).toBe(true)
+    expect(msg.createdAt).toBeDefined()
+  })
+
+  it('handles empty text', () => {
+    const msg = createPendingUserMessage('')
+    expect(msg.content).toBe('')
+    expect(msg.blocks).toEqual([])
+    expect(msg.files).toEqual([])
+  })
+
+  it('handles no files (default)', () => {
+    const msg = createPendingUserMessage('hello')
+    expect(msg.files).toEqual([])
+  })
+
+  it('handles undefined text', () => {
+    const msg = createPendingUserMessage(undefined as any)
+    expect(msg.content).toBe('')
+    expect(msg.blocks).toEqual([])
+  })
+})
+
+describe('consumePendingMessage', () => {
+  const callbacks = {
+    onRenderNeeded: vi.fn(),
+    onExtractScheduledTasks: vi.fn(),
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('finds and un-marks pending message then pushes streaming assistant', () => {
+    const messages: any[] = [
+      { role: 'user', content: 'hello', pending: true, blocks: [{ type: 'text', text: 'hello' }] },
+    ]
+    const result = consumePendingMessage(messages, 'hello', [], 'codebuddy', callbacks)
+    expect(messages[0].pending).toBeUndefined()
+    expect(result.role).toBe('assistant')
+    expect(result.streaming).toBe(true)
+    expect(result.backend).toBe('codebuddy')
+    expect(messages).toHaveLength(2)
+  })
+
+  it('updates files on un-marked pending message', () => {
+    const messages: any[] = [
+      { role: 'user', content: 'hello', pending: true, files: [], blocks: [{ type: 'text', text: 'hello' }] },
+    ]
+    consumePendingMessage(messages, 'hello', ['/a.txt'], 'codebuddy', callbacks)
+    expect(messages[0].files).toEqual([{ path: '/a.txt' }])
+  })
+
+  it('creates user message when pending not found and no existing user msg', () => {
     const messages: any[] = []
-    const result = recoverStreamingMsg(messages, false, 'cli')
-    expect(result).toBeUndefined()
+    const result = consumePendingMessage(messages, 'hello', [], 'codebuddy', callbacks)
+    expect(messages).toHaveLength(2)
+    expect(messages[0].role).toBe('user')
+    expect(messages[0].content).toBe('hello')
+    expect(result.role).toBe('assistant')
+  })
+
+  it('skips creating user message when existing non-id user msg matches', () => {
+    const messages: any[] = [
+      { role: 'user', content: 'hello', id: undefined, blocks: [{ type: 'text', text: 'hello' }] },
+    ]
+    const result = consumePendingMessage(messages, 'hello', [], 'codebuddy', callbacks)
+    // Only the new streaming assistant is pushed, no duplicate user msg
+    expect(messages).toHaveLength(2)
+    expect(messages[0].content).toBe('hello')
+    expect(messages[1].role).toBe('assistant')
+  })
+
+  it('finalizes stale streaming message before adding new ones', () => {
+    const messages: any[] = [
+      { role: 'assistant', content: '', blocks: [], streaming: true },
+      { role: 'user', content: 'hello', pending: true, blocks: [{ type: 'text', text: 'hello' }] },
+    ]
+    consumePendingMessage(messages, 'hello', [], 'codebuddy', callbacks)
+    // Old empty streaming was removed by cleanup, new streaming was added
+    const streamingMsgs = messages.filter(m => m.streaming)
+    expect(streamingMsgs).toHaveLength(1)
+    expect(streamingMsgs[0].backend).toBe('codebuddy')
+  })
+
+  it('calls onExtractScheduledTasks during cleanup', () => {
+    const onExtractScheduledTasks = vi.fn()
+    const messages: any[] = [
+      { role: 'assistant', content: 'has content', blocks: [], streaming: true },
+      { role: 'user', content: 'hello', pending: true, blocks: [{ type: 'text', text: 'hello' }] },
+    ]
+    consumePendingMessage(messages, 'hello', [], 'codebuddy', { onRenderNeeded: vi.fn(), onExtractScheduledTasks })
+    expect(onExtractScheduledTasks).toHaveBeenCalled()
+  })
+})
+
+describe('syncPendingFromBackend', () => {
+  it('adds pending messages from backend that are not locally present', () => {
+    const messages: any[] = []
+    syncPendingFromBackend(messages, [{ text: 'hello' }])
+    expect(messages).toHaveLength(1)
+    expect(messages[0].role).toBe('user')
+    expect(messages[0].content).toBe('hello')
+    expect(messages[0].pending).toBe(true)
+  })
+
+  it('does not duplicate existing pending messages', () => {
+    const messages: any[] = [
+      { role: 'user', content: 'hello', pending: true },
+    ]
+    syncPendingFromBackend(messages, [{ text: 'hello' }])
+    expect(messages).toHaveLength(1)
+  })
+
+  it('removes pending messages not in backend queue', () => {
+    const messages: any[] = [
+      { role: 'user', content: 'hello', pending: true },
+    ]
+    syncPendingFromBackend(messages, [])
     expect(messages).toHaveLength(0)
   })
 
-  it('finds existing streaming message when loading', () => {
-    const streamingMsg = { role: 'assistant', content: '', blocks: [], streaming: true }
-    const messages = [streamingMsg]
-    const result = recoverStreamingMsg(messages, true, 'cli')
-    expect(result).toBe(streamingMsg)
-    expect(messages).toHaveLength(1)
-  })
-
-  it('creates new streaming message when none exists and loading', () => {
+  it('keeps non-pending user messages even if not in backend queue', () => {
     const messages: any[] = [
       { role: 'user', content: 'hello' },
     ]
-    const result = recoverStreamingMsg(messages, true, 'cli')
-    expect(result).toBeDefined()
-    expect(result.role).toBe('assistant')
-    expect(result.streaming).toBe(true)
-    expect(result.backend).toBe('cli')
-    expect(messages).toHaveLength(2)
-    expect(messages[messages.length - 1]).toBe(result)
-  })
-
-  it('does not create message when not loading even if no streaming msg exists', () => {
-    const messages: any[] = [{ role: 'user', content: 'hello' }]
-    const result = recoverStreamingMsg(messages, false, 'cli')
-    expect(result).toBeUndefined()
+    syncPendingFromBackend(messages, [])
     expect(messages).toHaveLength(1)
   })
 
-  it('finds streaming message among multiple messages', () => {
-    const streamingMsg = { role: 'assistant', content: '', blocks: [], streaming: true }
-    const messages = [
-      { role: 'user', content: 'hello' },
-      { role: 'assistant', content: 'response', blocks: [{ type: 'text', text: 'response' }] },
-      streamingMsg,
-    ]
-    const result = recoverStreamingMsg(messages, true, 'cli')
-    expect(result).toBe(streamingMsg)
+  it('merges files and filePaths from backend item', () => {
+    const messages: any[] = []
+    syncPendingFromBackend(messages, [{ text: 'hi', files: ['/a.txt'], filePaths: ['/b.txt'] }])
+    expect(messages[0].files).toEqual([{ path: '/a.txt' }, { path: '/b.txt' }])
   })
 
-  it('sets backend on newly created message', () => {
+  it('handles backend items with missing fields', () => {
     const messages: any[] = []
-    const result = recoverStreamingMsg(messages, true, 'acp')
-    expect(result.backend).toBe('acp')
+    syncPendingFromBackend(messages, [{ text: 'hi' }])
+    expect(messages[0].files).toEqual([])
+  })
+
+  it('handles backend item with empty text', () => {
+    const messages: any[] = []
+    syncPendingFromBackend(messages, [{ text: '' }])
+    expect(messages).toHaveLength(1)
+    expect(messages[0].content).toBe('')
+  })
+
+  it('removes only stale pending messages while adding new ones', () => {
+    const messages: any[] = [
+      { role: 'user', content: 'old', pending: true },
+    ]
+    syncPendingFromBackend(messages, [{ text: 'new' }])
+    expect(messages).toHaveLength(1)
+    expect(messages[0].content).toBe('new')
+    expect(messages[0].pending).toBe(true)
   })
 })
 
-describe('prepareQueueConsume', () => {
-  it('finalizes stale streaming message and adds user + assistant', () => {
-    const streamingMsg = { role: 'assistant', content: 'AI response', blocks: [{ type: 'text', text: 'AI response' }], streaming: true }
-    const messages: any[] = [
-      { role: 'user', content: 'first question' },
-      streamingMsg,
-    ]
-    const result = prepareQueueConsume(messages, 'second question', [], 'cli', {
-      onRenderNeeded: vi.fn(),
-    })
-    // Old streaming message should be finalized (no streaming flag)
-    expect(streamingMsg.streaming).toBeUndefined()
-    // New user message added
-    const userMsg = messages.find(m => m.role === 'user' && m.content === 'second question')
-    expect(userMsg).toBeDefined()
-    // New streaming assistant placeholder
-    expect(result).toBeDefined()
-    expect(result.role).toBe('assistant')
-    expect(result.streaming).toBe(true)
-    // Order: user1, AI1 (finalized), user2, assistant2 (streaming)
-    expect(messages[0].content).toBe('first question')
-    expect(messages[1]).toBe(streamingMsg)
-    expect(messages[2]).toBe(userMsg)
-    expect(messages[3]).toBe(result)
-  })
 
-  it('removes empty streaming message before adding new messages', () => {
-    const streamingMsg = { role: 'assistant', content: '', blocks: [], streaming: true }
-    const messages: any[] = [
-      { role: 'user', content: 'question' },
-      streamingMsg,
-    ]
-    const result = prepareQueueConsume(messages, 'next question', [], 'cli', {
-      onRenderNeeded: vi.fn(),
-    })
-    // Empty streaming message should be removed
-    expect(messages).not.toContain(streamingMsg)
-    // New user + assistant messages added
-    expect(messages).toHaveLength(3)
-    expect(messages[0].content).toBe('question')
-    expect(messages[1].role).toBe('user')
-    expect(messages[1].content).toBe('next question')
-    expect(messages[2]).toBe(result)
-  })
-
-  it('deduplicates user message when local version exists', () => {
-    const messages: any[] = [
-      { role: 'user', content: 'hello', id: undefined },
-    ]
-    const result = prepareQueueConsume(messages, 'hello', [], 'cli', {
-      onRenderNeeded: vi.fn(),
-    })
-    // Should not add duplicate user message
-    const userMsgs = messages.filter(m => m.role === 'user' && m.content === 'hello')
-    expect(userMsgs).toHaveLength(1)
-    // But still adds streaming assistant
-    expect(result).toBeDefined()
-    expect(result.streaming).toBe(true)
-  })
-
-  it('adds user message with files', () => {
-    const messages: any[] = []
-    const result = prepareQueueConsume(messages, 'check this', ['/path/to/file'], 'cli', {
-      onRenderNeeded: vi.fn(),
-    })
-    const userMsg = messages.find(m => m.role === 'user')
-    expect(userMsg.files).toEqual([{ path: '/path/to/file' }])
-  })
-
-  it('handles empty content with files only', () => {
-    const messages: any[] = []
-    const result = prepareQueueConsume(messages, '', ['/path/to/file'], 'cli', {
-      onRenderNeeded: vi.fn(),
-    })
-    const userMsg = messages.find(m => m.role === 'user')
-    expect(userMsg).toBeDefined()
-    expect(userMsg.content).toBe('')
-    expect(userMsg.blocks).toEqual([])
-    expect(userMsg.files).toEqual([{ path: '/path/to/file' }])
-    expect(result).toBeDefined()
-  })
-
-  it('correct ordering prevents AI reply appearing above user message', () => {
-    // Simulate: first AI execution done, streaming message still in array
-    const streamingMsg = { role: 'assistant', content: 'first reply', blocks: [{ type: 'text', text: 'first reply' }], streaming: true }
-    const messages: any[] = [
-      { role: 'user', content: 'first question' },
-      streamingMsg,
-    ]
-    // queue_consume for the second message
-    const result = prepareQueueConsume(messages, 'second question', [], 'cli', {
-      onRenderNeeded: vi.fn(),
-    })
-    // Verify ordering: user1 -> AI1 (finalized) -> user2 -> AI2 (streaming)
-    const roles = messages.map(m => m.role)
-    expect(roles).toEqual(['user', 'assistant', 'user', 'assistant'])
-    // Verify the finalized AI1 has no streaming flag
-    expect(messages[1].streaming).toBeUndefined()
-    // Verify the new streaming AI2 has streaming flag
-    expect(messages[3].streaming).toBe(true)
-    expect(messages[3]).toBe(result)
-  })
-
-  it('calls onExtractScheduledTasks on finalized streaming message', () => {
-    const onExtractScheduledTasks = vi.fn()
-    const streamingMsg = { role: 'assistant', content: 'has content', blocks: [], streaming: true }
-    const messages: any[] = [streamingMsg]
-    prepareQueueConsume(messages, 'next question', [], 'cli', {
-      onRenderNeeded: vi.fn(),
-      onExtractScheduledTasks,
-    })
-    expect(onExtractScheduledTasks).toHaveBeenCalledWith(messages)
-  })
-
-  it('handles no existing streaming message (queue_done already ran)', () => {
-    const messages: any[] = [
-      { role: 'user', content: 'first question' },
-      { role: 'assistant', content: 'first reply', blocks: [{ type: 'text', text: 'first reply' }] },
-    ]
-    const result = prepareQueueConsume(messages, 'second question', [], 'cli', {
-      onRenderNeeded: vi.fn(),
-    })
-    // Should add user + assistant normally
-    expect(messages).toHaveLength(4)
-    expect(messages[2].role).toBe('user')
-    expect(messages[2].content).toBe('second question')
-    expect(messages[3]).toBe(result)
-    expect(result.streaming).toBe(true)
-  })
-})

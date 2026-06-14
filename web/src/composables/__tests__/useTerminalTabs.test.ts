@@ -75,6 +75,7 @@ vi.mock('@xterm/xterm', () => {
     dispose() { this.element = null }
     write() {}
     clear() {}
+    reset() {}
     focus() {}
     onData(cb: Function) { this._dataCallbacks.push(cb) }
     onResize(cb: Function) { this._resizeCallbacks.push(cb) }
@@ -164,6 +165,23 @@ describe('useTerminalTabs', () => {
       const mgr = createTabManager()
       const tab = mgr.tabs.value[0]
       expect(tab.session.connectionState).toBe('disconnected')
+    })
+
+    // Regression: reactive() auto-unwraps Refs, so .value must NOT be used
+    // on session properties accessed through the reactive tab proxy.
+    // Using .value would read the .value property of the already-unwrapped
+    // string, which is undefined.
+    it('session Refs are auto-unwrapped by reactive() — no .value needed', () => {
+      const mgr = createTabManager()
+      const tab = mgr.tabs.value[0]
+      // Direct access (correct) returns the unwrapped string
+      expect(tab.session.connectionState).toBe('disconnected')
+      expect(tab.session.errorCode).toBe('')
+      expect(tab.session.errorMessage).toBe('')
+      // Accessing .value on the unwrapped string is undefined
+      expect((tab.session.connectionState as any).value).toBeUndefined()
+      expect((tab.session.errorCode as any).value).toBeUndefined()
+      expect((tab.session.errorMessage as any).value).toBeUndefined()
     })
   })
 
@@ -639,6 +657,27 @@ describe('useTerminalTabs', () => {
   })
 
   describe('callbacks', () => {
+    it('onReplay clears terminal and writes replay data (no frontend suppress)', () => {
+      const mgr = createTabManager()
+      const tab = mgr.createTab()
+      const rawSession = getRawSession(tabIndex(mgr, tab))
+      const writeSpy = vi.spyOn(tab.xterm!, 'write')
+      const resetSpy = vi.spyOn(tab.xterm!, 'reset')
+
+      const setCallbacksCall = rawSession.setCallbacks.mock.calls[0][0]
+
+      // Replay resets terminal and writes replay data
+      setCallbacksCall.onReplay('replay-buffer-with-prompt$ ')
+      expect(resetSpy).toHaveBeenCalled()
+      expect(writeSpy).toHaveBeenLastCalledWith('replay-buffer-with-prompt$ ')
+
+      // After replay, output is NOT suppressed on the frontend —
+      // the backend handles suppressOutput to avoid duplicate prompts.
+      writeSpy.mockClear()
+      setCallbacksCall.onOutput('new output')
+      expect(writeSpy).toHaveBeenCalledWith('new output')
+    })
+
     it('fires onExit callback when session exits', () => {
       const onExit = vi.fn()
       const mgr = createTabManager({ onExit })
