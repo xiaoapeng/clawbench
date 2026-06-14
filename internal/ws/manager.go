@@ -274,7 +274,7 @@ func (m *Manager) broadcastToSubscription(key string, msg ServerMessage, deliver
 	shouldPush := false
 	switch d := msg.Data.(type) {
 	case *SessionUpdateData:
-		shouldPush = d.Status == "completed" || d.Status == "cancelled" || d.Status == "permission_pending"
+		shouldPush = d.Status == "completed" || d.Status == "cancelled" || d.Status == StatusPermissionPending
 	case *TaskUpdateData:
 		shouldPush = d.Status == "completed" || d.Status == "failed" || d.Status == "cancelled"
 	}
@@ -296,8 +296,8 @@ func (m *Manager) broadcastToSubscription(key string, msg ServerMessage, deliver
 			if d.ProjectPath != "" {
 				extras["project_path"] = d.ProjectPath
 			}
-			if d.Status == "permission_pending" {
-				extras["event_type"] = "permission_pending"
+			if d.Status == StatusPermissionPending {
+				extras["event_type"] = StatusPermissionPending
 			}
 		case *TaskUpdateData:
 			extras["task_id"] = d.TaskID
@@ -328,7 +328,7 @@ func (m *Manager) broadcastToSubscription(key string, msg ServerMessage, deliver
 			sessionTitle = d.SessionTitle
 			responsePreview = d.ResponsePreview
 			// Permission pending: override title/alert to show approval request
-			if d.Status == "permission_pending" {
+			if d.Status == StatusPermissionPending {
 				title = i18n.T(loc, "PushPermissionPending")
 				if d.ToolName != "" {
 					alert = d.ToolName

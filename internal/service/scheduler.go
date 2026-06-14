@@ -533,7 +533,7 @@ func emitTaskEvent(taskID, status, executionID, sessionID, projectPath, taskName
 		}
 	}
 	mgr.BroadcastEvent(ws.ServerMessage{
-		Type:  "event",
+		Type:  ws.MessageTypeEvent,
 		ID:    ws.GenerateEventID(),
 		Event: "task_update",
 		Data:  data,

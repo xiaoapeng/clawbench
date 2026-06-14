@@ -423,10 +423,10 @@ func setupTestProviderModels(t *testing.T) {
 	t.Helper()
 	tmpDir := t.TempDir()
 	dir := filepath.Join(tmpDir, ".clawbench")
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "provider_models.json"), []byte(testProviderModelsJSON), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "provider_models.json"), []byte(testProviderModelsJSON), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	// Save original ProviderRegistry entries

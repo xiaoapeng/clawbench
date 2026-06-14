@@ -843,9 +843,9 @@ func TestManager_BroadcastEvent_JPushSentForPermissionPending(t *testing.T) {
 		ID:    "evt_1",
 		Event: "session_update",
 		Data: &SessionUpdateData{
-			SessionID:  "s1",
-			Status:     "permission_pending",
-			ToolName:   "WriteTextFile",
+			SessionID:   "s1",
+			Status:      "permission_pending",
+			ToolName:    "WriteTextFile",
 			ProjectPath: "/home/user/project",
 		},
 	}
@@ -1432,8 +1432,8 @@ func TestManager_BroadcastEvent_JPushPermissionPending_NoToolName(t *testing.T) 
 		ID:    "evt_1",
 		Event: "session_update",
 		Data: &SessionUpdateData{
-			SessionID:  "s1",
-			Status:     "permission_pending",
+			SessionID:   "s1",
+			Status:      "permission_pending",
 			ProjectPath: "/home/user/project",
 		},
 	}

@@ -54,10 +54,10 @@ func setupProviderModels(t *testing.T) {
 	t.Helper()
 	tmpDir := t.TempDir()
 	dir := filepath.Join(tmpDir, ".clawbench")
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "provider_models.json"), []byte(testProviderModelsJSON), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "provider_models.json"), []byte(testProviderModelsJSON), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	// Save original ProviderRegistry entries
@@ -434,8 +434,8 @@ func TestLoadProviderModelsFromFile_MissingFile(t *testing.T) {
 func TestLoadProviderModelsFromFile_InvalidJSON(t *testing.T) {
 	tmpDir := t.TempDir()
 	dir := filepath.Join(tmpDir, ".clawbench")
-	require.NoError(t, os.MkdirAll(dir, 0755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "provider_models.json"), []byte("invalid json"), 0644))
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "provider_models.json"), []byte("invalid json"), 0o644))
 
 	LoadProviderModelsFromFile(dir)
 }
@@ -443,8 +443,8 @@ func TestLoadProviderModelsFromFile_InvalidJSON(t *testing.T) {
 func TestLoadProviderModelsFromFile_ValidFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	dir := filepath.Join(tmpDir, ".clawbench")
-	require.NoError(t, os.MkdirAll(dir, 0755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "provider_models.json"), []byte(testProviderModelsJSON), 0644))
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "provider_models.json"), []byte(testProviderModelsJSON), 0o644))
 
 	origRegistry := make(map[string]ProviderSpec, len(ProviderRegistry))
 	for k, v := range ProviderRegistry {
@@ -467,12 +467,12 @@ func TestLoadProviderModelsFromFile_UnreadableDir(t *testing.T) {
 	// Create a directory with an unreadable file (permission denied, not IsNotExist)
 	tmpDir := t.TempDir()
 	dir := filepath.Join(tmpDir, ".clawbench")
-	require.NoError(t, os.MkdirAll(dir, 0755))
+	require.NoError(t, os.MkdirAll(dir, 0o755))
 	path := filepath.Join(dir, "provider_models.json")
-	require.NoError(t, os.WriteFile(path, []byte(testProviderModelsJSON), 0644))
+	require.NoError(t, os.WriteFile(path, []byte(testProviderModelsJSON), 0o644))
 	// Remove read permission
-	require.NoError(t, os.Chmod(path, 0000))
-	t.Cleanup(func() { _ = os.Chmod(path, 0644) })
+	require.NoError(t, os.Chmod(path, 0o000))
+	t.Cleanup(func() { _ = os.Chmod(path, 0o644) })
 
 	// Should not panic, just log warning and return
 	LoadProviderModelsFromFile(dir)

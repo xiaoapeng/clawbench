@@ -75,7 +75,7 @@ func EmitSessionEvent(sessionID, status string, hasNewMessages bool, toolName ..
 	data.ProjectPath = GetSessionProjectPath(sessionID)
 
 	mgr.BroadcastEvent(ws.ServerMessage{
-		Type:  "event",
+		Type:  ws.MessageTypeEvent,
 		ID:    ws.GenerateEventID(),
 		Event: "session_update",
 		Data:  data,
@@ -103,40 +103,50 @@ func getSessionResponsePreview(sessionID string) string {
 		if err := json.Unmarshal([]byte(messages[i].Content), &content); err != nil {
 			continue
 		}
-		// Find the last tool_use block index to skip intermediate text
-		lastToolIdx := -1
-		for j, b := range content.Blocks {
-			if b.Type == "tool_use" {
-				lastToolIdx = j
-			}
-		}
-		// Extract text from blocks after the last tool_use
-		for j := lastToolIdx + 1; j < len(content.Blocks); j++ {
-			b := content.Blocks[j]
-			if b.Type == "text" && b.Text != "" {
-				if utf8.RuneCountInString(b.Text) > responsePreviewMaxRunes {
-					return string([]rune(b.Text)[:responsePreviewMaxRunes]) + "…"
-				}
-				return b.Text
-			}
-		}
-		// No text after last tool_use — fall back to the longest text block.
-		// Handles the case where the AI gives a substantive answer followed by
-		// a terminal tool_use (e.g. AskUserQuestion) with no trailing text.
-		var bestText string
-		for _, b := range content.Blocks {
-			if b.Type == "text" && b.Text != "" && utf8.RuneCountInString(b.Text) > utf8.RuneCountInString(bestText) {
-				bestText = b.Text
-			}
-		}
-		if bestText != "" {
-			if utf8.RuneCountInString(bestText) > responsePreviewMaxRunes {
-				return string([]rune(bestText)[:responsePreviewMaxRunes]) + "…"
-			}
-			return bestText
+		if preview := extractPreviewFromBlocks(content.Blocks); preview != "" {
+			return preview
 		}
 	}
 	return ""
+}
+
+// extractPreviewFromBlocks returns a preview string from content blocks.
+// It first tries text after the last tool_use block, then falls back to the
+// longest text block (handles AskUserQuestion-style terminal tool_use).
+func extractPreviewFromBlocks(blocks []model.ContentBlock) string {
+	// Find the last tool_use block index to skip intermediate text
+	lastToolIdx := -1
+	for j, b := range blocks {
+		if b.Type == "tool_use" {
+			lastToolIdx = j
+		}
+	}
+	// Extract text from blocks after the last tool_use
+	for j := lastToolIdx + 1; j < len(blocks); j++ {
+		b := blocks[j]
+		if b.Type == "text" && b.Text != "" {
+			return truncatePreview(b.Text)
+		}
+	}
+	// Fallback: longest text block
+	var bestText string
+	for _, b := range blocks {
+		if b.Type == "text" && b.Text != "" && utf8.RuneCountInString(b.Text) > utf8.RuneCountInString(bestText) {
+			bestText = b.Text
+		}
+	}
+	return truncatePreview(bestText)
+}
+
+// truncatePreview truncates text to responsePreviewMaxRunes with ellipsis if needed.
+func truncatePreview(text string) string {
+	if text == "" {
+		return ""
+	}
+	if utf8.RuneCountInString(text) > responsePreviewMaxRunes {
+		return string([]rune(text)[:responsePreviewMaxRunes]) + "…"
+	}
+	return text
 }
 
 // IsSessionRunning checks if a session is currently running.
@@ -410,7 +420,7 @@ func GetChatSummaryMode() string {
 	if v == nil {
 		return ""
 	}
-	return v.(string)
+	return v.(string) //nolint:errcheck // type assertion is safe: only string values are stored via chatSummaryMode.Store
 }
 
 // triggerChatSummarization triggers async summarization for the last assistant
@@ -422,32 +432,8 @@ func triggerChatSummarization(sessionID string) {
 		return
 	}
 
-	// Get the last assistant message for this session
-	messages, err := GetMessagesBySessionID(sessionID)
-	if err != nil || len(messages) == 0 {
-		return
-	}
-
-	// Find the last assistant message
-	var lastAssistant *model.ChatMessage
-	for i := len(messages) - 1; i >= 0; i-- {
-		if messages[i].Role == "assistant" {
-			lastAssistant = &messages[i]
-			break
-		}
-	}
-	if lastAssistant == nil {
-		return
-	}
-
-	// Parse blocks from the assistant content
-	var content struct {
-		Blocks []model.ContentBlock `json:"blocks"`
-	}
-	if err := json.Unmarshal([]byte(lastAssistant.Content), &content); err != nil {
-		return
-	}
-	if len(content.Blocks) == 0 {
+	lastAssistant, blocks := getLastAssistantBlocks(sessionID)
+	if lastAssistant == nil || len(blocks) == 0 {
 		return
 	}
 
@@ -457,40 +443,10 @@ func triggerChatSummarization(sessionID string) {
 		return
 	}
 
-	// Get project path for WS event
 	projectPath := GetSessionProjectPath(sessionID)
 
 	if mode == "simple" {
-		// Fast path: extract last answer text directly, no AI call
-		text := summarize.ExtractLastAnswerFromBlocks(content.Blocks)
-		if text == "" {
-			return
-		}
-		if err := SaveSummary("chat_message", lastAssistant.ID, text); err != nil {
-			slog.Warn(
-				"failed to save simple summary",
-				slog.String("target_type", "chat_message"),
-				slog.Int64("target_id", lastAssistant.ID),
-				slog.String("err", err.Error()),
-			)
-			return
-		}
-		// Broadcast summary_update via WebSocket
-		mgr := ws.GetManager()
-		if mgr != nil {
-			mgr.BroadcastEvent(ws.ServerMessage{
-				Type:  "event",
-				ID:    ws.GenerateEventID(),
-				Event: "summary_update",
-				Data: ws.SummaryUpdateData{
-					TargetType:  "chat_message",
-					TargetID:    lastAssistant.ID,
-					Summary:     text,
-					ProjectPath: projectPath,
-					SessionID:   sessionID,
-				},
-			})
-		}
+		summarizeChatSimple(lastAssistant, blocks, projectPath, sessionID)
 		return
 	}
 
@@ -498,5 +454,64 @@ func triggerChatSummarization(sessionID string) {
 	if taskSummarizerInstance == nil {
 		return
 	}
-	AsyncSummarize("chat_message", lastAssistant.ID, content.Blocks, projectPath, sessionID)
+	AsyncSummarize("chat_message", lastAssistant.ID, blocks, projectPath, sessionID)
+}
+
+// getLastAssistantBlocks returns the last assistant message and its parsed content blocks.
+func getLastAssistantBlocks(sessionID string) (*model.ChatMessage, []model.ContentBlock) {
+	messages, err := GetMessagesBySessionID(sessionID)
+	if err != nil || len(messages) == 0 {
+		return nil, nil
+	}
+
+	var lastAssistant *model.ChatMessage
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role == "assistant" {
+			lastAssistant = &messages[i]
+			break
+		}
+	}
+	if lastAssistant == nil {
+		return nil, nil
+	}
+
+	var content struct {
+		Blocks []model.ContentBlock `json:"blocks"`
+	}
+	if err := json.Unmarshal([]byte(lastAssistant.Content), &content); err != nil {
+		return lastAssistant, nil
+	}
+	return lastAssistant, content.Blocks
+}
+
+// summarizeChatSimple extracts the last answer text and saves it as a summary.
+func summarizeChatSimple(msg *model.ChatMessage, blocks []model.ContentBlock, projectPath, sessionID string) {
+	text := summarize.ExtractLastAnswerFromBlocks(blocks)
+	if text == "" {
+		return
+	}
+	if err := SaveSummary("chat_message", msg.ID, text); err != nil {
+		slog.Warn(
+			"failed to save simple summary",
+			slog.String("target_type", "chat_message"),
+			slog.Int64("target_id", msg.ID),
+			slog.String("err", err.Error()),
+		)
+		return
+	}
+	mgr := ws.GetManager()
+	if mgr != nil {
+		mgr.BroadcastEvent(ws.ServerMessage{
+			Type:  ws.MessageTypeEvent,
+			ID:    ws.GenerateEventID(),
+			Event: "summary_update",
+			Data: ws.SummaryUpdateData{
+				TargetType:  "chat_message",
+				TargetID:    msg.ID,
+				Summary:     text,
+				ProjectPath: projectPath,
+				SessionID:   sessionID,
+			},
+		})
+	}
 }

@@ -1,5 +1,11 @@
 package ws
 
+// MessageTypeEvent is the type field for event messages sent from server to client.
+const MessageTypeEvent = "event"
+
+// StatusPermissionPending indicates a session is waiting for user approval.
+const StatusPermissionPending = "permission_pending"
+
 // ServerMessage is a message sent from server to client.
 type ServerMessage struct {
 	Type  string `json:"type"`            // "event", "ping"

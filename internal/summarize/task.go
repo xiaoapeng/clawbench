@@ -11,6 +11,9 @@ import (
 	"clawbench/internal/model"
 )
 
+// blockTypeText is the ContentBlock type identifier for text blocks.
+const blockTypeText = "text"
+
 // taskSummarizePrompt is the system prompt for task execution summarization.
 // It preserves Markdown formatting and condenses the output to ~30% length.
 const taskSummarizePrompt = `你是一个精简总结助手。请对以下 AI 助手的输出进行精简总结，要求：
@@ -132,7 +135,7 @@ func (t *TaskSummarizer) Summarize(ctx context.Context, text string, language st
 func ExtractTextFromBlocks(blocks []model.ContentBlock) string {
 	var buf strings.Builder
 	for _, b := range blocks {
-		if b.Type == "text" && b.Text != "" {
+		if b.Type == blockTypeText && b.Text != "" {
 			if buf.Len() > 0 {
 				buf.WriteString("\n\n")
 			}
@@ -168,7 +171,7 @@ func ExtractLastAnswerFromBlocks(blocks []model.ContentBlock) string {
 	// sentence ("Let me check...") rather than the actual answer.
 	var bestText string
 	for _, b := range blocks {
-		if b.Type == "text" && b.Text != "" && utf8.RuneCountInString(b.Text) > utf8.RuneCountInString(bestText) {
+		if b.Type == blockTypeText && b.Text != "" && utf8.RuneCountInString(b.Text) > utf8.RuneCountInString(bestText) {
 			bestText = b.Text
 		}
 	}
