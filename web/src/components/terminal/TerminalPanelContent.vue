@@ -127,9 +127,6 @@
             <button class="toolbar-btn btn-action" @click="handleCopyOutput" :title="t('terminal.copyOutput')">
               <CopyIcon :size="14" />
             </button>
-            <button class="toolbar-btn btn-action" @click="handleRebuild" :title="t('terminal.rebuildSession')">
-              <RefreshCwIcon :size="14" />
-            </button>
           </div>
         </div>
         </div>
@@ -196,7 +193,7 @@ import {
   incrementSymbolFreq,
 } from '@/utils/terminalSymbolFreq'
 
-import { Copy as CopyIcon, Zap as ZapIcon, Hand as HandIcon, RefreshCw as RefreshCwIcon, Hash as HashIcon, Plus as PlusIcon, MoreVertical as MoreVerticalIcon, Terminal as TerminalIcon } from 'lucide-vue-next'
+import { Copy as CopyIcon, Zap as ZapIcon, Hand as HandIcon, Hash as HashIcon, Plus as PlusIcon, MoreVertical as MoreVerticalIcon, Terminal as TerminalIcon } from 'lucide-vue-next'
 const props = defineProps<{
   requestedCwd?: string | null
   active?: boolean
@@ -280,9 +277,6 @@ function refreshToolbarFade() {
   toolbarScrollFade.left = fade.left
   toolbarScrollFade.right = fade.right
 }
-
-// Re-evaluate fade when gesture toggle changes visible buttons
-watch(() => gestures.enabled.value, () => nextTick(refreshToolbarFade))
 
 // Tab menu state
 const showTabMenu = ref(false)
@@ -443,6 +437,13 @@ const gestures = useTerminalGestures(
     },
   },
 )
+
+// Re-evaluate fade when gesture toggle changes visible buttons
+watch(() => gestures.enabled.value, () => nextTick(refreshToolbarFade))
+
+// Re-bind gesture listeners when switching/creating tabs (container element changes).
+// Use double nextTick to ensure mountTabToContainer has already run.
+watch(activeTabId, () => nextTick(() => nextTick(() => gestures.attach())))
 
 // Volume keys (Android)
 const { isAppMode } = useAppMode()
