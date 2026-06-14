@@ -1,4 +1,4 @@
-import { ref, type Ref } from 'vue'
+import { ref, watch, type Ref } from 'vue'
 
 export interface GestureCallbacks {
   sendArrowUp: () => void
@@ -92,7 +92,19 @@ export function useTerminalGestures(
   }
 
   function getTouchCenter(t1: Touch, t2: Touch): { x: number; y: number } {
-    return {
+    // Re-bind listeners when the container element changes (e.g. switching/creating tabs)
+  watch(elementRef, (_newEl, oldEl) => {
+    if (oldEl && listenersAttached) {
+      detachListeners()
+    }
+    if (oldEl && disabledScrollListenersAttached) {
+      detachDisabledScrollListeners()
+    }
+    // Re-apply current state to the new element
+    applyState()
+  })
+
+  return {
       x: (t1.clientX + t2.clientX) / 2,
       y: (t1.clientY + t2.clientY) / 2,
     }
