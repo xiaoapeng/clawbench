@@ -100,6 +100,11 @@ jobs:
           file clawbench-linux
           ldd clawbench-linux
 
+      - name: Generate provider models
+        run: |
+          mkdir -p .clawbench
+          scripts/fetch-provider-models.sh --output .clawbench/provider_models.json
+
       - name: Resolve latest Pi version
         id: pi-version
         run: |
@@ -127,6 +132,7 @@ jobs:
           cp -r config pkg-linux/clawbench/config
           mkdir -p pkg-linux/clawbench/.clawbench
           cp -r .clawbench/pi pkg-linux/clawbench/.clawbench/pi
+          cp .clawbench/provider_models.json pkg-linux/clawbench/.clawbench/provider_models.json
           chmod +x pkg-linux/clawbench/clawbench
           cd pkg-linux && zip -r clawbench-linux-amd64.zip clawbench/
 
@@ -165,6 +171,12 @@ jobs:
           $VERSION = if (git describe --tags --always 2>$null) { git describe --tags --always } else { "dev" }
           go build -tags "fts5" -ldflags="-s -w -X clawbench/internal/version.Version=$VERSION" -o clawbench.exe ./cmd/server
 
+      - name: Generate provider models
+        shell: bash
+        run: |
+          mkdir -p .clawbench
+          scripts/fetch-provider-models.sh --output .clawbench/provider_models.json
+
       - name: Resolve latest Pi version
         id: pi-version
         shell: pwsh
@@ -198,6 +210,7 @@ jobs:
           Copy-Item -Recurse config pkg-windows/clawbench/config
           New-Item -ItemType Directory -Force -Path pkg-windows/clawbench/.clawbench
           Copy-Item -Recurse .clawbench/pi pkg-windows/clawbench/.clawbench/pi
+          Copy-Item .clawbench/provider_models.json pkg-windows/clawbench/.clawbench/provider_models.json
           Compress-Archive -Path pkg-windows/clawbench -DestinationPath pkg-windows/clawbench-windows-amd64.zip
 
       - uses: softprops/action-gh-release@v2
@@ -230,6 +243,11 @@ jobs:
           VERSION=$(git describe --tags --always 2>/dev/null || echo "dev")
           go build -tags "fts5" -ldflags="-s -w -X clawbench/internal/version.Version=$VERSION" -o clawbench-darwin-arm64 ./cmd/server
 
+      - name: Generate provider models
+        run: |
+          mkdir -p .clawbench
+          scripts/fetch-provider-models.sh --output .clawbench/provider_models.json
+
       - name: Resolve latest Pi version
         id: pi-version
         run: |
@@ -257,6 +275,7 @@ jobs:
           cp -r config pkg-mac-arm64/clawbench/config
           mkdir -p pkg-mac-arm64/clawbench/.clawbench
           cp -r .clawbench/pi pkg-mac-arm64/clawbench/.clawbench/pi
+          cp .clawbench/provider_models.json pkg-mac-arm64/clawbench/.clawbench/provider_models.json
           chmod +x pkg-mac-arm64/clawbench/clawbench
           cd pkg-mac-arm64 && zip -r clawbench-darwin-arm64.zip clawbench/
 
@@ -293,6 +312,11 @@ jobs:
           VERSION=$(git describe --tags --always 2>/dev/null || echo "dev")
           go build -tags "fts5" -ldflags="-s -w -X clawbench/internal/version.Version=$VERSION" -o clawbench-darwin-amd64 ./cmd/server
 
+      - name: Generate provider models
+        run: |
+          mkdir -p .clawbench
+          scripts/fetch-provider-models.sh --output .clawbench/provider_models.json
+
       - name: Resolve latest Pi version
         id: pi-version
         run: |
@@ -320,6 +344,7 @@ jobs:
           cp -r config pkg-mac-amd64/clawbench/config
           mkdir -p pkg-mac-amd64/clawbench/.clawbench
           cp -r .clawbench/pi pkg-mac-amd64/clawbench/.clawbench/pi
+          cp .clawbench/provider_models.json pkg-mac-amd64/clawbench/.clawbench/provider_models.json
           chmod +x pkg-mac-amd64/clawbench/clawbench
           cd pkg-mac-amd64 && zip -r clawbench-darwin-amd64.zip clawbench/
 

@@ -51,7 +51,7 @@ cd android && JAVA_HOME=/usr/lib/jvm/jdk-17.0.12 ./gradlew assembleRelease  # Re
 - `internal/handler/` — HTTP/SSE endpoints. All `/api/` routes use `middleware.Auth` (localhost bypass for CLI).
 - `internal/service/` — Business logic: chat persistence, auto-summary, scheduler, SQLite, versioned schema migration, agent store (DB-backed), API key encryption (AES-256-GCM).
 - `internal/ai/` — AI backend abstraction: `AIBackend` interface → `CLIBackend` (CLI args + LineParser) → `AutoResumeBackend` (ExitPlanMode → cancel → resume) → `ACPBackend` (JSON-RPC over stdio, connection pool). Factory: `factory.go`.
-- `internal/model/` — Data models, `BackendRegistry` (backend specs + model discovery), `ProviderRegistry` (28 LLM providers). Known models from embedded `provider_models.json`.
+- `internal/model/` — Data models, `BackendRegistry` (backend specs + model discovery), `ProviderRegistry` (28 LLM providers). Known models from runtime `provider_models.json`.
 - `internal/cli/` — AI agent self-service: `task`, `rag`, `migrate`.
 - `internal/middleware/` — Auth, request logging, panic recovery, request ID.
 - `internal/platform/` — Cross-platform path resolution, shell detection, Windows CLI utilities.
@@ -97,7 +97,7 @@ cd android && JAVA_HOME=/usr/lib/jvm/jdk-17.0.12 ./gradlew assembleRelease  # Re
 - **Android integration:** HTML login + `AndroidNative` JS bridge. `BackgroundService` for SSH + WS. Push-aware: JPush when available, keep WS alive otherwise.
 - **SPA hot project switch:** In-place state reset + Vue `:key` rebuild, no `window.location.reload()`.
 - **Worktree annotation:** `useWorktreeAnnotation` annotates worktree paths in chat messages. Runs before file path annotation to prevent partial matches.
-- **Provider models auto-generation:** `scripts/generate-provider-models.py` fetches from models.dev API, writes `provider_models.json`. Embedded via `go:embed`. `build.sh` runs automatically.
+- **Provider models auto-generation:** `scripts/fetch-provider-models.sh` fetches from models.dev API (curl+jq, no Python), writes `provider_models.json` to `<BinDir>/.clawbench/`. Read at runtime by `LoadProviderModelsFromFile()`. `build.sh` and CI generate automatically.
 
 ## Development Rules
 

@@ -10,7 +10,6 @@ TARGET_OS=""
 TARGET_ARCH=""
 BUILD_ANDROID=""
 DOWNLOAD_PI=""
-REFRESH_MODELS=""
 for arg in "$@"; do
     case "$arg" in
         --windows)
@@ -40,28 +39,22 @@ for arg in "$@"; do
         --with-pi)
             DOWNLOAD_PI=1
             ;;
-        --refresh-models)
-            REFRESH_MODELS=1
-            ;;
     esac
 done
 
 echo "=== Building $NAME ==="
 
-# 0. Generate provider models from models.dev API (only with --refresh-models)
-if [ -n "$REFRESH_MODELS" ]; then
+# 0. Generate provider models from models.dev API
+if command -v jq >/dev/null 2>&1 && command -v curl >/dev/null 2>&1; then
     echo "[0/5] Generating provider models..."
-    if command -v python3 >/dev/null 2>&1; then
-        if python3 scripts/generate-provider-models.py; then
-            echo "  internal/model/provider_models.json updated"
-        else
-            echo "  WARNING: Failed to generate provider models, using cached version"
-        fi
+    mkdir -p .clawbench
+    if scripts/fetch-provider-models.sh --output .clawbench/provider_models.json; then
+        echo "  .clawbench/provider_models.json updated"
     else
-        echo "  python3 not found, using cached provider_models.json"
+        echo "  WARNING: Failed to fetch provider models (using existing file if any)"
     fi
 else
-    echo "[0/5] Provider models skipped (use --refresh-models to fetch from models.dev API)"
+    echo "[0/5] Provider models skipped (requires curl and jq)"
 fi
 
 # Derive version from git (e.g. v1.0.0, v0.30.0-30-g830bb6c, or short SHA)
@@ -220,6 +213,3 @@ echo ""
 echo "Embedded agent:"
 echo "  ./build.sh --linux --with-pi  # Linux + Pi binary (CI release)"
 echo "  PI_VERSION=0.79.0 ./build.sh --with-pi  # Pin a specific Pi version"
-echo ""
-echo "Model data:"
-echo "  ./build.sh --refresh-models  # Fetch latest models from models.dev API"
