@@ -86,3 +86,85 @@ export function forceCleanupStreamingState(
   callbacks.onRenderNeeded(true)
   return streamingMsg
 }
+
+/**
+ * Recover a stale streamingMsg reference when guard() fails because the
+ * message was removed from the array (e.g. by forceCleanupStreamingState
+ * during queue_done, or by loadHistory replacing messages).
+ *
+ * If the session is still running (isLoading=true), find or create a new
+ * streaming assistant message so subsequent SSE events aren't silently dropped.
+ *
+ * Returns the new streamingMsg, or undefined if recovery is not possible
+ * (session changed or not loading).
+ */
+export function recoverStreamingMsg(
+  messages: any[],
+  isLoading: boolean,
+  currentBackend: string
+): any | undefined {
+  if (!isLoading) return undefined
+
+  // Try to find an existing streaming message
+  const existing = messages.find((m: any) => m.role === 'assistant' && m.streaming)
+  if (existing) return existing
+
+  // No streaming message — create one (queue_consume was likely missed)
+  const newMsg = {
+    role: 'assistant' as const,
+    content: '',
+    blocks: [] as any[],
+    streaming: true,
+    createdAt: new Date().toISOString(),
+    backend: currentBackend,
+  }
+  messages.push(newMsg)
+  return newMsg
+}
+
+/**
+ * Prepare the messages array for a queue_consume event.
+ * Finalizes any stale streaming message before adding the new user + assistant
+ * messages, ensuring correct visual ordering (no AI reply above user message).
+ *
+ * Returns the new streaming assistant message.
+ */
+export function prepareQueueConsume(
+  messages: any[],
+  userContent: string,
+  userFiles: string[],
+  currentBackend: string,
+  callbacks: {
+    onRenderNeeded: (forceFull?: boolean) => void
+    onExtractScheduledTasks?: (msgs: any[]) => void
+  }
+): any {
+  // Finalize any stale streaming message to prevent wrong ordering
+  forceCleanupStreamingState(messages, callbacks)
+
+  // Add user message (deduplicate: skip if a local message with same content exists)
+  const existingUserMsg = messages.find(
+    (m: any) => m.role === 'user' && m.content === userContent && !m.id
+  )
+  if (!existingUserMsg) {
+    messages.push({
+      role: 'user',
+      content: userContent,
+      blocks: userContent ? [{ type: 'text', text: userContent }] : [],
+      files: userFiles.map(p => ({ path: p })),
+      createdAt: new Date().toISOString(),
+    })
+  }
+
+  // Create new streaming assistant placeholder
+  const newStreamingMsg = {
+    role: 'assistant' as const,
+    content: '',
+    blocks: [] as any[],
+    streaming: true,
+    createdAt: new Date().toISOString(),
+    backend: currentBackend,
+  }
+  messages.push(newStreamingMsg)
+  return newStreamingMsg
+}
