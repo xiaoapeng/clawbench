@@ -50,14 +50,14 @@ interface AppState {
     // Recent projects config
     recentProjectsMaxCount: number
 
-    // Chat unread badge
-    chatUnread: boolean
+    // Chat unread count (for dock badge — number of unread sessions)
+    chatUnreadCount: number
 
     // Chat running indicator (AI is generating)
     chatRunning: boolean
 
-    // Task unread badge (unread task executions)
-    taskUnread: boolean
+    // Task unread count (for dock badge)
+    taskUnreadCount: number
 
     // Task running indicator (scheduled task is executing)
     taskRunning: boolean
@@ -67,6 +67,9 @@ interface AppState {
 
     // Terminal session count (for dock badge)
     terminalSessionCount: number
+
+    // Active port forward count (for dock badge)
+    portForwardActiveCount: number
 
     // Task list (kept in sync by global polling)
     tasks: any[]
@@ -108,12 +111,13 @@ const state = reactive<AppState>({
     sessionMaxCount: 10,
     sessionCount: 0,
     recentProjectsMaxCount: 10,
-    chatUnread: false,
+    chatUnreadCount: 0,
     chatRunning: false,
-    taskUnread: false,
+    taskUnreadCount: 0,
     taskRunning: false,
     taskJustCompleted: false,
     terminalSessionCount: 0,
+    portForwardActiveCount: 0,
     tasks: [],
 
     // File browser
@@ -189,12 +193,13 @@ function resetProjectState(): void {
     state.gitHead = ''
     state.gitDirty = false
     // Chat/task badges
-    state.chatUnread = false
+    state.chatUnreadCount = 0
     state.chatRunning = false
-    state.taskUnread = false
+    state.taskUnreadCount = 0
     state.taskRunning = false
     state.taskJustCompleted = false
     state.terminalSessionCount = 0
+    state.portForwardActiveCount = 0
     state.tasks = []
     // Config defaults
     state.uploadMaxSizeMB = 100

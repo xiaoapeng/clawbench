@@ -20,11 +20,11 @@ export async function loadSessionsOnce() {
       const data = await res.json()
       const sessions = data.sessions || []
       const hasRunning = sessions.some((s: any) => s.running)
-      const hasUnread = sessions.some((s: any) =>
+      const unreadCount = sessions.filter((s: any) =>
         (s.unreadCount > 0 || s.pendingApproval) && s.id !== identity.currentSessionId.value
-      )
+      ).length
       store.state.chatRunning = hasRunning
-      store.state.chatUnread = hasUnread
+      store.state.chatUnreadCount = unreadCount
       // Update session count for header indicator
       if (typeof data.totalCount === 'number') {
         store.state.sessionCount = data.totalCount

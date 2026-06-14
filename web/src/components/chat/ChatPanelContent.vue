@@ -81,7 +81,7 @@
       :messages="messages"
       :autoSpeechEnabled="autoSpeech.enabled.value"
       :currentSessionId="identity.currentSessionId.value"
-      :chatUnread="store.state.chatUnread"
+      :chatUnreadCount="store.state.chatUnreadCount"
       :chatRunning="store.state.chatRunning"
       :currentModelId="identity.currentModelId.value"
       :currentModelName="identity.currentModelName.value"

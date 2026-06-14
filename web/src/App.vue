@@ -184,10 +184,10 @@
         <div class="bottom-dock">
           <div class="dock-center">
             <div class="dock-btn-wrap">
-              <button class="dock-btn" :class="{ active: activeTab === 'chat', 'has-unread': store.state.chatUnread && activeTab !== 'chat', 'has-running': store.state.chatRunning && activeTab !== 'chat' }" @click.stop="switchTab('chat')" :title="t('nav.chat')">
+              <button class="dock-btn" :class="{ active: activeTab === 'chat', 'has-unread': store.state.chatUnreadCount > 0 && activeTab !== 'chat', 'has-running': store.state.chatRunning && activeTab !== 'chat' }" @click.stop="switchTab('chat')" :title="t('nav.chat')">
                 <MessageSquare />
               </button>
-              <span v-if="store.state.chatUnread && activeTab !== 'chat'" class="dock-badge"></span>
+              <span v-if="store.state.chatUnreadCount > 0 && activeTab !== 'chat'" class="dock-badge dock-badge-count">{{ store.state.chatUnreadCount }}</span>
             </div>
             <button class="dock-btn" :class="{ active: activeTab === 'viewer' }" @click.stop="switchTab('viewer')" :title="t('nav.fileViewer')">
               <FileText />
@@ -196,11 +196,12 @@
               <FolderOpen />
             </button>
             <div class="dock-btn-wrap">
-              <button class="dock-btn" :class="{ active: activeTab === dockSlot4Tab, 'has-unread': dockSlot4Tab === 'tasks' && store.state.taskUnread && activeTab !== 'tasks', 'just-completed': dockSlot4Tab === 'tasks' && store.state.taskJustCompleted && activeTab !== 'tasks', 'has-running': dockSlot4Tab === 'tasks' && store.state.taskRunning && activeTab !== 'tasks' }" @click.stop="handleDockSlot4Click" :title="dockSlot4Title">
+              <button class="dock-btn" :class="{ active: activeTab === dockSlot4Tab, 'has-unread': dockSlot4Tab === 'tasks' && store.state.taskUnreadCount > 0 && activeTab !== 'tasks', 'just-completed': dockSlot4Tab === 'tasks' && store.state.taskJustCompleted && activeTab !== 'tasks', 'has-running': dockSlot4Tab === 'tasks' && store.state.taskRunning && activeTab !== 'tasks' }" @click.stop="handleDockSlot4Click" :title="dockSlot4Title">
                 <component :is="dockSlot4Icon" />
               </button>
-              <span v-if="dockSlot4Tab === 'tasks' && store.state.taskUnread && activeTab !== 'tasks'" class="dock-badge"></span>
+              <span v-if="dockSlot4Tab === 'tasks' && store.state.taskUnreadCount > 0 && activeTab !== 'tasks'" class="dock-badge dock-badge-count">{{ store.state.taskUnreadCount }}</span>
               <span v-if="dockSlot4Tab === 'terminal' && store.state.terminalSessionCount > 0 && activeTab !== 'terminal'" class="dock-badge dock-badge-count">{{ store.state.terminalSessionCount }}</span>
+              <span v-if="dockSlot4Tab === 'proxy' && store.state.portForwardActiveCount > 0 && activeTab !== 'proxy'" class="dock-badge dock-badge-count">{{ store.state.portForwardActiveCount }}</span>
             </div>
             <div class="dock-overflow-wrapper">
               <button
@@ -227,22 +228,21 @@
           <button class="dock-overflow-item" :class="{ active: activeTab === 'tasks' }" @click.stop="handleOverflowSelect('tasks')">
             <CalendarClock :size="16" />
             <span>{{ t('nav.tasks') }}</span>
-            <Check v-if="dockSlot4Tab === 'tasks'" :size="14" class="dock-slot4-check" />
+            <span v-if="store.state.taskUnreadCount > 0" class="dock-overflow-count">{{ store.state.taskUnreadCount }}</span>
           </button>
           <button class="dock-overflow-item" :class="{ active: activeTab === 'history' }" @click.stop="handleOverflowSelect('history')">
             <GitBranch :size="16" />
             <span>{{ t('git.history.projectHistory') }}</span>
-            <Check v-if="dockSlot4Tab === 'history'" :size="14" class="dock-slot4-check" />
           </button>
           <button v-if="!isSSHDisabled" class="dock-overflow-item" :class="{ active: activeTab === 'proxy' }" @click.stop="handleOverflowSelect('proxy')">
             <EthernetPort :size="16" />
             <span>{{ t('nav.portForward') }}</span>
-            <Check v-if="dockSlot4Tab === 'proxy'" :size="14" class="dock-slot4-check" />
+            <span v-if="store.state.portForwardActiveCount > 0" class="dock-overflow-count">{{ store.state.portForwardActiveCount }}</span>
           </button>
           <button v-if="!isTerminalDisabled" class="dock-overflow-item" :class="{ active: activeTab === 'terminal' }" @click.stop="handleOverflowSelect('terminal')">
             <TerminalIcon :size="16" />
             <span>{{ t('terminal.title') }}</span>
-            <Check v-if="dockSlot4Tab === 'terminal'" :size="14" class="dock-slot4-check" />
+            <span v-if="store.state.terminalSessionCount > 0" class="dock-overflow-count">{{ store.state.terminalSessionCount }}</span>
           </button>
           <div class="dock-overflow-divider"></div>
           <button class="dock-overflow-item" @click.stop="handleOverflowSettings">
@@ -262,7 +262,7 @@
 import { ref, computed, watch, onMounted, onUnmounted, provide, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSettingsConfig } from '@/composables/useSettingsConfig'
-import { MessageSquare, FolderOpen, FileText, GitBranch, EthernetPort, Terminal as TerminalIcon, CalendarClock, MoreHorizontal, Settings, Check } from 'lucide-vue-next'
+import { MessageSquare, FolderOpen, FileText, GitBranch, EthernetPort, Terminal as TerminalIcon, CalendarClock, MoreHorizontal, Settings } from 'lucide-vue-next'
 import AppHeader from './components/common/AppHeader.vue'
 import TabPanel from './components/common/TabPanel.vue'
 import WelcomeView from './components/WelcomeView.vue'
@@ -410,7 +410,7 @@ function switchTab(tab) {
   if (tab === 'tasks') {
     // Only stop dock button flash — don't clear per-task unread badges.
     // Per-task badges are cleared when the user enters that task's execution history.
-    store.state.taskUnread = false
+    store.state.taskUnreadCount = 0
   }
   // Close overflow menu when switching to a main tab
   if (!overflowTabs.value.includes(tab)) {
@@ -1458,9 +1458,17 @@ onUnmounted(() => {
     color: var(--accent-color);
 }
 
-.dock-slot4-check {
+.dock-overflow-count {
     margin-left: auto;
-    color: var(--accent-color);
+    min-width: 18px;
+    padding: 0 5px;
+    border-radius: 9px;
+    background: var(--accent-color);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 18px;
+    text-align: center;
     flex-shrink: 0;
 }
 

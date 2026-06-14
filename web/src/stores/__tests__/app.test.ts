@@ -80,18 +80,18 @@ describe('store', () => {
         })
 
         it('clears chat/task badges', () => {
-            store.state.chatUnread = true
+            store.state.chatUnreadCount = 3
             store.state.chatRunning = true
-            store.state.taskUnread = true
+            store.state.taskUnreadCount = 5
             store.state.taskRunning = true
             store.state.taskJustCompleted = true
             store.state.tasks = [{ id: 'task-1' }]
 
             store.resetProjectState()
 
-            expect(store.state.chatUnread).toBe(false)
+            expect(store.state.chatUnreadCount).toBe(0)
             expect(store.state.chatRunning).toBe(false)
-            expect(store.state.taskUnread).toBe(false)
+            expect(store.state.taskUnreadCount).toBe(0)
             expect(store.state.taskRunning).toBe(false)
             expect(store.state.taskJustCompleted).toBe(false)
             expect(store.state.tasks).toEqual([])

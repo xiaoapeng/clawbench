@@ -103,7 +103,7 @@ function mountInputBar(props = {}) {
       messages: [],
       autoSpeechEnabled: false,
       currentSessionId: 'test-session-id',
-      chatUnread: false,
+      chatUnreadCount: 0,
       chatRunning: false,
       currentModelId: 'model-1',
       currentModelName: 'Test Model',

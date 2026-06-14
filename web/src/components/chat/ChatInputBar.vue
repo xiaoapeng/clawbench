@@ -7,7 +7,7 @@
           <MessageSquare :size="12" />
           {{ t('chat.actions.session') }}
         </span>
-        <button class="chat-action-btn" :class="{ 'has-unread': chatUnread, 'has-running': chatRunning }"
+        <button class="chat-action-btn" :class="{ 'has-unread': chatUnreadCount > 0, 'has-running': chatRunning }"
           @click="$emit('open-session-tab', 'sessions')"
           :title="t('chat.actions.session')">
           <List :size="14" />
@@ -311,7 +311,7 @@ const props = defineProps({
   messages: Array,
   autoSpeechEnabled: Boolean,
   currentSessionId: String,
-  chatUnread: Boolean,
+  chatUnreadCount: Number,
   chatRunning: Boolean,
   currentModelId: String,
   currentModelName: String,
