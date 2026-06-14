@@ -43,6 +43,8 @@ export function useTerminalTabs(
     onError?: (tabId: string, message: string, code: string) => void
     onAutoExec?: (tabId: string, command: string) => void
     toast?: (msg: string, opts?: Record<string, unknown>) => void
+    /** Transform keyboard input through modifier key processing (Ctrl/Alt/Shift combos) */
+    processInput?: (data: string) => string
   },
 ) {
   const tabs: Ref<TerminalTab[]> = ref([])
@@ -124,9 +126,10 @@ export function useTerminalTabs(
       },
     })
 
-    // Handle terminal input
+    // Handle terminal input — transform through modifier key processing
     term.onData((data) => {
-      session.sendInput(data)
+      const transformed = opts.processInput ? opts.processInput(data) : data
+      if (transformed) session.sendInput(transformed)
     })
 
     // Send resize to backend

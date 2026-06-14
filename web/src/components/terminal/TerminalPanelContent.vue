@@ -350,6 +350,12 @@ const lightTheme = {
 }
 
 // Tab manager
+// Terminal keys — create early so processInput can be passed to tabManager.
+// sendInput uses a wrapper that reads activeTab at call time (no cycle).
+const terminalKeys = useTerminalKeys((data: string) => {
+  activeTab.value?.session.sendInput(data)
+})
+
 const tabManager = useTerminalTabs(getWsUrl, {
   fontSize,
   getXtermTheme,
@@ -366,6 +372,7 @@ const tabManager = useTerminalTabs(getWsUrl, {
   onError: () => {
     // Error displayed via overlay
   },
+  processInput: terminalKeys.processInput,
 })
 
 const { tabs, activeTabId, activeTab } = tabManager
@@ -382,11 +389,6 @@ const viewport = useTerminalViewport(
   computed(() => activeTab.value?.xterm || null),
   computed(() => activeTab.value?.container || null),
 )
-
-// Terminal keys — send to active tab
-const terminalKeys = useTerminalKeys((data: string) => {
-  activeTab.value?.session.sendInput(data)
-})
 
 let touchScrollRemainder = 0
 
