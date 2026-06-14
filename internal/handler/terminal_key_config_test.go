@@ -1,10 +1,15 @@
 package handler
 
 import (
+	"database/sql"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"clawbench/internal/service"
+
+	_ "modernc.org/sqlite"
 )
 
 func TestServeKeyConfig_GetEmpty(t *testing.T) {
@@ -94,4 +99,87 @@ func TestServeKeyConfig_Replace(t *testing.T) {
 	if items[0].KeyID != "$" || items[1].KeyID != "&" {
 		t.Fatalf("unexpected items after replace: %+v", items)
 	}
+}
+
+func TestServeKeyConfig_PutInvalidType(t *testing.T) {
+	_, teardown := setupTestEnv(t)
+	defer teardown()
+
+	putBody := map[string]any{
+		"type":  "invalid",
+		"items": []string{"esc"},
+	}
+	req := newRequest(t, http.MethodPut, "/api/terminal/key-config", putBody)
+	w := callHandler(ServeKeyConfig, req)
+	assertStatus(t, w, http.StatusBadRequest)
+}
+
+func TestServeKeyConfig_MethodNotAllowed(t *testing.T) {
+	_, teardown := setupTestEnv(t)
+	defer teardown()
+
+	req := newRequest(t, http.MethodDelete, "/api/terminal/key-config", nil)
+	w := callHandler(ServeKeyConfig, req)
+	assertStatus(t, w, http.StatusMethodNotAllowed)
+
+	req = newRequest(t, http.MethodPost, "/api/terminal/key-config", nil)
+	w = callHandler(ServeKeyConfig, req)
+	assertStatus(t, w, http.StatusMethodNotAllowed)
+}
+
+func TestServeKeyConfig_GetEmptyType(t *testing.T) {
+	_, teardown := setupTestEnv(t)
+	defer teardown()
+
+	// GET with no type parameter (empty string) should return 400
+	req := newRequest(t, http.MethodGet, "/api/terminal/key-config", nil)
+	w := callHandler(ServeKeyConfig, req)
+	assertStatus(t, w, http.StatusBadRequest)
+}
+
+func TestServeKeyConfig_PutInvalidJSON(t *testing.T) {
+	_, teardown := setupTestEnv(t)
+	defer teardown()
+
+	// PUT with invalid JSON body should return 400
+	req := httptest.NewRequest(http.MethodPut, "/api/terminal/key-config", strings.NewReader("not-json"))
+	req.Header.Set("Content-Type", "application/json")
+	w := callHandler(ServeKeyConfig, req)
+	assertStatus(t, w, http.StatusBadRequest)
+}
+
+func TestServeKeyConfig_GetDBError(t *testing.T) {
+	_, teardown := setupTestEnv(t)
+	defer teardown()
+
+	// Close the DB to force an error from GetKeyConfig
+	origDBRead := service.DBRead
+	closedDB, _ := sql.Open("sqlite", ":memory:")
+	closedDB.Close()
+	service.DBRead = closedDB
+	defer func() { service.DBRead = origDBRead }()
+
+	req := newRequest(t, http.MethodGet, "/api/terminal/key-config?type=key", nil)
+	w := callHandler(ServeKeyConfig, req)
+	assertStatus(t, w, http.StatusInternalServerError)
+}
+
+func TestServeKeyConfig_PutDBError(t *testing.T) {
+	_, teardown := setupTestEnv(t)
+	defer teardown()
+
+	// Close the DB to force an error from ReplaceKeyConfig
+	origDB := service.DB
+	closedDB, _ := sql.Open("sqlite", ":memory:")
+	closedDB.Close()
+	service.DB = closedDB
+	defer func() { service.DB = origDB }()
+
+	putBody := map[string]any{
+		"type":  "key",
+		"items": []string{"esc"},
+	}
+	req := newRequest(t, http.MethodPut, "/api/terminal/key-config", putBody)
+	w := callHandler(ServeKeyConfig, req)
+	assertStatus(t, w, http.StatusInternalServerError)
 }

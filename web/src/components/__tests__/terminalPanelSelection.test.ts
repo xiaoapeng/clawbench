@@ -24,8 +24,8 @@ describe('TerminalPanel xterm selection defaults', () => {
   it('renders config-driven toolbar with gesture-aware visibility', () => {
     const source = readTerminalComponent('../terminal/TerminalPanelContent.vue')
 
-    // Toolbar is now config-driven: keys rendered via v-for over selectedKeys
-    expect(source).toContain('v-for="def in selectedKeys"')
+    // Toolbar is now config-driven: keys rendered via v-for over visibleKeys
+    expect(source).toContain('v-for="def in visibleKeys"')
     // Modifier keys still use toggle behavior with active/locked classes
     expect(source).toContain('toolbarBtnClass(def)')
     // Click handler dispatches via terminalKeys.send() or toggleModifier()

@@ -52,7 +52,7 @@ function onEdit() {
   openEditForm()
 }
 
-async function onFormSaved(newTaskId: string) {
+async function onFormSaved(newTaskId: number) {
   await loadTasks()
   closeForm()
   if (formMode.value === 'create' && newTaskId) {
@@ -71,7 +71,7 @@ function onOpenFile(filePath: string, lineStart?: number) {
   emit('open-file', filePath, lineStart)
 }
 
-function onTaskSelect(taskId: string) {
+function onTaskSelect(taskId: number) {
   navigateToTaskSettings(taskId)
 }
 

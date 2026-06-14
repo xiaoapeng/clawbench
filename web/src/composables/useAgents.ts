@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 import { apiGet, apiPatch } from '@/utils/api'
 import { gt } from '@/composables/useLocale'
-import { updateModeState, updateAvailableModes, updateThinkingEffortState, updateAvailableThinkingEfforts, updateCommandState, currentAgentId } from '@/composables/useSessionIdentity.ts'
+import { updateAvailableModes, updateAvailableThinkingEfforts, updateCommandState, currentAgentId } from '@/composables/useSessionIdentity.ts'
 import { updatePlanEntries } from '@/composables/usePlanProgress'
 
 // Singleton state — shared across the whole app
@@ -111,7 +111,7 @@ function getDefaultModelId(agentId: string): string {
     const agent = agents.value.find(a => a.id === agentId)
     if (agent?.preferredModel) return agent.preferredModel
     if (!agent?.models?.length) return ''
-    const defaultModel = agent.models.find(m => m.default)
+    const defaultModel = agent.models.find((m: any) => m.default)
     return defaultModel ? defaultModel.id : agent.models[0].id
 }
 

@@ -1393,3 +1393,107 @@ func TestManager_Subscribe_LimitReached(t *testing.T) {
 	}
 	_ = conn.Close(websocket.StatusNormalClosure, "")
 }
+
+// TestManager_BroadcastEvent_JPushPermissionPending_NoToolName verifies that
+// when permission_pending has no ToolName, the alert falls back to the i18n text.
+func TestManager_BroadcastEvent_JPushPermissionPending_NoToolName(t *testing.T) {
+	var receivedTitle, receivedAlert string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err == nil {
+			if n, ok := payload["notification"].(map[string]any); ok {
+				if a, ok := n["android"].(map[string]any); ok {
+					receivedAlert, _ = a["alert"].(string)
+					receivedTitle, _ = a["title"].(string)
+				}
+			}
+		}
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte(`{"sendno":"123","msg_id":"456"}`))
+	}))
+	defer server.Close()
+
+	jpush := push.NewJPushClient(push.JPushConfig{
+		Enabled:      true,
+		AppKey:       "test-key",
+		MasterSecret: "test-secret",
+	})
+	jpush.SetBaseURL(server.URL)
+
+	mgr := newTestManager(jpush)
+	var writeMu sync.Mutex
+	mgr.Subscribe(nil, &writeMu, "client-1", "")
+	mgr.RegisterPushID("reg-123", "client-1")
+	mgr.DisconnectClient("client-1")
+
+	// permission_pending with NO ToolName — alert should be the i18n PushPermissionPending text
+	msg := ServerMessage{
+		Type:  "event",
+		ID:    "evt_1",
+		Event: "session_update",
+		Data: &SessionUpdateData{
+			SessionID:  "s1",
+			Status:     "permission_pending",
+			ProjectPath: "/home/user/project",
+		},
+	}
+	mgr.BroadcastEvent(msg)
+
+	if receivedTitle != "Approval Required" {
+		t.Errorf("expected 'Approval Required' title, got %q", receivedTitle)
+	}
+	if receivedAlert != "Approval Required" {
+		t.Errorf("expected 'Approval Required' alert (fallback), got %q", receivedAlert)
+	}
+}
+
+// TestManager_BroadcastEvent_JPushPermissionPending_NoDonePrefix verifies that
+// the "Done:" prefix is NOT added for permission_pending events even with a session title.
+func TestManager_BroadcastEvent_JPushPermissionPending_NoDonePrefix(t *testing.T) {
+	var receivedTitle string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err == nil {
+			if n, ok := payload["notification"].(map[string]any); ok {
+				if a, ok := n["android"].(map[string]any); ok {
+					receivedTitle, _ = a["title"].(string)
+				}
+			}
+		}
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte(`{"sendno":"123","msg_id":"456"}`))
+	}))
+	defer server.Close()
+
+	jpush := push.NewJPushClient(push.JPushConfig{
+		Enabled:      true,
+		AppKey:       "test-key",
+		MasterSecret: "test-secret",
+	})
+	jpush.SetBaseURL(server.URL)
+
+	mgr := newTestManager(jpush)
+	var writeMu sync.Mutex
+	mgr.Subscribe(nil, &writeMu, "client-1", "")
+	mgr.RegisterPushID("reg-123", "client-1")
+	mgr.DisconnectClient("client-1")
+
+	// permission_pending WITH session title — title should be "Approval Required", NOT "Done:..."
+	msg := ServerMessage{
+		Type:  "event",
+		ID:    "evt_1",
+		Event: "session_update",
+		Data: &SessionUpdateData{
+			SessionID:    "s1",
+			Status:       "permission_pending",
+			ToolName:     "Bash",
+			SessionTitle: "My Session",
+			ProjectPath:  "/home/user/project",
+		},
+	}
+	mgr.BroadcastEvent(msg)
+
+	if receivedTitle != "Approval Required" {
+		t.Errorf("expected 'Approval Required' title (no Done: prefix), got %q", receivedTitle)
+	}
+}

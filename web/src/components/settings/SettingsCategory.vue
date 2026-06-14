@@ -51,8 +51,8 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const toast = useToast()
-const { localConfig, serverConfig, setLocalConfig, getServerValueWithDefault, setServerValue, patchAgentPref } = useSettingsConfig()
-const { agents, loadAgents, getAgentModels } = useAgents()
+const { localConfig, serverConfig, setLocalConfig, getServerValueWithDefault, setServerValue } = useSettingsConfig()
+const { agents, loadAgents } = useAgents()
 const { isAppMode } = useAppMode()
 const { pushRegistered } = useGlobalEvents()
 
@@ -130,7 +130,7 @@ const items = computed(() => {
       ...item,
       label: item.label || t(item.labelKey),
       description: item.descriptionKey ? t(item.descriptionKey) : '',
-      options: resolvedOptions?.map(opt => ({
+      options: resolvedOptions?.map((opt: any) => ({
         ...opt,
         label: opt.label || resolveOptionLabel(item.key, opt),
       })),

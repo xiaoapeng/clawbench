@@ -170,7 +170,6 @@ import { useQuickCommands } from '@/composables/useQuickCommands'
 import { useAppMode } from '@/composables/useAppMode'
 import { useKeyConfig } from '@/composables/useKeyConfig'
 import { store } from '@/stores/app'
-import { resolveTerminalCwd } from './terminalCwd'
 import {
   DEFAULT_FONT_SIZE,
   canReconnect as canReconnectUtil,
@@ -255,6 +254,7 @@ function updateSymbolBarScrollFade(e: Event) {
 
 // Refs for scroll containers
 const toolbarScrollRef = ref<HTMLElement | null>(null)
+// @ts-expect-error template ref
 const symbolBarScrollRef = ref<HTMLElement | null>(null)
 
 function refreshToolbarFade() {
@@ -300,14 +300,6 @@ function handleGestureToggle() {
   gestures.toggle()
   toast.show(gestures.enabled.value ? t('terminal.gesturesOn') : t('terminal.gesturesOff'), { type: 'info', duration: 1200 })
   focusTerminal()
-}
-
-function computeCwd(): string {
-  return resolveTerminalCwd({
-    currentFilePath: store.state.currentFile?.path,
-    currentDir: store.state.currentDir,
-    requestedCwd: props.requestedCwd,
-  })
 }
 
 // Build WS URL for a given CWD
@@ -473,20 +465,21 @@ const panelStyle = computed(() => ({
 }))
 
 // Per-tab error state helpers
-// NOTE: tab is a reactive() proxy which auto-unwraps Refs, so we access
-// tab.session.connectionState directly (no .value) — same as in the template.
+// NOTE: tab is a reactive() proxy which auto-unwraps Refs, so we could
+// access tab.session.connectionState directly. However, TypeScript doesn't
+// model reactive() auto-unwrapping, so we use .value for type correctness.
 function isTabError(tab: TerminalTab): boolean {
-  return showErrorOverlayUtil(tab.session.connectionState as unknown as ConnectionState)
+  return showErrorOverlayUtil(tab.session.connectionState.value)
 }
 
 function isTabCanReconnect(tab: TerminalTab): boolean {
-  return canReconnectUtil(tab.session.errorCode as unknown as string)
+  return canReconnectUtil(tab.session.errorCode.value)
 }
 
 function getTabErrorMessage(tab: TerminalTab): string {
   return errorDisplayMessageUtil(
-    tab.session.errorCode as unknown as string,
-    tab.session.errorMessage as unknown as string,
+    tab.session.errorCode.value,
+    tab.session.errorMessage.value,
     t('terminal.websocketFailed'),
   )
 }
@@ -555,7 +548,7 @@ function handleTabClick(tabId: string) {
 
   // Connect the newly active tab if it's disconnected (e.g. after panel reactivation)
   const tab = tabManager.getTab(tabId)
-  if (tab && tab.session.connectionState === 'disconnected') {
+  if (tab && tab.session.connectionState.value === 'disconnected') {
     tab.session.connect().then(() => {
       tabManager.syncTabSessionId(tabId)
       requestAnimationFrame(() => {
@@ -576,7 +569,7 @@ function handleCreateTab() {
       mountTabToContainer(tab, container)
     }
     // Connect the new tab
-    if (props.active && tab.session.connectionState === 'disconnected') {
+    if (props.active && tab.session.connectionState.value === 'disconnected') {
       tab.session.connect().then(() => {
         tabManager.syncTabSessionId(tab.id)
         requestAnimationFrame(() => {
@@ -607,7 +600,7 @@ function handleTabMenuClose() {
       if (container && tab && !tab.container) {
         mountTabToContainer(tab, container)
       }
-      if (props.active && tab && tab.session.connectionState === 'disconnected') {
+      if (props.active && tab && tab.session.connectionState.value === 'disconnected') {
         tab.session.connect().then(() => {
           tabManager.syncTabSessionId(tab.id)
           requestAnimationFrame(() => {
@@ -637,34 +630,6 @@ function handleReconnect(tab: TerminalTab) {
 }
 
 // Rebuild (re-create) the active tab's session
-async function handleRebuild() {
-  const tab = activeTab.value
-  if (!tab) return
-
-  terminalKeys.reset()
-  showCommands.value = false
-  rebuildingTabId.value = tab.id
-
-  // Close specific session via HTTP API
-  try {
-    const sid = tab.session.sessionId
-    const url = sid ? `/api/terminal/close?session=${encodeURIComponent(sid)}` : '/api/terminal/close'
-    await fetch(url, { method: 'POST' })
-  } catch { /* ignore */ }
-
-  tab.session.reset()
-  if (tab.xterm) tab.xterm.clear()
-
-  try {
-    await tab.session.connect()
-    tabManager.syncTabSessionId(tab.id)
-    focusTerminal()
-  } catch { /* error shown via overlay */ }
-  finally {
-    rebuildingTabId.value = null
-  }
-}
-
 // Copy output from active tab
 function executeCommand(cmd: { id: number; label: string; command: string }) {
   activeTab.value?.session.sendInput(cmd.command + '\r')
@@ -724,7 +689,7 @@ watch(() => props.active, async (isActive) => {
       if (container && !tab.container) {
         mountTabToContainer(tab, container)
       }
-      if (tab.session.connectionState === 'disconnected') {
+      if (tab.session.connectionState.value === 'disconnected') {
         try {
           await tab.session.connect()
           tabManager.syncTabSessionId(tab.id)
@@ -760,7 +725,7 @@ watch(() => props.requestedCwd, async (cwd) => {
   if (container && !tab.container) {
     mountTabToContainer(tab, container)
   }
-  if (tab.session.connectionState === 'disconnected') {
+  if (tab.session.connectionState.value === 'disconnected') {
     tab.session.connect().then(() => {
       tabManager.syncTabSessionId(tab.id)
       requestAnimationFrame(() => {
@@ -805,7 +770,7 @@ onMounted(async () => {
       if (container && !tab.container) {
         mountTabToContainer(tab, container)
       }
-      if (tab.session.connectionState === 'disconnected') {
+      if (tab.session.connectionState.value === 'disconnected') {
         try {
           await tab.session.connect()
           tabManager.syncTabSessionId(tab.id)

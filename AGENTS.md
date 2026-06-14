@@ -61,17 +61,17 @@ cd android && JAVA_HOME=/usr/lib/jvm/jdk-17.0.12 ./gradlew assembleRelease  # Re
 - `internal/proxy/` — HTTP reverse proxy + port forwarding. Rewrites Host header for virtual-host backends.
 - `internal/symbol/` — Code symbol extraction via tree-sitter (`gotreesitter`, pure Go, no CGO). 17 symbol kinds, 100+ languages.
 - `internal/rag/` — RAG: DuckDB vector store, Ollama BGE-M3 embeddings.
-- `internal/terminal/` — Web terminal: PTY sessions, ring buffer replay.
-- `internal/push/` — Push notifications via JPush.
+- `internal/terminal/` — Web terminal: PTY sessions, ring buffer replay, multi-tab support, key/symbol configuration.
+- `internal/push/` — Push notifications via JPush (session completed/cancelled + ACP permission_pending).
 - `internal/ws/` — WebSocket event channel. JPush fallback on disconnect, buffered replay on reconnect.
 
 ### Frontend (Vue 3 + TypeScript)
 
 **Source root:** `web/src/` — No Vue Router, drawer-based single-page layout. Single `reactive()` store in `stores/app.ts`.
 
-**Composables:** `useChatSession`, `useChatStream` (SSE + reconnect + polling), `useChatRender` (block parsing + coalescing), `useAutoSpeech`, `useQuickSend`, `useSessionIdentity`, `useSessionManager`, `useSetup`, `useReconnect`, `useFileRefresh`, `useSystemEvents`, `useGlobalEvents`, `usePortForward`, `useBackHandler`, `useEdgeSwipeBack`, `useTerminalSession`, `useSwipeDelete`, `useSwipeSession`, `useCodeSymbols`, `useStickyScroll`, `useLocalhostAnnotation`, `useWorktreeAnnotation`, `useFileUpload`.
+**Composables:** `useChatSession`, `useChatStream` (SSE + reconnect + polling), `useChatRender` (block parsing + coalescing), `useAutoSpeech`, `useQuickSend`, `useSessionIdentity`, `useSessionManager`, `useSetup`, `useReconnect`, `useFileRefresh`, `useSystemEvents`, `useGlobalEvents`, `usePortForward`, `useBackHandler`, `useEdgeSwipeBack`, `useTerminalSession`, `useTerminalTabs` (multi-tab management), `useTerminalKeys` (virtual key processing), `useKeyConfig` (key/symbol persistence), `useTerminalGestures`, `useSwipeDelete`, `useSwipeSession`, `useCodeSymbols`, `useStickyScroll`, `useLocalhostAnnotation`, `useWorktreeAnnotation`, `useFileUpload`, `useAgents`, `useFilePathAnnotation`, `useTaskTab`.
 
-**Components:** `ChatPanel`, `FileManager`/`FileViewer`, `TocDrawer`, `TaskTab`, `TaskExecDetail`, `TerminalPanel`, `GitGraph`, `GitManageContent`, `SessionSettingModal`, `SetupWizard`, `ContentBlocks`, `SummaryToggle`, `SessionDrawer`, `BottomSheet`, `PopupMenu`, `Lightbox`, `SwipeToDeleteRow`, `PasswordChangeDialog`.
+**Components:** `ChatPanel`, `FileManager`/`FileViewer`, `TocDrawer`, `TaskTab`, `TaskExecDetail`, `TerminalPanel` (multi-tab, key/symbol config drawer), `KeyConfigDrawer`, `KeyConfigTab`, `TerminalTabMenu`, `GitGraph`, `GitManageContent`, `SessionSettingModal`, `SetupWizard`, `ContentBlocks`, `SummaryToggle`, `SessionDrawer`, `AcpSessionDrawer`, `BottomSheet`, `PopupMenu`, `Lightbox`, `SwipeToDeleteRow`, `PasswordChangeDialog`.
 
 **Vite:** `hljsThemeWrapper` plugin for light/dark coexistence. Root `web/`, output `public/`. Alias `@` → `web/src/`.
 
@@ -98,6 +98,9 @@ cd android && JAVA_HOME=/usr/lib/jvm/jdk-17.0.12 ./gradlew assembleRelease  # Re
 - **SPA hot project switch:** In-place state reset + Vue `:key` rebuild, no `window.location.reload()`.
 - **Worktree annotation:** `useWorktreeAnnotation` annotates worktree paths in chat messages. Runs before file path annotation to prevent partial matches.
 - **Provider models auto-generation:** `scripts/fetch-provider-models.sh` fetches from models.dev API (curl+jq, no Python), writes `provider_models.json` to `<BinDir>/.clawbench/`. Read at runtime by `LoadProviderModelsFromFile()`. `build.sh` and CI generate automatically.
+- **Terminal multi-tab:** `useTerminalTabs` manages tab lifecycle (create/close/switch). `useTerminalKeys` processes virtual key input with modifier lock. `useKeyConfig` persists custom key/symbol layouts to DB via `/api/terminal/key-config`.
+- **Chat summary modes:** `simple` mode extracts last answer text from blocks (no AI call); `ai` mode uses `AsyncSummarize`; empty string disables summarization. Mode set via `SetChatSummaryMode()`.
+- **Permission pending push:** ACP `permission_pending` events trigger JPush notifications with tool name, allowing mobile users to approve from notification.
 
 ## Development Rules
 

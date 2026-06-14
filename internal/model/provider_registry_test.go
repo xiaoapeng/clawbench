@@ -462,3 +462,18 @@ func TestLoadProviderModelsFromFile_ValidFile(t *testing.T) {
 	assert.NotEmpty(t, spec.KnownModels, "anthropic should have KnownModels after loading file")
 	assert.Equal(t, "claude-sonnet-4-20250514", spec.KnownModels[0].ID)
 }
+
+func TestLoadProviderModelsFromFile_UnreadableDir(t *testing.T) {
+	// Create a directory with an unreadable file (permission denied, not IsNotExist)
+	tmpDir := t.TempDir()
+	dir := filepath.Join(tmpDir, ".clawbench")
+	require.NoError(t, os.MkdirAll(dir, 0755))
+	path := filepath.Join(dir, "provider_models.json")
+	require.NoError(t, os.WriteFile(path, []byte(testProviderModelsJSON), 0644))
+	// Remove read permission
+	require.NoError(t, os.Chmod(path, 0000))
+	t.Cleanup(func() { _ = os.Chmod(path, 0644) })
+
+	// Should not panic, just log warning and return
+	LoadProviderModelsFromFile(dir)
+}
