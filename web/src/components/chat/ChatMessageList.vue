@@ -48,6 +48,7 @@
       :blockRagResults="blockRagResults"
       :agents="agents"
       :shouldCollapse="isCollapsed(i, msg)"
+      :isLastRound="lastRoundIndices.has(i)"
       :staticBlockCache="staticBlockCache"
       :active="active"
       @toggle-tool="$emit('toggle-tool', $event)"
@@ -276,8 +277,9 @@ async function handleChatClick(event) {
     event.preventDefault()
     event.stopPropagation()
     const filePath = btn.getAttribute('data-file-path')
+    const lineStart = btn.getAttribute('data-line-start')
     if (filePath) {
-      const ok = await openFilePath(filePath)
+      const ok = await openFilePath(filePath, lineStart ? parseInt(lineStart, 10) : undefined)
       if (ok) chatUI.navigateToFileViewer?.()
     }
     return

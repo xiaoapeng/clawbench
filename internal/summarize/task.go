@@ -153,18 +153,11 @@ func ExtractLastAnswerFromBlocks(blocks []model.ContentBlock) string {
 			lastToolIdx = i
 		}
 	}
-	// Check if the last tool_use is AskUserQuestion — append its question text
-	// so the summary includes the AI's question to the user.
-	var askQuestionSuffix string
-	if lastToolIdx >= 0 && blocks[lastToolIdx].Name == "AskUserQuestion" {
-		askQuestionSuffix = ExtractAskQuestionText(blocks[lastToolIdx])
-	}
-
 	// Find first text block after the last tool_use (only if tool_use exists)
 	if lastToolIdx >= 0 {
 		for i := lastToolIdx + 1; i < len(blocks); i++ {
 			if blocks[i].Type == "text" && blocks[i].Text != "" {
-				return blocks[i].Text + askQuestionSuffix
+				return blocks[i].Text
 			}
 		}
 	}
@@ -179,56 +172,5 @@ func ExtractLastAnswerFromBlocks(blocks []model.ContentBlock) string {
 			bestText = b.Text
 		}
 	}
-	return bestText + askQuestionSuffix
-}
-
-// ExtractAskQuestionText formats the question text from an AskUserQuestion tool_use block.
-// It extracts the questions array from the block's input and formats each question
-// with its options as a readable string.
-func ExtractAskQuestionText(block model.ContentBlock) string {
-	questionsRaw, ok := block.Input["questions"]
-	if !ok {
-		return ""
-	}
-	questions, ok := questionsRaw.([]any)
-	if !ok || len(questions) == 0 {
-		return ""
-	}
-
-	var buf strings.Builder
-	buf.WriteString("\n\n---\n")
-	for i, qRaw := range questions {
-		q, ok := qRaw.(map[string]any)
-		if !ok {
-			continue
-		}
-		if i > 0 {
-			buf.WriteString("\n")
-		}
-		if header, ok := q["header"].(string); ok && header != "" {
-			buf.WriteString("**" + header + "**\n")
-		}
-		if question, ok := q["question"].(string); ok && question != "" {
-			buf.WriteString(question + "\n")
-		}
-		if options, ok := q["options"].([]any); ok {
-			for _, optRaw := range options {
-				opt, ok := optRaw.(map[string]any)
-				if !ok {
-					continue
-				}
-				label, _ := opt["label"].(string)
-				if label == "" {
-					continue
-				}
-				desc, _ := opt["description"].(string)
-				if desc != "" {
-					buf.WriteString("- " + label + ": " + desc + "\n")
-				} else {
-					buf.WriteString("- " + label + "\n")
-				}
-			}
-		}
-	}
-	return buf.String()
+	return bestText
 }

@@ -110,20 +110,14 @@ func getSessionResponsePreview(sessionID string) string {
 				lastToolIdx = j
 			}
 		}
-		// Build AskUserQuestion suffix if the last tool_use is AskUserQuestion
-		var askSuffix string
-		if lastToolIdx >= 0 && content.Blocks[lastToolIdx].Name == "AskUserQuestion" {
-			askSuffix = summarize.ExtractAskQuestionText(content.Blocks[lastToolIdx])
-		}
 		// Extract text from blocks after the last tool_use
 		for j := lastToolIdx + 1; j < len(content.Blocks); j++ {
 			b := content.Blocks[j]
 			if b.Type == "text" && b.Text != "" {
-				text := b.Text + askSuffix
-				if utf8.RuneCountInString(text) > responsePreviewMaxRunes {
-					return string([]rune(text)[:responsePreviewMaxRunes]) + "…"
+				if utf8.RuneCountInString(b.Text) > responsePreviewMaxRunes {
+					return string([]rune(b.Text)[:responsePreviewMaxRunes]) + "…"
 				}
-				return text
+				return b.Text
 			}
 		}
 		// No text after last tool_use — fall back to the longest text block.
@@ -136,11 +130,10 @@ func getSessionResponsePreview(sessionID string) string {
 			}
 		}
 		if bestText != "" {
-			text := bestText + askSuffix
-			if utf8.RuneCountInString(text) > responsePreviewMaxRunes {
-				return string([]rune(text)[:responsePreviewMaxRunes]) + "…"
+			if utf8.RuneCountInString(bestText) > responsePreviewMaxRunes {
+				return string([]rune(bestText)[:responsePreviewMaxRunes]) + "…"
 			}
-			return text
+			return bestText
 		}
 	}
 	return ""

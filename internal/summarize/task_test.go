@@ -307,64 +307,8 @@ func TestExtractLastAnswerFromBlocks_LongAnswerBeforeTerminalToolUse(t *testing.
 		{Type: "text", Text: "Now let me check the handler."},
 		{Type: "tool_use", Name: "Read", ID: "3"},
 		{Type: "text", Text: longAnswer},
-		{Type: "tool_use", Name: "AskUserQuestion", ID: "4", Input: map[string]any{
-			"questions": []any{
-				map[string]any{
-					"header":  "Fix approach",
-					"question": "Which fix do you prefer?",
-					"options": []any{
-						map[string]any{"label": "Suppress output", "description": "Ignore output briefly after replay"},
-						map[string]any{"label": "Dedup by content", "description": "Compare output tail with replay tail"},
-					},
-				},
-			},
-		}},
+		{Type: "tool_use", Name: "AskUserQuestion", ID: "4"},
 	}
 	result := ExtractLastAnswerFromBlocks(blocks)
-	assert.Contains(t, result, longAnswer)
-	assert.Contains(t, result, "Fix approach")
-	assert.Contains(t, result, "Which fix do you prefer?")
-	assert.Contains(t, result, "Suppress output")
-}
-
-func TestExtractLastAnswerFromBlocks_AskUserQuestionAppended(t *testing.T) {
-	blocks := []model.ContentBlock{
-		{Type: "text", Text: "Here is the result."},
-		{Type: "tool_use", Name: "AskUserQuestion", ID: "1", Input: map[string]any{
-			"questions": []any{
-				map[string]any{
-					"header":  "Next step",
-					"question": "Shall I proceed?",
-					"options": []any{
-						map[string]any{"label": "Yes"},
-						map[string]any{"label": "No"},
-					},
-				},
-			},
-		}},
-	}
-	result := ExtractLastAnswerFromBlocks(blocks)
-	assert.Contains(t, result, "Here is the result.")
-	assert.Contains(t, result, "Next step")
-	assert.Contains(t, result, "Shall I proceed?")
-	assert.Contains(t, result, "Yes")
-	assert.Contains(t, result, "No")
-}
-
-func TestExtractLastAnswerFromBlocks_LastToolNotAskUserQuestion(t *testing.T) {
-	blocks := []model.ContentBlock{
-		{Type: "text", Text: "Searching..."},
-		{Type: "tool_use", Name: "Bash", ID: "1"},
-	}
-	result := ExtractLastAnswerFromBlocks(blocks)
-	assert.Equal(t, "Searching...", result) // no AskUserQuestion suffix
-}
-
-func TestExtractLastAnswerFromBlocks_AskUserQuestionNoInput(t *testing.T) {
-	blocks := []model.ContentBlock{
-		{Type: "text", Text: "Some answer."},
-		{Type: "tool_use", Name: "AskUserQuestion", ID: "1", Input: map[string]any{}},
-	}
-	result := ExtractLastAnswerFromBlocks(blocks)
-	assert.Equal(t, "Some answer.", result) // no questions, no suffix
+	assert.Equal(t, longAnswer, result) // picks the longest text block, not the intro
 }
