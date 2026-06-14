@@ -22,7 +22,6 @@
           @click="handleTabClick(tab.id)"
         >
           <span class="terminal-tab-title" :title="tab.cwd">{{ tab.title }}</span>
-          <span class="terminal-tab-status" :class="tab.session.connectionState"></span>
           <button class="terminal-tab-menu-btn" @click.stop="openTabMenu($event, tab)" :title="t('terminal.title')">
             <MoreVerticalIcon :size="12" />
           </button>
@@ -945,29 +944,6 @@ defineExpose({ activate: () => {}, deactivate: () => {}, keyboardHeight: viewpor
   font-weight: 600;
 }
 
-.terminal-tab-status {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--text-muted);
-  flex-shrink: 0;
-}
-
-.terminal-tab-status.connected {
-  background: var(--color-green);
-}
-
-.terminal-tab-status.connecting,
-.terminal-tab-status.reconnecting {
-  background: var(--color-yellow);
-  animation: status-blink 1s ease-in-out infinite;
-}
-
-.terminal-tab-status.disconnected,
-.terminal-tab-status.error {
-  background: var(--text-muted);
-}
-
 .terminal-tab-menu-btn {
   display: flex;
   align-items: center;
@@ -1019,11 +995,6 @@ defineExpose({ activate: () => {}, deactivate: () => {}, keyboardHeight: viewpor
 .terminal-tab-add.disabled {
   opacity: 0.3;
   cursor: not-allowed;
-}
-
-@keyframes status-blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
 }
 
 /* Symbol bar transition */
