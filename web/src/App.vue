@@ -506,8 +506,8 @@ const showHidden = ref(false)
 const { localConfig, setLocalConfig: setSetting, loadConfig, getServerValueWithDefault } = useSettingsConfig()
 // Initialize from settings config (which handles legacy key migration)
 showHidden.value = !!localConfig.showHidden
-const sortField = ref(null)
-const sortDir = ref('asc')
+const sortField = ref(localConfig.sortField || null)
+const sortDir = ref(localConfig.sortDir || 'asc')
 
 useFileWatch({
   fileManagerOpen: computed(() => activeTab.value === 'browse'),
@@ -665,6 +665,10 @@ async function handleSetupComplete() {
     window.addEventListener('clawbench-showhidden-change', (e) => {
         showHidden.value = e.detail
     })
+    window.addEventListener('clawbench-sort-change', (e) => {
+        if (e.detail.field !== undefined) sortField.value = e.detail.field
+        if (e.detail.dir !== undefined) sortDir.value = e.detail.dir
+    })
     loadTasks()
     loadConfig()
 
@@ -754,6 +758,8 @@ function handleToggleSort(field) {
         sortField.value = field
         sortDir.value = 'asc'
     }
+    setSetting('sortField', sortField.value)
+    setSetting('sortDir', sortDir.value)
 }
 
 async function handleNavigateDir(path) {
@@ -1071,6 +1077,10 @@ onMounted(async () => {
     })
     window.addEventListener('clawbench-showhidden-change', (e) => {
         showHidden.value = e.detail
+    })
+    window.addEventListener('clawbench-sort-change', (e) => {
+        if (e.detail.field !== undefined) sortField.value = e.detail.field
+        if (e.detail.dir !== undefined) sortDir.value = e.detail.dir
     })
     // Load project first so the backend sets the clawbench_project cookie.
     // Without this, subsequent chat/session API calls fail with NoProjectSelected

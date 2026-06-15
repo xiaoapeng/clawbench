@@ -3,6 +3,7 @@ package terminal
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"os/exec"
@@ -439,6 +440,31 @@ func TestStartPTY_InvalidCwd(t *testing.T) {
 	_, _, err := startPTY("/nonexistent/path/that/does/not/exist")
 	if err == nil {
 		t.Error("expected error for nonexistent working directory")
+	}
+}
+
+func TestPlatformError(t *testing.T) {
+	pe := &PlatformError{OS: "windows"}
+	if pe.Error() != "terminal not supported on windows" {
+		t.Errorf("unexpected error message: %s", pe.Error())
+	}
+}
+
+func TestPlatformError_SimulatedWindows(t *testing.T) {
+	orig := runtimeGOOS
+	runtimeGOOS = "windows"
+	defer func() { runtimeGOOS = orig }()
+
+	_, _, err := startPTY("")
+	if err == nil {
+		t.Fatal("expected PlatformError on simulated Windows")
+	}
+	var pe *PlatformError
+	if !errors.As(err, &pe) {
+		t.Errorf("expected *PlatformError, got %T: %v", err, err)
+	}
+	if pe.OS != "windows" {
+		t.Errorf("expected OS=windows, got %s", pe.OS)
 	}
 }
 
