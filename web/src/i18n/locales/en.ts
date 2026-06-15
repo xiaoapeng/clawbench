@@ -31,7 +31,6 @@ export default {
     refresh: 'Refresh',
     more: 'More',
     settings: 'Settings',
-    fileViewer: 'File Viewer',
   },
   toast: {
     portForwardAppOnly: 'Port forwarding is only available in the mobile app',
@@ -560,6 +559,9 @@ export default {
       stickyScroll: 'Sticky Scroll',
       fileHistory: 'File history',
       confirmDelete: 'Delete "{name}"?',
+    },
+    overlay: {
+      back: 'Back',
     },
   },
   proxy: {

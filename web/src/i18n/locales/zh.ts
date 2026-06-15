@@ -31,7 +31,6 @@ export default {
     refresh: '刷新',
     more: '更多',
     settings: '设置',
-    fileViewer: '文件查看器',
   },
   toast: {
     portForwardAppOnly: '端口转发仅在移动端APP支持',
@@ -560,6 +559,9 @@ export default {
       stickyScroll: '粘性滚动',
       fileHistory: '文件历史',
       confirmDelete: '确定要删除"{name}"吗？',
+    },
+    overlay: {
+      back: '返回',
     },
   },
   proxy: {

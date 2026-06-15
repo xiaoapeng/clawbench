@@ -18,6 +18,8 @@ import { useDoubleClickCopy } from '@/composables/useDoubleClickCopy.ts'
 import { useQuoteQuestion } from '@/composables/useQuoteQuestion.ts'
 import { useStickyScroll } from '@/composables/useStickyScroll.ts'
 import { renderCodeLines } from '@/utils/codeRender.ts'
+import { resolveFilePath } from '@/composables/useFilePathAnnotation.ts'
+import { store } from '@/stores/app.ts'
 
 const props = defineProps({
     /** Raw file content */
@@ -37,6 +39,8 @@ const props = defineProps({
     /** Enable VS Code-style sticky scroll */
     stickyScroll: { type: Boolean, default: true },
 })
+
+const emit = defineEmits(['openFile'])
 
 const codeHtml = ref('')
 const codeRef = ref(null)
@@ -64,7 +68,18 @@ function handleStickyClick(lineNum) {
     if (!lineEls) return
     const el = lineEls[lineNum - 1]
     if (!el) return
-    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+
+    // Calculate sticky zone height to scroll target below it (avoid occlusion)
+    let stickyHeight = 0
+    for (const s of stickyLines.value) {
+        stickyHeight += s.height
+    }
+
+    const containerTop = codeRef.value.getBoundingClientRect().top
+    const lineTop = el.getBoundingClientRect().top
+    const scrollDelta = lineTop - containerTop - stickyHeight
+    codeRef.value.scrollBy({ top: scrollDelta, behavior: 'smooth' })
+
     // Flash animation
     el.classList.add('line-flash')
     setTimeout(() => el.classList.remove('line-flash'), 1200)
@@ -91,7 +106,51 @@ const { handleDblClick } = useDoubleClickCopy({
 })
 
 function handleClick(event) {
+    // Intercept clicks on annotated file-path spans in code
+    const pathEl = event.target.closest('.code-file-path')
+    if (pathEl) {
+        event.preventDefault()
+        event.stopPropagation()
+        const filePath = pathEl.getAttribute('data-file-path')
+        if (filePath) {
+            emit('openFile', filePath)
+        }
+        return
+    }
     handleDblClick(event)
+}
+
+function annotateFilePaths() {
+    if (!codeRef.value) return
+    const projectRoot = store.state.projectRoot
+    const homeDir = store.state.homeDir
+
+    for (const span of codeRef.value.querySelectorAll('.hljs-string')) {
+        // Skip already-annotated spans
+        if (span.querySelector('.code-file-path')) continue
+
+        const text = span.textContent || ''
+        // Strip surrounding quotes to get the raw path
+        const stripped = text.replace(/^['"`](.*)['"`]$/, '$1').trim()
+        if (!stripped || stripped.length < 3) continue
+
+        const resolved = resolveFilePath(stripped, projectRoot, homeDir)
+        if (!resolved) continue
+
+        // Wrap the path text in a clickable span
+        const innerHtml = span.innerHTML
+        // Replace the stripped path (without quotes) in the inner HTML
+        // The hljs-string contains the path with quotes highlighted as part of the string
+        // We need to find the path text within and wrap it
+        const escapedPath = stripped.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        const pathRegex = new RegExp(`(${escapedPath})`)
+        if (pathRegex.test(innerHtml)) {
+            span.innerHTML = innerHtml.replace(
+                pathRegex,
+                `<span class="code-file-path" data-file-path="${resolved}">$1</span>`
+            )
+        }
+    }
 }
 
 function doRender(content) {
@@ -117,6 +176,7 @@ function doRender(content) {
     lineHtmlCache.clear()
     invalidateCache()
     nextTick(() => {
+        annotateFilePaths()
         if (props.stickyScroll && props.filePath && codeRef.value) {
             initSticky(props.filePath, codeRef.value)
         } else {
@@ -145,6 +205,21 @@ watch(
     line-height: 1.6;
     tab-size: 4;
     user-select: text;
+    scrollbar-width: thin;
+}
+.raw-content-pre::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+}
+.raw-content-pre::-webkit-scrollbar-track {
+    background: transparent;
+}
+.raw-content-pre::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 2px;
+}
+.raw-content-pre::-webkit-scrollbar-corner {
+    background: transparent;
 }
 
 .raw-content-pre code {
@@ -208,8 +283,8 @@ watch(
     position: sticky;
     left: 0;
     z-index: 3;
-    min-width: 48px;
-    padding-right: 12px;
+    min-width: 32px;
+    padding-right: 6px;
     text-align: right;
     user-select: none;
     color: var(--text-muted);
@@ -223,7 +298,7 @@ watch(
 
 .raw-content-pre .sticky-code-text {
     white-space: pre;
-    padding-left: 12px;
+    padding-left: 8px;
     font-size: 13px;
     line-height: 20.8px;
     position: relative;
@@ -305,5 +380,16 @@ watch(
 .char-flash-add {
     animation: char-flash-add-anim 1.5s ease-out forwards;
     border-radius: 2px;
+}
+
+/* Clickable file path in code strings */
+.code-file-path {
+    cursor: pointer;
+    border-bottom: 1px dashed var(--accent-color);
+    transition: background 0.15s;
+    border-radius: 2px;
+}
+.code-file-path:hover {
+    background: rgba(255, 230, 0, 0.2);
 }
 </style>

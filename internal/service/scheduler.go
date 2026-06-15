@@ -686,118 +686,23 @@ func (s *Scheduler) executeTask(task *model.ScheduledTask, projectPath string, t
 		return
 	}
 
-	// Consume streaming events and build content blocks
-	var blocks []model.ContentBlock
-	var responseMetadata *ai.Metadata
-	var receivedTerminal bool // tracks whether "done" or "error" was received
-	wallStart := time.Now()
+	// Delegate streaming event loop to SessionExecutor.
+	// Extracted into processScheduledStreamEvents for testability.
+	runResult, completed := processScheduledStreamEvents(ctx, eventCh, RunConfig{
+		Mode:        ModeScheduled,
+		ProjectPath: projectPath,
+		BackendName: backendName,
+		SessionID:   sessionID,
+		AgentID:     task.AgentID,
+		ChatRequest: chatReq,
+		TaskID:      task.ID,
+		ExecutionID: executionID,
+		TriggerType: triggerType,
+	}, task, executionID)
 
-	for event := range eventCh {
-		switch event.Type {
-		case "metadata":
-			if event.Meta != nil {
-				responseMetadata = event.Meta
-			}
-		case "session_capture":
-			// Persist external session ID so that ContinueFromExecution
-			// inherits the correct CLI session ID (not the ClawBench UUID placeholder).
-			// Without this, resuming a continued scheduled-task session causes
-			// the CLI to start a fresh session (context amnesia).
-			if event.Content != "" {
-				existingExtID := GetExternalSessionID(sessionID)
-				if existingExtID == "" || existingExtID == sessionID {
-					if err := UpdateExternalSessionID(sessionID, event.Content); err != nil {
-						slog.Error("failed to save external session ID from scheduled task",
-							slog.String("session", sessionID),
-							slog.String("external_id", event.Content),
-							slog.String("err", err.Error()))
-					} else {
-						slog.Info("captured external session ID from scheduled task",
-							slog.String("session", sessionID),
-							slog.String("external_id", event.Content))
-					}
-				}
-			}
-		case "done", "error":
-			receivedTerminal = true
-		default:
-			ai.AccumulateBlock(&blocks, event)
-		}
-	}
-
-	// Fallback: capture external session ID from metadata.SessionID
-	// (same logic as handler/chat.go event loop).
-	if responseMetadata != nil && responseMetadata.SessionID != "" {
-		existingExtID := GetExternalSessionID(sessionID)
-		if existingExtID == "" || existingExtID == sessionID {
-			if err := UpdateExternalSessionID(sessionID, responseMetadata.SessionID); err != nil {
-				slog.Error("failed to save external session ID from metadata in scheduled task",
-					slog.String("session", sessionID),
-					slog.String("external_id", responseMetadata.SessionID),
-					slog.String("err", err.Error()))
-			}
-		}
-	}
-
-	// If context was cancelled, mark execution as cancelled and update stats
-	if ctx.Err() == context.Canceled {
-		slog.Info(
-			"task execution cancelled",
-			slog.Int64("task_id", task.ID),
-			slog.String("session_id", sessionID),
-		)
-		_ = UpdateExecutionStatus(sessionID, "cancelled")
-		emitTaskEvent(fmt.Sprintf("%d", task.ID), "cancelled", fmt.Sprintf("%d", executionID), sessionID, projectPath, task.Name)
-		// Only update stats, not status — don't overwrite user-initiated pauses (ISS-013)
-		UpdateTaskStats(task)
+	if !completed {
 		return
 	}
-
-	// If the event channel closed without a terminal event (done/error),
-	// the CLI process likely crashed or was killed (e.g. SIGKILL, OOM).
-	// Mark as failed to prevent zombie "running" state in DB.
-	if !receivedTerminal {
-		slog.Warn(
-			"task execution ended without terminal event (CLI process crashed?)",
-			slog.Int64("task_id", task.ID),
-			slog.String("session_id", sessionID),
-		)
-		_ = UpdateExecutionStatus(sessionID, "failed")
-		emitTaskEvent(fmt.Sprintf("%d", task.ID), "failed", fmt.Sprintf("%d", executionID), sessionID, projectPath, task.Name)
-		// Only update stats, not status — don't overwrite user-initiated pauses (ISS-013)
-		UpdateTaskStats(task)
-		return
-	}
-
-	// Compute wall-clock duration and inject into metadata
-	wallMs := int(time.Since(wallStart).Milliseconds())
-	if responseMetadata == nil {
-		responseMetadata = &ai.Metadata{}
-	}
-	responseMetadata.WallMs = wallMs
-
-	// Build content JSON for the assistant message
-	contentMap := map[string]any{"blocks": blocks}
-	contentMap["metadata"] = responseMetadata
-	contentJSON, _ := json.Marshal(contentMap)
-
-	// Write assistant message to chat_history
-	msgID, err := AddChatMessage(projectPath, backendName, sessionID, "assistant", string(contentJSON), nil, false, task.Name)
-	if err != nil {
-		slog.Error("failed to write assistant message for task", slog.String("err", err.Error()))
-	}
-	// Save metadata to dedicated table for analytical queries
-	if msgID > 0 && responseMetadata != nil {
-		if saveErr := SaveMetadata(msgID, responseMetadata); saveErr != nil {
-			slog.Warn("failed to save task message metadata", slog.Int64("msg_id", msgID), slog.String("err", saveErr.Error()))
-		}
-	}
-
-	// Mark execution as completed
-	_ = UpdateExecutionStatus(sessionID, "completed")
-	emitTaskEvent(fmt.Sprintf("%d", task.ID), "completed", fmt.Sprintf("%d", executionID), sessionID, projectPath, task.Name)
-
-	// Update task execution stats
 	// Read current DB status to avoid overwriting user-initiated changes (e.g. pause).
 	// See ISS-013: using task.Status (in-memory snapshot) can revert "paused" back to "active".
 	var currentStatus string
@@ -863,10 +768,12 @@ func (s *Scheduler) executeTask(task *model.ScheduledTask, projectPath string, t
 		slog.String("status", newStatus),
 	)
 
-	// Generate summary asynchronously using unified AsyncSummarize
-	if taskSummarizerInstance != nil {
-		projectPath := task.ProjectPath
-		AsyncSummarize("task_execution", executionID, blocks, projectPath, sessionID)
+	// Generate summary asynchronously — use "chat_message" type keyed by the
+	// assistant message ID (runResult.MsgID), same as interactive chat sessions.
+	// This unifies the summary storage model so ContinueFromExecution no longer
+	// needs to convert between target_types.
+	if taskSummarizerInstance != nil && runResult.MsgID > 0 {
+		AsyncSummarize("chat_message", runResult.MsgID, runResult.Blocks, task.ProjectPath, sessionID)
 	}
 }
 
@@ -1142,4 +1049,66 @@ func HasUnreadTasks(projectPath string) (bool, error) {
 		).Scan(&count)
 	}
 	return count > 0, err
+}
+
+// createStreamingPlaceholder creates an empty streaming assistant message in the DB
+// so that SessionExecutor.Finalize can update it via FinalizeStreamingMessage,
+// just like interactive sessions.
+func createStreamingPlaceholder(projectPath, backendName, sessionID string) {
+	emptyContent, _ := json.Marshal(map[string]any{"blocks": []any{}})
+	_, _ = AddChatMessage(projectPath, backendName, sessionID, "assistant", string(emptyContent), nil, true, "")
+}
+
+// processScheduledStreamEvents handles the streaming event loop for scheduled tasks.
+// It creates a streaming placeholder, runs the event loop via SessionExecutor,
+// checks for cancellation or crash, and finalizes the result.
+// Returns the RunResult and a bool: true if execution completed normally (caller
+// should continue with post-completion logic), false if cancelled or crashed.
+func processScheduledStreamEvents(ctx context.Context, eventCh <-chan ai.StreamEvent, cfg RunConfig, task *model.ScheduledTask, executionID int64) (RunResult, bool) {
+	projectPath := cfg.ProjectPath
+	backendName := cfg.BackendName
+	sessionID := cfg.SessionID
+
+	// Create streaming placeholder message in DB
+	createStreamingPlaceholder(projectPath, backendName, sessionID)
+
+	// Delegate event loop to SessionExecutor (scheduled mode)
+	executor := NewSessionExecutor(ctx, cfg)
+	runResult := executor.RunWithChannel(eventCh)
+
+	// If context was cancelled, mark execution as cancelled and update stats
+	if ctx.Err() == context.Canceled {
+		slog.Info(
+			"task execution cancelled",
+			slog.Int64("task_id", task.ID),
+			slog.String("session_id", sessionID),
+		)
+		_ = UpdateExecutionStatus(sessionID, "cancelled")
+		emitTaskEvent(fmt.Sprintf("%d", task.ID), "cancelled", fmt.Sprintf("%d", executionID), sessionID, projectPath, task.Name)
+		UpdateTaskStats(task)
+		return RunResult{}, false
+	}
+
+	// If the event channel closed without a terminal event (done/error),
+	// the CLI process likely crashed or was killed (e.g. SIGKILL, OOM).
+	if !runResult.ReceivedTerminal {
+		slog.Warn(
+			"task execution ended without terminal event (CLI process crashed?)",
+			slog.Int64("task_id", task.ID),
+			slog.String("session_id", sessionID),
+		)
+		_ = UpdateExecutionStatus(sessionID, "failed")
+		emitTaskEvent(fmt.Sprintf("%d", task.ID), "failed", fmt.Sprintf("%d", executionID), sessionID, projectPath, task.Name)
+		UpdateTaskStats(task)
+		return RunResult{}, false
+	}
+
+	// Finalize: persist blocks to DB, save metadata, drain raw output
+	finalResult := executor.Finalize(runResult, nil)
+
+	// Mark execution as completed
+	_ = UpdateExecutionStatus(sessionID, "completed")
+	emitTaskEvent(fmt.Sprintf("%d", task.ID), "completed", fmt.Sprintf("%d", executionID), sessionID, projectPath, task.Name)
+
+	return finalResult, true
 }

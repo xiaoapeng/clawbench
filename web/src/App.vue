@@ -38,71 +38,53 @@
             />
           </TabPanel>
 
-          <!-- File Browse Tab -->
+          <!-- File Browse Tab (合一：目录浏览 + 文件覆盖预览) -->
           <TabPanel tabId="browse" :activeTab="activeTab" :noHeader="true">
-            <FileManagerContent
-              :entries="dirEntries"
-              :current-dir="currentDir"
-              :current-file="currentFile"
-              :show-hidden="showHidden"
-              :sort-field="sortField"
-              :sort-dir="sortDir"
-              :dir-loading="store.state.dirLoading"
-              @navigate-dir="handleNavigateDir"
-              @select-file="handleBrowseSelectFile"
-              @toggle-sort="handleToggleSort"
-              @toggle-hidden="toggleHidden"
-              @rename="handleRename"
-              @delete="handleDelete"
-              @batch-delete="handleBatchDelete"
-              @refresh="handleRefresh"
-              @open-terminal="handleOpenTerminal"
-            />
-          </TabPanel>
-
-          <!-- File Viewer Tab -->
-          <TabPanel tabId="viewer" :activeTab="activeTab" :noHeader="true">
-            <div class="viewer-panel">
-              <WelcomeView v-if="!currentFile" />
-              <FileViewer
-                v-if="currentFile"
-                ref="fileViewerRef"
-                :file="currentFile"
+            <div class="browse-panel">
+              <FileManagerContent
+                ref="fileManagerRef"
+                :entries="dirEntries"
+                :current-dir="currentDir"
+                :current-file="currentFile"
+                :show-hidden="showHidden"
+                :sort-field="sortField"
+                :sort-dir="sortDir"
+                :dir-loading="store.state.dirLoading"
+                @navigate-dir="handleNavigateDir"
+                @select-file="handleBrowseSelectFile"
+                @toggle-sort="handleToggleSort"
+                @toggle-hidden="toggleHidden"
+                @rename="handleRename"
+                @delete="handleDelete"
+                @batch-delete="handleBatchDelete"
+                @refresh="handleRefresh"
+                @open-terminal="handleOpenTerminal"
+              />
+              <FileOverlay
+                ref="fileOverlayRef"
+                :overlay-open="fileNav.overlayOpen.value"
+                :current-file="currentFile"
                 :toc-open="tocOpen"
                 :search-open="searchOpen"
                 :markdown-view-mode="markdownViewMode"
-                @delete="handleDelete(currentFile?.path)"
+                :file-history-open="fileHistoryOpen"
+                :toc-file="tocFile"
+                :pdf-outline="pdfOutline"
+                @delete="handleDelete($event)"
                 @show-details="detailsOpen = true"
                 @open-git-history="openFileHistory"
                 @toggle-toc="tocOpen = !tocOpen"
                 @toggle-search="currentFile?.content && (searchOpen = !searchOpen)"
                 @toggle-view="markdownViewMode = markdownViewMode === 'rendered' ? 'raw' : 'rendered'"
                 @refresh="handleRefresh"
+                @jump="scrollToLine"
+                @jump-page="handleJumpPdfPage"
+                @close-git-history="fileHistoryOpen = false"
+                @open-file="handleOverlayOpenFile"
+                @overlay-close="handleOverlayClose"
+                @overlay-go-back="handleOverlayGoBack"
               />
             </div>
-            <!-- Auxiliary overlays for viewer tab — open only when viewer tab is active -->
-            <TocDrawer
-              :file="tocFile"
-              :pdf-outline="pdfOutline"
-              :open="activeTab === 'viewer' && tocOpen"
-              @close="tocOpen = false"
-              @jump="scrollToLine"
-              @jump-page="handleJumpPdfPage"
-            />
-            <SearchDrawer
-              :file="currentFile"
-              :open="activeTab === 'viewer' && searchOpen"
-              :view-mode="currentFileIsMarkdown ? markdownViewMode : undefined"
-              @close="searchOpen = false"
-              @jump="scrollToLine"
-            />
-            <GitHistoryDrawer
-              :open="activeTab === 'viewer' && fileHistoryOpen"
-              mode="file"
-              :file="currentFile"
-              @close="fileHistoryOpen = false"
-              @open-file="handleSelectFile"
-            />
           </TabPanel>
 
           <!-- History Tab -->
@@ -149,7 +131,7 @@
 
       <FileDetailsDialog
         :file="currentFile"
-        :open="activeTab === 'viewer' && detailsOpen"
+        :open="activeTab === 'browse' && fileNav.overlayOpen.value && detailsOpen"
         @close="detailsOpen = false"
       />
 
@@ -189,11 +171,11 @@
               </button>
               <span v-if="store.state.chatUnreadCount > 0 && activeTab !== 'chat'" class="dock-badge dock-badge-count">{{ store.state.chatUnreadCount }}</span>
             </div>
-            <button class="dock-btn" :class="{ active: activeTab === 'viewer' }" @click.stop="switchTab('viewer')" :title="t('nav.fileViewer')">
-              <FileText />
-            </button>
             <button class="dock-btn" :class="{ active: activeTab === 'browse' }" @click.stop="switchTab('browse')" :title="t('nav.fileManager')">
               <FolderOpen />
+            </button>
+            <button class="dock-btn" :class="{ active: activeTab === 'history' }" @click.stop="switchTab('history')" :title="t('git.history.projectHistory')">
+              <GitBranch />
             </button>
             <div class="dock-btn-wrap">
               <button class="dock-btn" :class="{ active: activeTab === dockSlot4Tab, 'has-unread': dockSlot4Tab === 'tasks' && store.state.taskUnreadCount > 0 && activeTab !== 'tasks', 'just-completed': dockSlot4Tab === 'tasks' && store.state.taskJustCompleted && activeTab !== 'tasks', 'has-running': dockSlot4Tab === 'tasks' && store.state.taskRunning && activeTab !== 'tasks' }" @click.stop="handleDockSlot4Click" :title="dockSlot4Title">
@@ -230,10 +212,6 @@
             <span>{{ t('nav.tasks') }}</span>
             <span v-if="store.state.taskUnreadCount > 0" class="dock-overflow-count">{{ store.state.taskUnreadCount }}</span>
           </button>
-          <button class="dock-overflow-item" :class="{ active: activeTab === 'history' }" @click.stop="handleOverflowSelect('history')">
-            <GitBranch :size="16" />
-            <span>{{ t('git.history.projectHistory') }}</span>
-          </button>
           <button v-if="!isSSHDisabled" class="dock-overflow-item" :class="{ active: activeTab === 'proxy' }" @click.stop="handleOverflowSelect('proxy')">
             <EthernetPort :size="16" />
             <span>{{ t('nav.portForward') }}</span>
@@ -262,11 +240,10 @@
 import { ref, computed, watch, onMounted, onUnmounted, provide, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSettingsConfig } from '@/composables/useSettingsConfig'
-import { MessageSquare, FolderOpen, FileText, GitBranch, EthernetPort, Terminal as TerminalIcon, CalendarClock, MoreHorizontal, Settings } from 'lucide-vue-next'
+import { MessageSquare, FolderOpen, GitBranch, EthernetPort, Terminal as TerminalIcon, CalendarClock, MoreHorizontal, Settings } from 'lucide-vue-next'
 import AppHeader from './components/common/AppHeader.vue'
 import TabPanel from './components/common/TabPanel.vue'
-import WelcomeView from './components/WelcomeView.vue'
-import FileViewer from './components/file/FileViewer.vue'
+import FileOverlay from './components/file/FileOverlay.vue'
 import Lightbox from './components/media/Lightbox.vue'
 import ChatPanelContent from './components/chat/ChatPanelContent.vue'
 import FileManagerContent from './components/file/FileManagerContent.vue'
@@ -299,9 +276,10 @@ import { useChatKeyboard } from './composables/useChatKeyboard.ts'
 import { usePortForward } from './composables/usePortForward.ts'
 import { useTerminalStatus } from './composables/useTerminalStatus.ts'
 import { useFileWatch } from './composables/useFileWatch.ts'
+import { useFileNavStack } from './composables/useFileNavStack'
 import { refreshCurrentFile } from './composables/useFileRefresh.ts'
 import { useGlobalEvents } from './composables/useGlobalEvents'
-import { useEdgeSwipeBack } from './composables/useEdgeSwipeBack'
+import { useEdgeSwipeBack, useFeatureBackHandler } from './composables/useEdgeSwipeBack'
 import { handleBackNavigation } from './composables/useBackHandler'
 import { store } from './stores/app.ts'
 import { setPendingCommitNavigation } from './composables/useCommitNavigation.ts'
@@ -350,6 +328,7 @@ async function hotSwitchProject(newProjectPath, pendingSessionId) {
   // (store state already reset by setProject, but identity/agents need explicit reset)
   resetIdentity()
   resetAgents()
+  fileNav.closeOverlay()
 
   // ── Phase 4: Change key → Vue destroys old component tree & builds new one ──
   projectKey.value = newProjectPath
@@ -515,6 +494,8 @@ useFileWatch({
   currentFile: computed(() => store.state.currentFile),
 })
 
+const fileNav = useFileNavStack()
+
 const { isAppMode } = useAppMode()
 const { syncToNative, sshInfo, loadSSHInfo } = usePortForward()
 const { terminalRuntimeEnabled, loadTerminalStatus } = useTerminalStatus()
@@ -552,6 +533,24 @@ const handleForeground = () => {
 
 // Edge swipe back gesture detection (right-edge-left-swipe → go back)
 useEdgeSwipeBack()
+
+// 文件覆盖层的返回手势：文件栈优先
+useFeatureBackHandler(
+  'file-overlay',
+  () => activeTab.value === 'browse' && fileNav.overlayOpen.value,
+  () => {
+    if (fileNav.canGoBack.value) {
+      const prevPath = fileNav.goBack()
+      if (prevPath) store.selectFile(prevPath)
+    } else {
+      fileNav.closeOverlay()
+      tocOpen.value = false
+      detailsOpen.value = false
+      searchOpen.value = false
+      fileHistoryOpen.value = false
+    }
+  },
+)
 
 // Android hardware back button / predictive back gesture → delegate to JS
 window.addEventListener('clawbench-back-press', () => {
@@ -650,6 +649,7 @@ async function handleSetupComplete() {
 
     // Register event listeners that were skipped during wizard (onMounted skipped them)
     window.addEventListener('open-file-manager', handleOpenFileManager)
+    window.addEventListener('open-file-overlay', handleOpenFileOverlay)
     window.addEventListener('navigate-to-commit', handleNavigateToCommit)
     window.addEventListener('quote-sent', playQuoteEmitAnimation)
     window.addEventListener('scroll-to-line', (e) => { scrollToLine(e.detail.line) })
@@ -728,10 +728,11 @@ const tocFile = computed(() => {
 })
 
 // PDF TOC integration
-const fileViewerRef = ref(null)
-const pdfOutline = computed(() => fileViewerRef.value?.pdfOutline || [])
+const fileOverlayRef = ref(null)
+const fileManagerRef = ref(null)
+const pdfOutline = computed(() => fileOverlayRef.value?.pdfOutline || [])
 function handleJumpPdfPage(pageNum) {
-    fileViewerRef.value?.pdfScrollToPage(pageNum)
+    fileOverlayRef.value?.pdfScrollToPage(pageNum)
 }
 
 watch(() => currentFile.value, (f) => {
@@ -768,20 +769,58 @@ async function handleNavigateDir(path) {
 }
 
 async function handleSelectFile(path) {
-    await store.selectFile(path)
+    const ok = await store.selectFile(path)
+    if (ok) {
+        activeTab.value = 'browse'
+        fileNav.openFile(path)
+    }
 }
 
 async function handleBrowseSelectFile(path) {
+    if (fileManagerRef.value?.multiSelectState?.active) return
     const ok = await store.selectFile(path)
-    if (ok) activeTab.value = 'viewer'
+    if (ok) {
+        fileNav.openFile(path)
+    }
 }
 
 async function handleTaskOpenFile(filePath, lineStart) {
     const ok = await store.selectFile(filePath)
     if (ok) {
-        switchTab('viewer')
+        activeTab.value = 'browse'
+        fileNav.openFile(filePath)
         if (lineStart) scrollToLine(lineStart)
     }
+}
+
+function handleOverlayClose() {
+    fileNav.closeOverlay()
+    tocOpen.value = false
+    detailsOpen.value = false
+    searchOpen.value = false
+    fileHistoryOpen.value = false
+}
+
+async function handleOverlayGoBack() {
+    const prevPath = fileNav.goBack()
+    if (prevPath) {
+        await store.selectFile(prevPath)
+    }
+}
+
+async function handleOverlayOpenFile(path) {
+    const ok = await store.selectFile(path)
+    if (ok) {
+        fileNav.openFile(path)
+    }
+}
+
+function handleOpenFileOverlay(e) {
+    const { path, lineStart } = e.detail || {}
+    if (!path) return
+    activeTab.value = 'browse'
+    fileNav.openFile(path)
+    if (lineStart) scrollToLine(lineStart)
 }
 
 function onTaskCardClick(taskId) {
@@ -814,7 +853,7 @@ function handleDockTerminal() {
 const overflowMenuOpen = ref(false)
 const overflowBtnRef = ref(null)
 const overflowTabs = computed(() => {
-  const tabs = ['tasks', 'history']
+  const tabs = ['tasks']
   if (!isSSHDisabled.value) tabs.push('proxy')
   if (!isTerminalDisabled.value) tabs.push('terminal')
   tabs.push('settings')
@@ -822,7 +861,6 @@ const overflowTabs = computed(() => {
 })
 const overflowTabMeta = {
   tasks:   { icon: CalendarClock, titleKey: 'nav.tasks' },
-  history: { icon: GitBranch, titleKey: 'git.history.projectHistory' },
   proxy:   { icon: EthernetPort, titleKey: 'nav.portForward' },
   terminal:{ icon: TerminalIcon, titleKey: 'terminal.title' },
   settings:{ icon: Settings, titleKey: 'nav.settings' },
@@ -1063,6 +1101,7 @@ onMounted(async () => {
     loadTasks()
     loadConfig()
     window.addEventListener('open-file-manager', handleOpenFileManager)
+    window.addEventListener('open-file-overlay', handleOpenFileOverlay)
     window.addEventListener('navigate-to-commit', handleNavigateToCommit)
     window.addEventListener('quote-sent', playQuoteEmitAnimation)
     window.addEventListener('scroll-to-line', (e) => { scrollToLine(e.detail.line) })
@@ -1203,8 +1242,8 @@ onMounted(async () => {
         await store.loadFiles(store.state.currentDir)
         await store.selectFile(lastFile)
         if (store.state.currentFile?.error) store.state.currentFile = null
-        // 不再自动跳转到 viewer，保持默认 tab（chat）
-        // 用户切到 browse 时可以直接看到上次打开的文件
+        // 不自动切换 Tab 或打开覆盖层，保持默认 tab（chat）
+        // 用户切到 browse 时可以在 handleBrowseSelectFile 中打开覆盖层
     }
 })
 
@@ -1213,6 +1252,7 @@ onUnmounted(() => {
     window.removeEventListener('clawbench-foreground', handleForeground)
     destroyGlobalEvents()
     window.removeEventListener('open-file-manager', handleOpenFileManager)
+    window.removeEventListener('open-file-overlay', handleOpenFileOverlay)
     window.removeEventListener('navigate-to-commit', handleNavigateToCommit)
     window.removeEventListener('quote-sent', playQuoteEmitAnimation)
     window.removeEventListener('clawbench-open-session', handleOpenSession)
@@ -1230,11 +1270,12 @@ onUnmounted(() => {
     opacity: 0;
 }
 
-.viewer-panel {
-  flex: 1;
+.browse-panel {
+  position: relative;
+  width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
-  min-height: 0;
   overflow: hidden;
 }
 
