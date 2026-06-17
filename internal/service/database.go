@@ -686,7 +686,6 @@ func MigrateTaskExecutionSummaries() {
 		SessionID string
 	}
 	var migrations []migrationRow
-	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var m migrationRow
 		if err := rows.Scan(&m.ExecID, &m.Summary, &m.SessionID); err != nil {
@@ -695,6 +694,7 @@ func MigrateTaskExecutionSummaries() {
 		}
 		migrations = append(migrations, m)
 	}
+	defer func() { _ = rows.Close() }()
 
 	migrated := 0
 	for _, m := range migrations {

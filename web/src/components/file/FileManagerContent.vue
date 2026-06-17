@@ -54,10 +54,6 @@
               <Upload :size="14" />
               <span>{{ t('file.uploadHere') }}</span>
             </button>
-            <button class="toolbar-dropdown-item" :disabled="syncButtonDisabled" @click="syncToCurrentFile(); moreMenuOpen = false">
-              <ArrowRightLeft :size="14" />
-              <span>{{ t('file.syncToCurrentDir') }}</span>
-            </button>
             <button class="toolbar-dropdown-item" @click="viewMode = viewMode === 'grid' ? 'list' : 'grid'; moreMenuOpen = false">
               <LayoutGrid v-if="viewMode === 'list'" :size="14" />
               <LayoutList v-else :size="14" />
@@ -77,7 +73,7 @@
           {{ isAllSelected ? t('file.multiSelect.deselectAll') : t('file.multiSelect.selectAll') }}
         </button>
       </div>
-      <DirBreadcrumb v-else :path="currentDir" @navigate="$emit('navigateDir', $event)" />
+      <DirBreadcrumb v-else :path="currentDir" @navigate="$emit('navigateDir', $event, 'truncate')" />
     </div>
 
     <!-- Hidden file input for upload -->
@@ -98,12 +94,12 @@
       @touchend="onContainerTouchEnd"
       @touchcancel="onContainerTouchEnd"
     >
-      <div v-if="dirLoading" class="dir-loading-overlay">
-        <Loader :size="24" class="dir-loading-spinner" />
-        <span>{{ t('common.loading') }}</span>
-      </div>
-      <template v-else>
-      <div v-if="filteredEntries.length === 0" class="empty-state">
+      <Transition name="loading-fade">
+        <div v-if="dirLoading" class="loading-mask">
+          <div class="loading-mask-spinner"></div>
+        </div>
+      </Transition>
+      <div v-if="filteredEntries.length === 0 && !dirLoading" class="empty-state">
         <Folder :size="48" />
         <p>{{ currentDir ? t('file.emptyDir') : t('file.noFiles') }}</p>
       </div>
@@ -125,7 +121,6 @@
           </div>
           <Folder class="file-icon" :size="28" />
           <span class="file-name">{{ entry.name }}</span>
-          <ChevronRight v-if="!multiSelect.active" :size="14" class="chevron" />
           <span class="file-meta">{{ formatDate(entry.modified) }}</span>
         </div>
 
@@ -157,7 +152,6 @@
       <div v-if="hasMoreEntries" class="truncate-hint">
         {{ t('file.truncateHint', { max: MAX_VISIBLE_ENTRIES, total: filteredEntries.length }) }}
       </div>
-      </template>
     </div>
 
     <!-- File grid -->
@@ -169,12 +163,12 @@
       @touchend="onContainerTouchEnd"
       @touchcancel="onContainerTouchEnd"
     >
-      <div v-if="dirLoading" class="dir-loading-overlay">
-        <Loader :size="24" class="dir-loading-spinner" />
-        <span>{{ t('common.loading') }}</span>
-      </div>
-      <template v-else>
-      <div v-if="filteredEntries.length === 0" class="empty-state">
+      <Transition name="loading-fade">
+        <div v-if="dirLoading" class="loading-mask">
+          <div class="loading-mask-spinner"></div>
+        </div>
+      </Transition>
+      <div v-if="filteredEntries.length === 0 && !dirLoading" class="empty-state">
         <Folder :size="48" />
         <p>{{ currentDir ? t('file.emptyDir') : t('file.noFiles') }}</p>
       </div>
@@ -205,7 +199,6 @@
       <div v-if="hasMoreEntries" class="truncate-hint">
         {{ t('file.truncateHint', { max: MAX_VISIBLE_ENTRIES, total: filteredEntries.length }) }}
       </div>
-      </template>
     </div>
 
     <!-- Multi-select bottom action bar -->
@@ -295,11 +288,11 @@
 </template>
 
 <script setup>
+import '@/assets/loading-mask.css'
 import { ref, computed, reactive, inject, nextTick, onMounted, onUnmounted, Teleport, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Folder, ArrowDownAz, ArrowUpZa, ChevronDown, ChevronUp, Clock, FileText, HardDrive, Eye, EyeOff, ArrowRightLeft, Loader, FileImage, FileMusic, ChevronRight, Copy, Scissors, ClipboardPaste, FilePlus, FolderPlus, Pencil, Download, Trash2, FolderOpen, RotateCw, Terminal as TerminalIcon, CheckSquare, Check, X, LayoutList, LayoutGrid, FileVideo, Package, Upload, MoreHorizontal } from 'lucide-vue-next'
+import { Folder, ArrowDownAz, ArrowUpZa, ChevronDown, ChevronUp, Clock, FileText, HardDrive, Eye, EyeOff, FileImage, FileMusic, Copy, Scissors, ClipboardPaste, FilePlus, FolderPlus, Pencil, Download, Trash2, FolderOpen, RotateCw, Terminal as TerminalIcon, CheckSquare, Check, X, LayoutList, LayoutGrid, FileVideo, Package, Upload, MoreHorizontal } from 'lucide-vue-next'
 import { getFileType } from '@/utils/fileType.ts'
-import { dirName } from '@/utils/path.ts'
 import {
   buildThumbUrl,
   isImage as isImageEntry, isAudio as isAudioEntry, isVideo as isVideoEntry,
@@ -312,8 +305,10 @@ import { localConfig, setLocalConfig, useSettingsConfig } from '@/composables/us
 import { useAppMode } from '@/composables/useAppMode.ts'
 import { useDialog } from '@/composables/useDialog.ts'
 import { useTerminalStatus } from '@/composables/useTerminalStatus.ts'
-import { useFeatureBackHandler } from '@/composables/useEdgeSwipeBack'
+import { useFeatureBackHandler, PRIORITY_PAGE } from '@/composables/useEdgeSwipeBack'
 import { useFileUpload } from '@/composables/useFileUpload.ts'
+import { useDirStack } from '@/composables/useDirStack'
+import { useFileNavStack } from '@/composables/useFileNavStack'
 import SearchInput from '@/components/common/SearchInput.vue'
 import DirBreadcrumb from './DirBreadcrumb.vue'
 
@@ -340,11 +335,17 @@ const isTerminalDisabled = computed(() => terminalRuntimeEnabled.value !== true)
 
 const activeTab = inject('activeTab', ref(''))
 
+const dirStack = useDirStack()
+const fileNav = useFileNavStack()
+
 // Register back handler for file browser directory navigation
+// PRIORITY_PAGE < PRIORITY_OVERLAY, so file-overlay always wins when open.
+// The !overlayOpen guard is redundant with priority but makes intent explicit.
 useFeatureBackHandler(
   'browse',
-  () => activeTab.value === 'browse' && !!props.currentDir,
-  () => emit('navigateDir', dirName(props.currentDir)),
+  () => activeTab.value === 'browse' && !fileNav.overlayOpen.value && dirStack.canGoBack.value,
+  () => emit('navigateBack'),
+  PRIORITY_PAGE,
 )
 
 const props = defineProps({
@@ -357,7 +358,7 @@ const props = defineProps({
     dirLoading: Boolean,
 })
 
-const emit = defineEmits(['navigateDir', 'selectFile', 'toggleSort', 'toggleHidden', 'rename', 'delete', 'refresh', 'openTerminal', 'batchDelete'])
+const emit = defineEmits(['navigateDir', 'navigateBack', 'selectFile', 'toggleSort', 'toggleHidden', 'rename', 'delete', 'refresh', 'openTerminal', 'batchDelete'])
 
 
 const searchQuery = ref('')
@@ -418,30 +419,6 @@ function closeDropdowns(e) {
 
 onMounted(() => document.addEventListener('click', closeDropdowns))
 onUnmounted(() => document.removeEventListener('click', closeDropdowns))
-
-// Sync button: navigate to the directory of the currently opened file
-const isInSync = computed(() => {
-    if (!props.currentFile?.path) return false
-    // Don't consider "in sync" if the file has an error (e.g. doesn't exist)
-    if (props.currentFile.error) return false
-    return dirName(props.currentFile.path) === props.currentDir
-})
-
-// Sync button disabled state: no file selected or file has error (issue #166)
-const syncButtonDisabled = computed(() => !props.currentFile?.path || !!props.currentFile?.error)
-
-function syncToCurrentFile() {
-    if (!props.currentFile?.path) return
-    // Don't sync if the file has an error (e.g. doesn't exist) —
-    // navigating to its directory may lead to a non-existent path (issue #166)
-    if (props.currentFile.error) return
-    const targetDir = dirName(props.currentFile.path)
-    if (targetDir === props.currentDir) {
-        if (toast) toast.show(t('file.alreadyInDir'), { icon: '📍', type: 'success', duration: 1500 })
-        return
-    }
-    emit('navigateDir', targetDir)
-}
 
 // Helper: build item path from entry name
 function itemPath(name) {
@@ -1115,6 +1092,7 @@ function doDelete() {
 
 /* ── File list area ── */
 .file-list {
+    position: relative;
     flex: 1;
     overflow-y: auto;
     padding: 4px 6px;
@@ -1273,15 +1251,8 @@ function doDelete() {
     background: var(--bg-tertiary, #f0f0f0);
 }
 
-.file-item.dir-item .chevron {
+.file-item.dir-item .file-meta {
     margin-left: auto;
-    color: var(--text-muted, #999);
-    transition: transform 0.2s;
-}
-
-.file-item.dir-item:hover .chevron {
-    transform: translateX(2px);
-    color: var(--accent-color, #4a90d9);
 }
 
 .file-icon {
@@ -1343,31 +1314,9 @@ function doDelete() {
     flex-shrink: 0;
 }
 
-/* Loading overlay */
-.dir-loading-overlay {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 40px 20px;
-    color: var(--text-muted, #999);
-    font-size: 13px;
-}
-
-.dir-loading-spinner {
-    width: 24px;
-    height: 24px;
-    animation: dir-spin 1s linear infinite;
-}
-
-@keyframes dir-spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-}
-
 /* ── File Grid ── */
 .file-grid {
+    position: relative;
     flex: 1;
     overflow-y: auto;
     padding: 8px;

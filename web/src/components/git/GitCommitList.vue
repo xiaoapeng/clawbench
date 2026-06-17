@@ -26,7 +26,7 @@
         <RefreshCw :size="14" />
       </button>
       <button
-        v-if="isGit"
+        v-if="isGit && mode !== 'file'"
         class="drilldown-refresh-btn"
         :title="t('git.manage.title')"
         @click.stop="$emit('manage')"
@@ -61,16 +61,16 @@
       </div>
       <div v-else-if="commits.length === 0" class="git-history-empty">{{ t('git.commitList.noCommits') }}</div>
       <div v-else class="commit-list-container">
-        <!-- Graph SVG - hidden during search because filtering breaks lane continuity -->
+        <!-- Graph SVG - hidden during search or file mode (no multi-branch graph for single file) -->
         <GitGraph
-          v-if="!isSearching"
+          v-if="!isSearching && mode !== 'file'"
           class="commit-list-graph"
           :commits="filteredCommits"
           :row-height="64"
           :collapsed="graphCollapsed"
           @update:collapsed="graphCollapsed = $event"
         />
-        <div v-else class="commit-list-graph-hint">
+        <div v-else-if="isSearching" class="commit-list-graph-hint">
           <Info :size="14" />
         </div>
         <!-- Commit rows -->
@@ -93,7 +93,6 @@
                 <span v-if="c.author"> · {{ c.author }}</span>
               </div>
             </div>
-            <ChevronRight :size="14" class="drilldown-chevron" />
           </div>
           <div ref="listRef" class="git-load-more-sentinel">
             <div v-if="hasMore && loadingMore" class="git-load-more">
@@ -107,7 +106,7 @@
 </template>
 
 <script setup>
-import { CirclePlus, FileText, Info, ChevronRight, RefreshCw, GitBranch } from 'lucide-vue-next'
+import { CirclePlus, FileText, Info, RefreshCw, GitBranch } from 'lucide-vue-next'
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import GitGraph from './GitGraph.vue'
@@ -130,6 +129,7 @@ const props = defineProps({
   searchPlaceholder: { type: String, default: '' },
   selectedSHA: { type: String, default: null },
   refreshHint: { type: Boolean, default: false },
+  mode: { type: String, default: 'project' }, // 'project' | 'file'
 })
 
 const emit = defineEmits(['select', 'search', 'load-more', 'init-git', 'refresh', 'manage'])
@@ -148,12 +148,14 @@ let touchStartY = 0
 let touchStartTime = 0
 
 function onTouchStart(e) {
+  if (props.mode === 'file') return // No graph to toggle in file mode
   touchStartX = e.touches[0].clientX
   touchStartY = e.touches[0].clientY
   touchStartTime = Date.now()
 }
 
 function onTouchEnd(e) {
+  if (props.mode === 'file') return // No graph to toggle in file mode
   const dx = e.changedTouches[0].clientX - touchStartX
   const dy = e.changedTouches[0].clientY - touchStartY
   const dt = Date.now() - touchStartTime
@@ -372,12 +374,6 @@ defineExpose({ observeList, unobserveList, commitSearch })
 
 .drilldown-item:active {
   background: var(--bg-tertiary, #e9ecef);
-}
-
-.drilldown-chevron {
-  flex-shrink: 0;
-  color: var(--text-muted, #ccc);
-  margin-left: 4px;
 }
 
 .git-commit-info {

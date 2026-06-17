@@ -25,9 +25,9 @@ const (
 	// ModeScheduled is for automated task execution without a user present.
 	ModeScheduled
 
-	// JSON content map keys
+	// contentKeyBlocks is the JSON key for content blocks in serialized messages.
 	contentKeyBlocks = "blocks"
-	// Cancel reason values
+	// cancelReasonUser is the cancel reason when the user explicitly cancels.
 	cancelReasonUser = "user"
 )
 
@@ -136,8 +136,63 @@ func (e *SessionExecutor) RunWithChannel(eventCh <-chan ai.StreamEvent) RunResul
 				// Channel closed without a terminal event — CLI process crash
 				return e.buildResult(false, wallStart)
 			}
-			if done, result := e.processEvent(event, wallStart); done {
-				return result
+			if event.Type == "done" || event.Type == "error" {
+				e.receivedTerminal = true
+				// For "error" events, AccumulateBlock handles them.
+				// We process the error event but still finalize.
+				if event.Type == "error" {
+					ai.AccumulateBlock(&e.blocks, event)
+				}
+				return e.buildResult(true, wallStart)
+			}
+
+			// raw_output: accumulate but don't forward or count
+			if event.Type == "raw_output" {
+				if e.rawOutput != "" {
+					e.rawOutput += "\n"
+				}
+				e.rawOutput += event.RawOutput
+				continue
+			}
+
+			// session_capture: persist external session ID
+			if event.Type == "session_capture" {
+				if event.Content != "" {
+					e.captureExternalSessionID(event.Content)
+				}
+				continue
+			}
+
+			// SSE forwarding (interactive mode only)
+			if e.cfg.Mode == ModeInteractive && e.cfg.StreamCh != nil {
+				if !ai.SendStreamEvent(e.ctx, e.cfg.StreamCh, event) {
+					// Context cancelled or stream channel closed
+					return e.buildResult(e.receivedTerminal, wallStart)
+				}
+			}
+
+			// Accumulate block
+			ai.AccumulateBlock(&e.blocks, event)
+
+			// resume_split: finalize current message, start new one
+			if event.Type == "resume_split" {
+				e.handleResumeSplit()
+				continue
+			}
+
+			// metadata capture
+			if event.Type == "metadata" && event.Meta != nil {
+				e.responseMetadata = event.Meta
+				// Capture external session ID from metadata
+				if event.Meta.SessionID != "" {
+					e.captureExternalSessionID(event.Meta.SessionID)
+				}
+			}
+
+			// Incremental persistence (every 5 events)
+			e.eventCount++
+			if e.eventCount%5 == 0 {
+				e.flushStreamingMessage()
 			}
 
 		case <-e.ctx.Done():
@@ -149,52 +204,6 @@ func (e *SessionExecutor) RunWithChannel(eventCh <-chan ai.StreamEvent) RunResul
 			}
 		}
 	}
-}
-
-// processEvent handles a single stream event. Returns (true, RunResult) if the
-// event loop should terminate (terminal event or SSE send failure), or (false, zero)
-// to continue processing.
-func (e *SessionExecutor) processEvent(event ai.StreamEvent, wallStart time.Time) (bool, RunResult) {
-	// Terminal events: done or error
-	if event.Type == "done" || event.Type == "error" {
-		e.receivedTerminal = true
-		if event.Type == "error" {
-			ai.AccumulateBlock(&e.blocks, event)
-		}
-		return true, e.buildResult(true, wallStart)
-	}
-
-	// Non-forwardable events: raw_output and session_capture
-	if done := e.handleNonForwardableEvent(event); done {
-		return false, RunResult{}
-	}
-
-	// SSE forwarding (interactive mode only)
-	if e.cfg.Mode == ModeInteractive && e.cfg.StreamCh != nil {
-		if !ai.SendStreamEvent(e.ctx, e.cfg.StreamCh, event) {
-			return true, e.buildResult(e.receivedTerminal, wallStart)
-		}
-	}
-
-	// Accumulate block
-	ai.AccumulateBlock(&e.blocks, event)
-
-	// resume_split: finalize current message, start new one
-	if event.Type == "resume_split" {
-		e.handleResumeSplit()
-		return false, RunResult{}
-	}
-
-	// metadata capture
-	e.captureMetadata(event)
-
-	// Incremental persistence (every 5 events)
-	e.eventCount++
-	if e.eventCount%5 == 0 {
-		e.flushStreamingMessage()
-	}
-
-	return false, RunResult{}
 }
 
 // buildResult constructs the final RunResult from the executor's accumulated state.
@@ -254,36 +263,6 @@ func (e *SessionExecutor) captureExternalSessionID(externalID string) {
 				slog.String("external_id", externalID),
 				slog.String("err", err.Error()))
 		}
-	}
-}
-
-// handleNonForwardableEvent processes events that should not be forwarded to SSE
-// (raw_output and session_capture). Returns true if the event was handled.
-func (e *SessionExecutor) handleNonForwardableEvent(event ai.StreamEvent) bool {
-	if event.Type == "raw_output" {
-		if e.rawOutput != "" {
-			e.rawOutput += "\n"
-		}
-		e.rawOutput += event.RawOutput
-		return true
-	}
-	if event.Type == "session_capture" {
-		if event.Content != "" {
-			e.captureExternalSessionID(event.Content)
-		}
-		return true
-	}
-	return false
-}
-
-// captureMetadata stores metadata from a metadata event and captures the external session ID.
-func (e *SessionExecutor) captureMetadata(event ai.StreamEvent) {
-	if event.Type != "metadata" || event.Meta == nil {
-		return
-	}
-	e.responseMetadata = event.Meta
-	if event.Meta.SessionID != "" {
-		e.captureExternalSessionID(event.Meta.SessionID)
 	}
 }
 
@@ -365,9 +344,62 @@ func (e *SessionExecutor) Finalize(result RunResult, eventCh <-chan ai.StreamEve
 	blocks := result.Blocks
 	responseMetadata := result.Metadata
 
-	e.injectResponseMetadata(responseMetadata)
+	// Inject ACP mode/thinking/transport/model into metadata
+	if s := ai.GetACPConnManager().GetCachedStateByClawbenchSID(e.cfg.SessionID); s.Mode != nil || s.Effort != nil {
+		if s.Mode != nil && s.Mode.CurrentModeID != "" {
+			responseMetadata.Mode = s.Mode.CurrentModeID
+		}
+		if s.Effort != nil && s.Effort.CurrentID != "" {
+			responseMetadata.ThinkingEffort = s.Effort.CurrentID
+		}
+	}
+	effectiveTransport := "cli"
+	if t := GetSessionTransport(e.cfg.SessionID); t != "" {
+		effectiveTransport = t
+	} else if agent, ok := model.Agents[e.cfg.AgentID]; ok && agent.SupportsACP() {
+		effectiveTransport = "acp-stdio"
+	}
+	responseMetadata.Transport = effectiveTransport
 
-	blocks, responseMetadata, content := e.finalizeContent(blocks, responseMetadata, result.CancelReason)
+	if sessionModel := GetSessionModel(e.cfg.SessionID); sessionModel != "" {
+		responseMetadata.Model = sessionModel
+	}
+
+	// Build content JSON for DB storage
+	var content string
+	if len(blocks) == 0 {
+		var errMsg string
+		var reason string
+		switch {
+		case result.CancelReason == cancelReasonUser:
+			errMsg, reason = "User cancelled", ai.ReasonUserCancel
+		case e.ctx.Err() == context.Canceled:
+			errMsg, reason = "AI response cancelled", ai.ReasonContextCancel
+		case e.ctx.Err() == context.DeadlineExceeded:
+			errMsg, reason = "AI response timed out (30 min)", ai.ReasonTimeout
+		default:
+			errMsg, reason = "AI returned no content", ai.ReasonEmpty
+		}
+		blocks = append(blocks, model.ContentBlock{Type: "warning", Text: errMsg, Reason: reason})
+		contentMap := map[string]any{contentKeyBlocks: blocks, "metadata": responseMetadata}
+		if result.CancelReason == cancelReasonUser || e.ctx.Err() == context.Canceled {
+			contentMap["cancelled"] = true
+		}
+		blocksJSON, _ := json.Marshal(contentMap)
+		content = string(blocksJSON)
+	} else {
+		contentMap := map[string]any{contentKeyBlocks: blocks, "metadata": responseMetadata}
+		if result.CancelReason == cancelReasonUser {
+			contentMap["cancelled"] = true
+		} else if e.ctx.Err() == context.Canceled {
+			contentMap["cancelled"] = true
+		} else if e.ctx.Err() == context.DeadlineExceeded {
+			blocks = append(blocks, model.ContentBlock{Type: "warning", Text: "AI response timed out (30 min)", Reason: ai.ReasonTimeout})
+		}
+		contentMap[contentKeyBlocks] = blocks
+		blocksJSON, _ := json.Marshal(contentMap)
+		content = string(blocksJSON)
+	}
 
 	msgID, err := FinalizeStreamingMessage(e.cfg.ProjectPath, e.cfg.BackendName, e.cfg.SessionID, content)
 	if err != nil {
@@ -384,12 +416,31 @@ func (e *SessionExecutor) Finalize(result RunResult, eventCh <-chan ai.StreamEve
 	}
 
 	// Drain any remaining events from channel (collect raw_output)
-	rawOutput := e.drainRawOutput(eventCh, result.RawOutput)
+	rawOutput := result.RawOutput
+	if eventCh != nil {
+		for {
+			select {
+			case event, ok := <-eventCh:
+				if !ok {
+					goto saveRaw
+				}
+				if event.Type == "raw_output" {
+					if rawOutput != "" {
+						rawOutput += "\n"
+					}
+					rawOutput += event.RawOutput
+				}
+			default:
+				goto saveRaw
+			}
+		}
+	}
 
+saveRaw:
 	// Save raw AI backend output for debugging/analysis
 	if rawOutput != "" {
-		if streamingMsgID := GetStreamingMessageID(e.cfg.SessionID); streamingMsgID > 0 {
-			if err := SaveRawResponse(e.cfg.SessionID, e.cfg.BackendName, streamingMsgID, rawOutput); err != nil {
+		if streamMsgID := GetStreamingMessageID(e.cfg.SessionID); streamMsgID > 0 {
+			if err := SaveRawResponse(e.cfg.SessionID, e.cfg.BackendName, streamMsgID, rawOutput); err != nil {
 				slog.Error("failed to save raw response",
 					slog.String("session", e.cfg.SessionID),
 					slog.String("err", err.Error()))
@@ -404,100 +455,4 @@ func (e *SessionExecutor) Finalize(result RunResult, eventCh <-chan ai.StreamEve
 	result.MsgID = msgID
 
 	return result
-}
-
-// injectResponseMetadata injects ACP mode, thinking effort, transport, and model into the response metadata.
-func (e *SessionExecutor) injectResponseMetadata(md *ai.Metadata) {
-	if s := ai.GetACPConnManager().GetCachedStateByClawbenchSID(e.cfg.SessionID); s.Mode != nil || s.Effort != nil {
-		if s.Mode != nil && s.Mode.CurrentModeID != "" {
-			md.Mode = s.Mode.CurrentModeID
-		}
-		if s.Effort != nil && s.Effort.CurrentID != "" {
-			md.ThinkingEffort = s.Effort.CurrentID
-		}
-	}
-	effectiveTransport := "cli"
-	if t := GetSessionTransport(e.cfg.SessionID); t != "" {
-		effectiveTransport = t
-	} else if agent, ok := model.Agents[e.cfg.AgentID]; ok && agent.SupportsACP() {
-		effectiveTransport = "acp-stdio"
-	}
-	md.Transport = effectiveTransport
-
-	if sessionModel := GetSessionModel(e.cfg.SessionID); sessionModel != "" {
-		md.Model = sessionModel
-	}
-}
-
-// finalizeContent builds the content JSON for DB storage, handling empty and non-empty block cases.
-// Returns the (possibly modified) blocks, metadata, and serialized content string.
-func (e *SessionExecutor) finalizeContent(blocks []model.ContentBlock, responseMetadata *ai.Metadata, cancelReason string) ([]model.ContentBlock, *ai.Metadata, string) {
-	var content string
-	if len(blocks) == 0 {
-		blocks, content = e.buildEmptyContentJSON(blocks, responseMetadata, cancelReason)
-	} else {
-		content = e.buildNonEmptyContentJSON(blocks, responseMetadata, cancelReason)
-	}
-	return blocks, responseMetadata, content
-}
-
-// buildEmptyContentJSON builds the content JSON for an empty response (warning block added).
-func (e *SessionExecutor) buildEmptyContentJSON(blocks []model.ContentBlock, responseMetadata *ai.Metadata, cancelReason string) ([]model.ContentBlock, string) {
-	var errMsg string
-	var reason string
-	switch {
-	case cancelReason == cancelReasonUser:
-		errMsg, reason = "User cancelled", ai.ReasonUserCancel
-	case e.ctx.Err() == context.Canceled:
-		errMsg, reason = "AI response cancelled", ai.ReasonContextCancel
-	case e.ctx.Err() == context.DeadlineExceeded:
-		errMsg, reason = "AI response timed out (30 min)", ai.ReasonTimeout
-	default:
-		errMsg, reason = "AI returned no content", ai.ReasonEmpty
-	}
-	blocks = append(blocks, model.ContentBlock{Type: "warning", Text: errMsg, Reason: reason})
-	contentMap := map[string]any{contentKeyBlocks: blocks, "metadata": responseMetadata}
-	if cancelReason == cancelReasonUser || e.ctx.Err() == context.Canceled {
-		contentMap["cancelled"] = true
-	}
-	blocksJSON, _ := json.Marshal(contentMap)
-	return blocks, string(blocksJSON)
-}
-
-// buildNonEmptyContentJSON builds the content JSON for a non-empty response.
-func (e *SessionExecutor) buildNonEmptyContentJSON(blocks []model.ContentBlock, responseMetadata *ai.Metadata, cancelReason string) string {
-	contentMap := map[string]any{contentKeyBlocks: blocks, "metadata": responseMetadata}
-	if cancelReason == cancelReasonUser {
-		contentMap["cancelled"] = true
-	} else if e.ctx.Err() == context.Canceled {
-		contentMap["cancelled"] = true
-	} else if e.ctx.Err() == context.DeadlineExceeded {
-		blocks = append(blocks, model.ContentBlock{Type: "warning", Text: "AI response timed out (30 min)", Reason: ai.ReasonTimeout})
-	}
-	contentMap[contentKeyBlocks] = blocks
-	blocksJSON, _ := json.Marshal(contentMap)
-	return string(blocksJSON)
-}
-
-// drainRawOutput drains remaining events from the channel, collecting raw_output events.
-func (e *SessionExecutor) drainRawOutput(eventCh <-chan ai.StreamEvent, rawOutput string) string {
-	if eventCh == nil {
-		return rawOutput
-	}
-	for {
-		select {
-		case event, ok := <-eventCh:
-			if !ok {
-				return rawOutput
-			}
-			if event.Type == "raw_output" {
-				if rawOutput != "" {
-					rawOutput += "\n"
-				}
-				rawOutput += event.RawOutput
-			}
-		default:
-			return rawOutput
-		}
-	}
 }

@@ -51,6 +51,7 @@
                 :sort-dir="sortDir"
                 :dir-loading="store.state.dirLoading"
                 @navigate-dir="handleNavigateDir"
+                @navigate-back="handleNavigateBack"
                 @select-file="handleBrowseSelectFile"
                 @toggle-sort="handleToggleSort"
                 @toggle-hidden="toggleHidden"
@@ -64,6 +65,7 @@
                 ref="fileOverlayRef"
                 :overlay-open="fileNav.overlayOpen.value"
                 :current-file="currentFile"
+                :file-loading="store.state.fileLoading"
                 :toc-open="tocOpen"
                 :search-open="searchOpen"
                 :markdown-view-mode="markdownViewMode"
@@ -268,7 +270,7 @@ import { useQuoteQuestion } from './composables/useQuoteQuestion.ts'
 import { useTaskTab, registerSwitchTab, onTaskEvent } from '@/composables/useTaskTab.ts'
 import { resetAgents } from '@/composables/useAgents'
 import { useSessionIdentity, registerSessionDrawerRef, resetIdentity } from './composables/useSessionIdentity.ts'
-import { loadSessionsOnce } from './composables/useChatSession.ts'
+import { loadSessionsOnce, resetChatSessionState } from './composables/useChatSession.ts'
 import { useToast } from './composables/useToast.ts'
 import { useAppMode } from './composables/useAppMode.ts'
 import { useTerminalKeyboard } from './composables/useTerminalKeyboard.ts'
@@ -279,9 +281,10 @@ import { useFileWatch } from './composables/useFileWatch.ts'
 import { useFileNavStack } from './composables/useFileNavStack'
 import { refreshCurrentFile } from './composables/useFileRefresh.ts'
 import { useGlobalEvents } from './composables/useGlobalEvents'
-import { useEdgeSwipeBack, useFeatureBackHandler } from './composables/useEdgeSwipeBack'
+import { useEdgeSwipeBack, useFeatureBackHandler, PRIORITY_OVERLAY } from './composables/useEdgeSwipeBack'
 import { handleBackNavigation } from './composables/useBackHandler'
 import { store } from './stores/app.ts'
+import { dirName } from './utils/path.ts'
 import { setPendingCommitNavigation } from './composables/useCommitNavigation.ts'
 import { initMermaid, reRenderMermaid } from './utils/mermaid.ts'
 import { getFileType } from './utils/fileType.ts'
@@ -328,7 +331,9 @@ async function hotSwitchProject(newProjectPath, pendingSessionId) {
   // (store state already reset by setProject, but identity/agents need explicit reset)
   resetIdentity()
   resetAgents()
+  resetChatSessionState()
   fileNav.closeOverlay()
+  store.resetDirStack()
 
   // ── Phase 4: Change key → Vue destroys old component tree & builds new one ──
   projectKey.value = newProjectPath
@@ -351,8 +356,9 @@ async function hotSwitchProject(newProjectPath, pendingSessionId) {
   const lastFile = localStorage.getItem('clawbenchLastFile_' + store.state.projectRoot)
   if (lastFile && lastFile !== store.state.currentFile?.path) {
     const lastSlash = lastFile.lastIndexOf('/')
-    store.state.currentDir = lastSlash > 0 ? lastFile.slice(0, lastSlash) : ''
-    await store.loadFiles(store.state.currentDir)
+    const targetDir = lastSlash > 0 ? lastFile.slice(0, lastSlash) : ''
+    store.resetDirStack(targetDir)
+    await store.loadFiles(targetDir)
     await store.selectFile(lastFile)
     if (store.state.currentFile?.error) store.state.currentFile = null
   }
@@ -379,6 +385,14 @@ const activeTab = ref('chat')
 function switchTab(tab) {
   if (activeTab.value === tab) return
   activeTab.value = tab
+  // Close file browser panels when leaving browse tab — they are teleported
+  // to <body> via BottomSheet so v-show hiding the tab-panel doesn't affect them.
+  if (activeTab.value !== 'browse') {
+    tocOpen.value = false
+    searchOpen.value = false
+    fileHistoryOpen.value = false
+    detailsOpen.value = false
+  }
   if (tab === 'chat') {
     // Recalculate instead of blindly clearing — if the user switches to chat
     // but hasn't opened the unread session, the indicator should keep flashing.
@@ -496,6 +510,28 @@ useFileWatch({
 
 const fileNav = useFileNavStack()
 
+/** Sync the directory listing to the current file's parent dir.
+ *  Used after closing the file overlay so the browse view matches. */
+function syncDirToFileParent() {
+  const filePath = store.state.currentFile?.path
+  if (filePath) {
+    const targetDir = dirName(filePath)
+    if (targetDir !== store.state.currentDir) {
+      store.replaceDirTop(targetDir)
+    }
+  }
+}
+
+/** Close overlay + all side panels, then sync directory to file parent. */
+function closeOverlayAndSync() {
+  fileNav.closeOverlay()
+  tocOpen.value = false
+  detailsOpen.value = false
+  searchOpen.value = false
+  fileHistoryOpen.value = false
+  syncDirToFileParent()
+}
+
 const { isAppMode } = useAppMode()
 const { syncToNative, sshInfo, loadSSHInfo } = usePortForward()
 const { terminalRuntimeEnabled, loadTerminalStatus } = useTerminalStatus()
@@ -534,7 +570,7 @@ const handleForeground = () => {
 // Edge swipe back gesture detection (right-edge-left-swipe → go back)
 useEdgeSwipeBack()
 
-// 文件覆盖层的返回手势：文件栈优先
+// 文件覆盖层的返回手势：overlay 优先级高于 browse，无论 mount 顺序如何
 useFeatureBackHandler(
   'file-overlay',
   () => activeTab.value === 'browse' && fileNav.overlayOpen.value,
@@ -543,13 +579,10 @@ useFeatureBackHandler(
       const prevPath = fileNav.goBack()
       if (prevPath) store.selectFile(prevPath)
     } else {
-      fileNav.closeOverlay()
-      tocOpen.value = false
-      detailsOpen.value = false
-      searchOpen.value = false
-      fileHistoryOpen.value = false
+      closeOverlayAndSync()
     }
   },
+  PRIORITY_OVERLAY,
 )
 
 // Android hardware back button / predictive back gesture → delegate to JS
@@ -650,6 +683,7 @@ async function handleSetupComplete() {
     // Register event listeners that were skipped during wizard (onMounted skipped them)
     window.addEventListener('open-file-manager', handleOpenFileManager)
     window.addEventListener('open-file-overlay', handleOpenFileOverlay)
+    window.addEventListener('close-file-overlay', handleOverlayClose)
     window.addEventListener('navigate-to-commit', handleNavigateToCommit)
     window.addEventListener('quote-sent', playQuoteEmitAnimation)
     window.addEventListener('scroll-to-line', (e) => { scrollToLine(e.detail.line) })
@@ -763,9 +797,18 @@ function handleToggleSort(field) {
     setSetting('sortDir', sortDir.value)
 }
 
-async function handleNavigateDir(path) {
-    if (store.state.dirLoading) return
-    await store.navigateToDir(path)
+async function handleNavigateDir(path, mode = 'push') {
+    if (mode === 'truncate') {
+        await store.truncateToDir(path)
+    } else if (mode === 'replace') {
+        await store.replaceDirTop(path)
+    } else {
+        await store.pushDir(path)
+    }
+}
+
+async function handleNavigateBack() {
+    await store.popDir()
 }
 
 async function handleSelectFile(path) {
@@ -794,17 +837,17 @@ async function handleTaskOpenFile(filePath, lineStart) {
 }
 
 function handleOverlayClose() {
-    fileNav.closeOverlay()
-    tocOpen.value = false
-    detailsOpen.value = false
-    searchOpen.value = false
-    fileHistoryOpen.value = false
+    closeOverlayAndSync()
 }
 
 async function handleOverlayGoBack() {
-    const prevPath = fileNav.goBack()
-    if (prevPath) {
-        await store.selectFile(prevPath)
+    if (fileNav.canGoBack.value) {
+        const prevPath = fileNav.goBack()
+        if (prevPath) {
+            await store.selectFile(prevPath)
+        }
+    } else {
+        handleOverlayClose()
     }
 }
 
@@ -833,7 +876,18 @@ async function handleRename({ path, name }) {
 }
 
 async function handleDelete(path) {
+    const wasOverlay = fileNav.overlayOpen.value
     await store.deleteFile(path)
+    if (wasOverlay) {
+        if (fileNav.canGoBack.value) {
+            const prevPath = fileNav.goBack()
+            if (prevPath) {
+                await store.selectFile(prevPath)
+            }
+        } else {
+            handleOverlayClose()
+        }
+    }
 }
 
 async function handleBatchDelete(paths) {
@@ -1102,6 +1156,7 @@ onMounted(async () => {
     loadConfig()
     window.addEventListener('open-file-manager', handleOpenFileManager)
     window.addEventListener('open-file-overlay', handleOpenFileOverlay)
+    window.addEventListener('close-file-overlay', handleOverlayClose)
     window.addEventListener('navigate-to-commit', handleNavigateToCommit)
     window.addEventListener('quote-sent', playQuoteEmitAnimation)
     window.addEventListener('scroll-to-line', (e) => { scrollToLine(e.detail.line) })
@@ -1238,8 +1293,9 @@ onMounted(async () => {
     const lastFile = localStorage.getItem('clawbenchLastFile_' + store.state.projectRoot)
     if (lastFile && lastFile !== store.state.currentFile?.path) {
         const lastSlash = lastFile.lastIndexOf('/')
-        store.state.currentDir = lastSlash > 0 ? lastFile.slice(0, lastSlash) : ''
-        await store.loadFiles(store.state.currentDir)
+        const targetDir = lastSlash > 0 ? lastFile.slice(0, lastSlash) : ''
+        store.resetDirStack(targetDir)
+        await store.loadFiles(targetDir)
         await store.selectFile(lastFile)
         if (store.state.currentFile?.error) store.state.currentFile = null
         // 不自动切换 Tab 或打开覆盖层，保持默认 tab（chat）
@@ -1253,6 +1309,7 @@ onUnmounted(() => {
     destroyGlobalEvents()
     window.removeEventListener('open-file-manager', handleOpenFileManager)
     window.removeEventListener('open-file-overlay', handleOpenFileOverlay)
+    window.removeEventListener('close-file-overlay', handleOverlayClose)
     window.removeEventListener('navigate-to-commit', handleNavigateToCommit)
     window.removeEventListener('quote-sent', playQuoteEmitAnimation)
     window.removeEventListener('clawbench-open-session', handleOpenSession)
