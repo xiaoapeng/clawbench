@@ -51,6 +51,7 @@ RUN if [ -n "$PI_VERSION" ]; then \
 # Copy local docker-staging/ as fallback (local builds only; no-op in CI since PI_VERSION is set).
 # When PI_VERSION is set above, the RUN step already populated .clawbench/pi/,
 # and this COPY overlays an empty directory (harmless).
+# In CI, docker-staging/ also contains provider_models.json from the Linux build artifact.
 COPY docker-staging/ .clawbench/
 
 # Data directory (mounted as volume for persistence)

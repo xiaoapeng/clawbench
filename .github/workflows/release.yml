@@ -415,6 +415,9 @@ jobs:
           cp -r pkg-linux/clawbench/public .
           mkdir -p docker-staging/pi
           chmod +x ./clawbench
+          # Copy provider_models.json so Anthropic-format providers have KnownModels
+          mkdir -p docker-staging
+          cp pkg-linux/clawbench/.clawbench/provider_models.json docker-staging/provider_models.json
 
       - name: Resolve latest Pi version
         id: pi-version
