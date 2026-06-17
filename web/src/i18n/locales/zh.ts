@@ -127,6 +127,7 @@ export default {
       sessionSettings: '会话设置',
       switchThinkingEffort: '切换思考档位',
       attachment: '附件',
+      attachToChat: '添加到聊天',
     },
     sessionInfo: {
       default: '默认',
@@ -188,6 +189,8 @@ export default {
       openWorktree: 'Worktree 操作',
       switchWorktree: '切换工作树',
       openDirectory: '打开目录',
+      addedToChat: '已添加到聊天',
+      alreadyAttached: '已在聊天附件中',
     },
     quickSend: {
       title: '快捷发送消息',
@@ -475,7 +478,7 @@ export default {
     sortClickToClear: '再次点击取消排序',
     hideHiddenFiles: '隐藏隐藏文件',
     showHiddenFiles: '显示隐藏文件',
-    uploadHere: '上传文件到当前目录',
+    uploadHere: '上传文件',
     truncateHint: '仅展示前 {max} 项（共 {total} 项），请使用搜索精确定位',
     emptyDir: '此目录为空',
     noFiles: '未找到支持的文件',
