@@ -191,6 +191,8 @@ export default {
       openDirectory: '打开目录',
       addedToChat: '已添加到聊天',
       alreadyAttached: '已在聊天附件中',
+      removedFromChat: '已从聊天附件移除',
+      removeFromChat: '取消附件',
     },
     quickSend: {
       title: '快捷发送消息',
@@ -726,7 +728,7 @@ export default {
       searchPlaceholder: '搜索提交信息…',
       commitRecords: '提交记录',
       notGitRepo: '尚未初始化 Git 仓库',
-      initGit: '初始化 Git',
+      notGitRepoDesc: '此项目尚未纳入版本控制',
       untrackedFile: '此文件未被 Git 跟踪',
       untrackedDesc: '文件尚未纳入版本控制，无历史记录',
       untrackedHint: 'git add <文件名> 可将其添加到跟踪',

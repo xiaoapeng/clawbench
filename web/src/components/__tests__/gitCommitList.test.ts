@@ -1,7 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import GitCommitList from '@/components/git/GitCommitList.vue'
+import GitGraph from '@/components/git/GitGraph.vue'
+import SearchInput from '@/components/common/SearchInput.vue'
 
 // ── i18n setup ──
 const i18n = createI18n({
@@ -17,7 +19,7 @@ const i18n = createI18n({
           loading: 'Loading…',
           refresh: 'Refresh',
           notGitRepo: 'Not a git repo',
-          initGit: 'Init git',
+          notGitRepoDesc: 'This project is not under version control',
           untrackedFile: 'Untracked file',
           untrackedDesc: 'This file is not tracked by git.',
           untrackedHint: 'to start tracking it.',
@@ -58,8 +60,8 @@ function mountList(props: Record<string, unknown> = {}) {
       plugins: [i18n],
       stubs: {
         'lucide-vue-next': LucideStub,
-        GitGraph: GitGraphStub,
-        SearchInput: SearchInputStub,
+        [GitGraph.name || 'GitGraph']: GitGraphStub,
+        [SearchInput.name || 'SearchInput']: SearchInputStub,
       },
     },
   })

@@ -40,13 +40,13 @@
       </div>
       <div v-else-if="error" class="git-history-error">{{ error }}</div>
       <div v-else-if="!isGit" class="git-history-empty">
-        <div class="init-git-prompt">
-          <CirclePlus :size="40" style="color:#ccc;margin-bottom:12px;" />
-          <div style="font-size:14px;color:var(--text-muted,#999);margin-bottom:12px;">{{ t('git.commitList.notGitRepo') }}</div>
-          <button class="init-git-btn" @click.stop="$emit('init-git')" :disabled="initLoading">
-            <span v-if="initLoading" class="spinner" style="width:14px;height:14px;border-width:2px;" />
-            <span v-else>{{ t('git.commitList.initGit') }}</span>
-          </button>
+        <div class="empty-state-card">
+          <GitBranch :size="36" :stroke-width="1.5" style="color:var(--text-muted);" />
+          <div class="empty-state-title">{{ t('git.commitList.notGitRepo') }}</div>
+          <div class="empty-state-desc">{{ t('git.commitList.notGitRepoDesc') }}</div>
+          <div class="empty-state-hint">
+            <code>git init</code>
+          </div>
         </div>
       </div>
       <div v-else-if="commits.length === 0 && untracked" class="git-history-empty">
@@ -106,7 +106,7 @@
 </template>
 
 <script setup>
-import { CirclePlus, FileText, Info, RefreshCw, GitBranch } from 'lucide-vue-next'
+import { FileText, Info, RefreshCw, GitBranch } from 'lucide-vue-next'
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import GitGraph from './GitGraph.vue'
@@ -121,7 +121,6 @@ const props = defineProps({
   hasMore: { type: Boolean, default: false },
   loadingMore: { type: Boolean, default: false },
   searchLoading: { type: Boolean, default: false },
-  initLoading: { type: Boolean, default: false },
   loading: { type: Boolean, default: false },
   error: { type: String, default: '' },
   untracked: { type: Boolean, default: false },
@@ -132,7 +131,7 @@ const props = defineProps({
   mode: { type: String, default: 'project' }, // 'project' | 'file'
 })
 
-const emit = defineEmits(['select', 'search', 'load-more', 'init-git', 'refresh', 'manage'])
+const emit = defineEmits(['select', 'search', 'load-more', 'refresh', 'manage'])
 
 const commitSearch = ref('')
 const listRef = ref(null)
@@ -461,37 +460,6 @@ defineExpose({ observeList, unobserveList, commitSearch })
     border-radius: 4px;
     font-family: monospace;
     font-size: 11px;
-}
-
-.init-git-prompt {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 40px 20px;
-}
-
-.init-git-btn {
-  padding: 8px 20px;
-  border: 1px solid var(--accent-color, #4a90d9);
-  border-radius: 6px;
-  background: var(--accent-color, #4a90d9);
-  color: #fff;
-  font-size: 14px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  transition: opacity 0.15s;
-}
-
-.init-git-btn:hover:not(:disabled) {
-  opacity: 0.85;
-}
-
-.init-git-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 /* Selected commit highlight */

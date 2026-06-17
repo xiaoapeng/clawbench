@@ -191,6 +191,8 @@ export default {
       openDirectory: 'Open directory',
       addedToChat: 'Added to chat',
       alreadyAttached: 'Already in chat attachments',
+      removedFromChat: 'Removed from chat attachments',
+      removeFromChat: 'Remove attachment',
     },
     quickSend: {
       title: 'Quick Send Message',
@@ -726,7 +728,7 @@ export default {
       searchPlaceholder: 'Search commits…',
       commitRecords: 'Commits',
       notGitRepo: 'Git repository not initialized',
-      initGit: 'Init Git',
+      notGitRepoDesc: 'This project is not under version control',
       untrackedFile: 'This file is not tracked by Git',
       untrackedDesc: 'File is not under version control, no history',
       untrackedHint: 'git add <filename> to start tracking',
