@@ -119,6 +119,61 @@ func NewSessionExecutor(ctx context.Context, cfg RunConfig) *SessionExecutor {
 	}
 }
 
+// handleNonTerminalEvent processes a single non-terminal stream event.
+// Returns true if the event loop should return (SSE send failure).
+func (e *SessionExecutor) handleNonTerminalEvent(event ai.StreamEvent) bool {
+	// raw_output: accumulate but don't forward or count
+	if event.Type == "raw_output" {
+		if e.rawOutput != "" {
+			e.rawOutput += "\n"
+		}
+		e.rawOutput += event.RawOutput
+		return false
+	}
+
+	// session_capture: persist external session ID
+	if event.Type == "session_capture" {
+		if event.Content != "" {
+			e.captureExternalSessionID(event.Content)
+		}
+		return false
+	}
+
+	// SSE forwarding (interactive mode only)
+	if e.cfg.Mode == ModeInteractive && e.cfg.StreamCh != nil {
+		if !ai.SendStreamEvent(e.ctx, e.cfg.StreamCh, event) {
+			// Context cancelled or stream channel closed
+			return true
+		}
+	}
+
+	// Accumulate block
+	ai.AccumulateBlock(&e.blocks, event)
+
+	// resume_split: finalize current message, start new one
+	if event.Type == "resume_split" {
+		e.handleResumeSplit()
+		return false
+	}
+
+	// metadata capture
+	if event.Type == "metadata" && event.Meta != nil {
+		e.responseMetadata = event.Meta
+		// Capture external session ID from metadata
+		if event.Meta.SessionID != "" {
+			e.captureExternalSessionID(event.Meta.SessionID)
+		}
+	}
+
+	// Incremental persistence (every 5 events)
+	e.eventCount++
+	if e.eventCount%5 == 0 {
+		e.flushStreamingMessage()
+	}
+
+	return false
+}
+
 // RunWithChannel executes the event loop against a pre-built event channel.
 // This is the core event processing logic shared by both interactive and scheduled modes.
 // The caller is responsible for creating the backend and obtaining the event channel.
@@ -146,53 +201,8 @@ func (e *SessionExecutor) RunWithChannel(eventCh <-chan ai.StreamEvent) RunResul
 				return e.buildResult(true, wallStart)
 			}
 
-			// raw_output: accumulate but don't forward or count
-			if event.Type == "raw_output" {
-				if e.rawOutput != "" {
-					e.rawOutput += "\n"
-				}
-				e.rawOutput += event.RawOutput
-				continue
-			}
-
-			// session_capture: persist external session ID
-			if event.Type == "session_capture" {
-				if event.Content != "" {
-					e.captureExternalSessionID(event.Content)
-				}
-				continue
-			}
-
-			// SSE forwarding (interactive mode only)
-			if e.cfg.Mode == ModeInteractive && e.cfg.StreamCh != nil {
-				if !ai.SendStreamEvent(e.ctx, e.cfg.StreamCh, event) {
-					// Context cancelled or stream channel closed
-					return e.buildResult(e.receivedTerminal, wallStart)
-				}
-			}
-
-			// Accumulate block
-			ai.AccumulateBlock(&e.blocks, event)
-
-			// resume_split: finalize current message, start new one
-			if event.Type == "resume_split" {
-				e.handleResumeSplit()
-				continue
-			}
-
-			// metadata capture
-			if event.Type == "metadata" && event.Meta != nil {
-				e.responseMetadata = event.Meta
-				// Capture external session ID from metadata
-				if event.Meta.SessionID != "" {
-					e.captureExternalSessionID(event.Meta.SessionID)
-				}
-			}
-
-			// Incremental persistence (every 5 events)
-			e.eventCount++
-			if e.eventCount%5 == 0 {
-				e.flushStreamingMessage()
+			if e.handleNonTerminalEvent(event) {
+				return e.buildResult(e.receivedTerminal, wallStart)
 			}
 
 		case <-e.ctx.Done():
@@ -334,23 +344,15 @@ func (e *SessionExecutor) handleResumeSplit() {
 	}
 }
 
-// Finalize persists the RunResult to the database: builds the content JSON,
-// finalizes the streaming message, saves metadata, drains remaining events,
-// and saves raw output. Returns the finalized RunResult with DB message ID.
-//
-// This replaces the old finalizeStreamRun function from handler/chat.go.
-// The caller is still responsible for SSE terminal events and drain loop logic.
-func (e *SessionExecutor) Finalize(result RunResult, eventCh <-chan ai.StreamEvent) RunResult {
-	blocks := result.Blocks
-	responseMetadata := result.Metadata
-
-	// Inject ACP mode/thinking/transport/model into metadata
+// injectSessionMetadata populates ACP mode, thinking effort, transport, and model
+// into the response metadata from session-level state.
+func (e *SessionExecutor) injectSessionMetadata(meta *ai.Metadata) {
 	if s := ai.GetACPConnManager().GetCachedStateByClawbenchSID(e.cfg.SessionID); s.Mode != nil || s.Effort != nil {
 		if s.Mode != nil && s.Mode.CurrentModeID != "" {
-			responseMetadata.Mode = s.Mode.CurrentModeID
+			meta.Mode = s.Mode.CurrentModeID
 		}
 		if s.Effort != nil && s.Effort.CurrentID != "" {
-			responseMetadata.ThinkingEffort = s.Effort.CurrentID
+			meta.ThinkingEffort = s.Effort.CurrentID
 		}
 	}
 	effectiveTransport := "cli"
@@ -359,14 +361,16 @@ func (e *SessionExecutor) Finalize(result RunResult, eventCh <-chan ai.StreamEve
 	} else if agent, ok := model.Agents[e.cfg.AgentID]; ok && agent.SupportsACP() {
 		effectiveTransport = "acp-stdio"
 	}
-	responseMetadata.Transport = effectiveTransport
+	meta.Transport = effectiveTransport
 
 	if sessionModel := GetSessionModel(e.cfg.SessionID); sessionModel != "" {
-		responseMetadata.Model = sessionModel
+		meta.Model = sessionModel
 	}
+}
 
-	// Build content JSON for DB storage
-	var content string
+// buildContentJSON serializes blocks and metadata into the DB content format,
+// handling empty-response warnings and cancellation markers.
+func (e *SessionExecutor) buildContentJSON(blocks []model.ContentBlock, result RunResult, meta *ai.Metadata) (string, []model.ContentBlock) {
 	if len(blocks) == 0 {
 		var errMsg string
 		var reason string
@@ -381,25 +385,63 @@ func (e *SessionExecutor) Finalize(result RunResult, eventCh <-chan ai.StreamEve
 			errMsg, reason = "AI returned no content", ai.ReasonEmpty
 		}
 		blocks = append(blocks, model.ContentBlock{Type: "warning", Text: errMsg, Reason: reason})
-		contentMap := map[string]any{contentKeyBlocks: blocks, "metadata": responseMetadata}
+		contentMap := map[string]any{contentKeyBlocks: blocks, "metadata": meta}
 		if result.CancelReason == cancelReasonUser || e.ctx.Err() == context.Canceled {
 			contentMap["cancelled"] = true
 		}
 		blocksJSON, _ := json.Marshal(contentMap)
-		content = string(blocksJSON)
-	} else {
-		contentMap := map[string]any{contentKeyBlocks: blocks, "metadata": responseMetadata}
-		if result.CancelReason == cancelReasonUser {
-			contentMap["cancelled"] = true
-		} else if e.ctx.Err() == context.Canceled {
-			contentMap["cancelled"] = true
-		} else if e.ctx.Err() == context.DeadlineExceeded {
-			blocks = append(blocks, model.ContentBlock{Type: "warning", Text: "AI response timed out (30 min)", Reason: ai.ReasonTimeout})
-		}
-		contentMap[contentKeyBlocks] = blocks
-		blocksJSON, _ := json.Marshal(contentMap)
-		content = string(blocksJSON)
+		return string(blocksJSON), blocks
 	}
+
+	contentMap := map[string]any{contentKeyBlocks: blocks, "metadata": meta}
+	if result.CancelReason == cancelReasonUser {
+		contentMap["cancelled"] = true
+	} else if e.ctx.Err() == context.Canceled {
+		contentMap["cancelled"] = true
+	} else if e.ctx.Err() == context.DeadlineExceeded {
+		blocks = append(blocks, model.ContentBlock{Type: "warning", Text: "AI response timed out (30 min)", Reason: ai.ReasonTimeout})
+	}
+	contentMap[contentKeyBlocks] = blocks
+	blocksJSON, _ := json.Marshal(contentMap)
+	return string(blocksJSON), blocks
+}
+
+// drainRawOutput reads remaining raw_output events from the channel without blocking.
+func drainRawOutput(eventCh <-chan ai.StreamEvent, rawOutput string) string {
+	if eventCh == nil {
+		return rawOutput
+	}
+	for {
+		select {
+		case event, ok := <-eventCh:
+			if !ok {
+				return rawOutput
+			}
+			if event.Type == "raw_output" {
+				if rawOutput != "" {
+					rawOutput += "\n"
+				}
+				rawOutput += event.RawOutput
+			}
+		default:
+			return rawOutput
+		}
+	}
+}
+
+// Finalize persists the RunResult to the database: builds the content JSON,
+// finalizes the streaming message, saves metadata, drains remaining events,
+// and saves raw output. Returns the finalized RunResult with DB message ID.
+//
+// This replaces the old finalizeStreamRun function from handler/chat.go.
+// The caller is still responsible for SSE terminal events and drain loop logic.
+func (e *SessionExecutor) Finalize(result RunResult, eventCh <-chan ai.StreamEvent) RunResult {
+	blocks := result.Blocks
+	responseMetadata := result.Metadata
+
+	e.injectSessionMetadata(responseMetadata)
+
+	content, blocks := e.buildContentJSON(blocks, result, responseMetadata)
 
 	msgID, err := FinalizeStreamingMessage(e.cfg.ProjectPath, e.cfg.BackendName, e.cfg.SessionID, content)
 	if err != nil {
@@ -416,27 +458,8 @@ func (e *SessionExecutor) Finalize(result RunResult, eventCh <-chan ai.StreamEve
 	}
 
 	// Drain any remaining events from channel (collect raw_output)
-	rawOutput := result.RawOutput
-	if eventCh != nil {
-		for {
-			select {
-			case event, ok := <-eventCh:
-				if !ok {
-					goto saveRaw
-				}
-				if event.Type == "raw_output" {
-					if rawOutput != "" {
-						rawOutput += "\n"
-					}
-					rawOutput += event.RawOutput
-				}
-			default:
-				goto saveRaw
-			}
-		}
-	}
+	rawOutput := drainRawOutput(eventCh, result.RawOutput)
 
-saveRaw:
 	// Save raw AI backend output for debugging/analysis
 	if rawOutput != "" {
 		if streamMsgID := GetStreamingMessageID(e.cfg.SessionID); streamMsgID > 0 {

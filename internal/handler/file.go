@@ -147,6 +147,49 @@ func ListFiles(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, files)
 }
 
+// resolveFilePath determines the absolute path and whether it's external to the
+// project. Supports absolute paths via ?path= query param and project-relative
+// paths via URL path.
+func resolveFilePath(w http.ResponseWriter, r *http.Request, projectPath string) (absPath string, isExternal bool, ok bool) {
+	if queryPath := r.URL.Query().Get("path"); queryPath != "" {
+		// Accept paths starting with / (POSIX-style absolute from frontend)
+		// or platform-native absolute paths (e.g. C:\ on Windows).
+		if !strings.HasPrefix(queryPath, "/") && !filepath.IsAbs(queryPath) {
+			writeLocalizedErrorf(w, r, http.StatusBadRequest, "InvalidFilePath")
+			return "", false, false
+		}
+		var err error
+		absPath, err = filepath.Abs(queryPath)
+		if err != nil {
+			writeLocalizedErrorf(w, r, http.StatusBadRequest, "InvalidFilePath")
+			return "", false, false
+		}
+		return absPath, true, true
+	}
+
+	// Project-relative path from URL path
+	filepathStr := r.URL.Path
+	if !strings.HasPrefix(filepathStr, "/api/file/") {
+		http.NotFound(w, r)
+		return "", false, false
+	}
+	filepathStr = filepathStr[len("/api/file/"):]
+	// Strip leading slashes to handle double-slash URLs (/api/file//path)
+	// caused by encodeURIComponent("/path") which encodes as %2Fpath.
+	// Go's ServeMux decodes %2F back to /, producing double slashes.
+	filepathStr = strings.TrimLeft(filepathStr, "/")
+	filepathStr = path.Clean(filepathStr)
+
+	if filepathStr == ".." || path.IsAbs(filepathStr) {
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "InvalidFilePath")
+		return "", false, false
+	}
+
+	basePath, _ := filepath.Abs(projectPath)
+	absPath, ok = validateAndResolvePath(w, r, basePath, filepathStr)
+	return absPath, false, ok
+}
+
 // GetFile returns the content of a single file.
 func GetFile(w http.ResponseWriter, r *http.Request) {
 	projectPath, ok := requireProject(w, r)
@@ -154,50 +197,9 @@ func GetFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check for absolute path passed as query parameter (?path=/etc/hosts).
-	// This avoids URL path encoding issues: encodeURIComponent("/path")
-	// produces %2Fpath, which Go's ServeMux decodes back to /, making the
-	// absolute path indistinguishable from a project-relative path.
-	var absPath string
-	var isExternal bool
-	if queryPath := r.URL.Query().Get("path"); queryPath != "" {
-		// Accept paths starting with / (POSIX-style absolute from frontend)
-		// or platform-native absolute paths (e.g. C:\ on Windows).
-		if !strings.HasPrefix(queryPath, "/") && !filepath.IsAbs(queryPath) {
-			writeLocalizedErrorf(w, r, http.StatusBadRequest, "InvalidFilePath")
-			return
-		}
-		var err error
-		absPath, err = filepath.Abs(queryPath)
-		if err != nil {
-			writeLocalizedErrorf(w, r, http.StatusBadRequest, "InvalidFilePath")
-			return
-		}
-		isExternal = true
-	} else {
-		// Project-relative path from URL path
-		filepathStr := r.URL.Path
-		if !strings.HasPrefix(filepathStr, "/api/file/") {
-			http.NotFound(w, r)
-			return
-		}
-		filepathStr = filepathStr[len("/api/file/"):]
-		// Strip leading slashes to handle double-slash URLs (/api/file//path)
-		// caused by encodeURIComponent("/path") which encodes as %2Fpath.
-		// Go's ServeMux decodes %2F back to /, producing double slashes.
-		filepathStr = strings.TrimLeft(filepathStr, "/")
-		filepathStr = path.Clean(filepathStr)
-
-		if filepathStr == ".." || path.IsAbs(filepathStr) {
-			writeLocalizedErrorf(w, r, http.StatusBadRequest, "InvalidFilePath")
-			return
-		}
-
-		basePath, _ := filepath.Abs(projectPath)
-		absPath, ok = validateAndResolvePath(w, r, basePath, filepathStr)
-		if !ok {
-			return
-		}
+	absPath, isExternal, ok := resolveFilePath(w, r, projectPath)
+	if !ok {
+		return
 	}
 
 	info, err := os.Stat(absPath)
