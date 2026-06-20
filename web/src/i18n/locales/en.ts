@@ -40,6 +40,7 @@ export default {
     projectLoadFailed: 'Project load failed, backend service may not be running properly',
     fileListLoadFailed: 'File list load failed',
     sendFailed: 'Send failed, please retry',
+    swipeAgainToExit: 'Swipe again to exit',
   },
   login: {
     slogan: 'From Terminal to Palm',
@@ -539,6 +540,7 @@ export default {
     viewer: {
       fileTooLarge: 'File too large to preview in browser',
       binaryFile: 'Binary file, cannot preview in browser',
+      truncated: 'Content truncated, showing partial text only',
     },
     details: {
       title: 'File Details',
@@ -737,6 +739,20 @@ export default {
     },
     diffView: {
       noChanges: 'No changes',
+      modified: 'Modified',
+      deleted: 'Deleted',
+      added: 'Added',
+      noDiffDetails: 'No diff details',
+      undo: 'Undo',
+      redo: 'Redo',
+      undoSuccess: 'Undone',
+      undoFailed: 'Undo failed',
+      redoSuccess: 'Redone',
+      redoFailed: 'Redo failed',
+      revert: 'Revert',
+      revertConfirm: 'Revert to the previous content?',
+      revertSuccess: 'Reverted',
+      revertFailed: 'Revert failed',
     },
     fileType: {
       added: 'Added',

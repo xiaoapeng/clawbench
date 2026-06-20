@@ -519,6 +519,11 @@ type ACPConn struct {
 	conn   *acp.ClientSideConnection
 	client *ClawBenchACPClient
 
+	// stdoutFilter wraps the agent's stdout pipe to fix ACP protocol violations
+	// (string-number IDs, non-JSON lines). Must be Close'd when the process dies
+	// to unblock pending reads and prevent cleanup hangs.
+	stdoutFilter *acpStdoutFilter
+
 	// acpSID is the ACP session ID. Populated from DB (ResumeSession) or
 	// from NewSession response. Empty means no session yet.
 	acpSID string
@@ -603,6 +608,17 @@ func (c *ACPConn) AgentID() string {
 	defer c.mu.Unlock()
 	if c.agent != nil {
 		return c.agent.ID
+	}
+	return ""
+}
+
+// BackendID returns the backend identifier of the agent this connection belongs to.
+// Used for ACP event mapping to look up backend-specific tool name and input remap tables.
+func (c *ACPConn) BackendID() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.agent != nil {
+		return c.agent.Backend
 	}
 	return ""
 }

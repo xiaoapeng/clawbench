@@ -283,9 +283,8 @@ import { useFileNavStack } from './composables/useFileNavStack'
 import { refreshCurrentFile } from './composables/useFileRefresh.ts'
 import { useGlobalEvents } from './composables/useGlobalEvents'
 import { useEdgeSwipeBack, useFeatureBackHandler, PRIORITY_OVERLAY } from './composables/useEdgeSwipeBack'
-import { handleBackNavigation } from './composables/useBackHandler'
+import { handleBackNavigation, requestExitConfirm } from './composables/useBackHandler'
 import { store } from './stores/app.ts'
-import { dirName } from './utils/path.ts'
 import { setPendingCommitNavigation } from './composables/useCommitNavigation.ts'
 import { initMermaid, reRenderMermaid } from './utils/mermaid.ts'
 import { getFileType } from './utils/fileType.ts'
@@ -511,26 +510,12 @@ useFileWatch({
 
 const fileNav = useFileNavStack()
 
-/** Sync the directory listing to the current file's parent dir.
- *  Used after closing the file overlay so the browse view matches. */
-function syncDirToFileParent() {
-  const filePath = store.state.currentFile?.path
-  if (filePath) {
-    const targetDir = dirName(filePath)
-    if (targetDir !== store.state.currentDir) {
-      store.replaceDirTop(targetDir)
-    }
-  }
-}
-
-/** Close overlay + all side panels, then sync directory to file parent. */
 function closeOverlayAndSync() {
   fileNav.closeOverlay()
   tocOpen.value = false
   detailsOpen.value = false
   searchOpen.value = false
   fileHistoryOpen.value = false
-  syncDirToFileParent()
 }
 
 const { isAppMode } = useAppMode()
@@ -590,8 +575,19 @@ useFeatureBackHandler(
 window.addEventListener('clawbench-back-press', () => {
     // If any feature can handle back, do it and prevent the default Android behavior
     const handled = handleBackNavigation()
-    // Set flag for the Android native code to check
-    window.__clawbenchBackHandled = !!handled
+    if (handled) {
+        window.__clawbenchBackHandled = true
+    } else {
+        // No back stack — double-back-to-exit pattern
+        if (requestExitConfirm()) {
+            // Second press within timeout → allow native exit
+            window.__clawbenchBackHandled = false
+        } else {
+            // First press → show tip, prevent exit
+            window.__clawbenchBackHandled = true
+            toast.show(t('toast.swipeAgainToExit'), { icon: '👋', type: 'info', duration: 2000 })
+        }
+    }
 })
 window.addEventListener('clawbench-foreground', handleForeground)
 const terminalRequestedCwd = ref(null)
@@ -666,7 +662,7 @@ function registerAppEventListeners() {
   window.addEventListener('navigate-to-commit', handleNavigateToCommit)
   window.addEventListener('quote-sent', playQuoteEmitAnimation)
   window.addEventListener('attach-to-chat', playQuoteEmitAnimation)
-  window.addEventListener('scroll-to-line', (e) => { scrollToLine(e.detail.line) })
+  window.addEventListener('scroll-to-line', (e) => { scrollToLine(e.detail.line, e.detail.lineEnd) })
   window.addEventListener('clawbench-open-session', handleOpenSession)
   window.addEventListener('clawbench-open-task', handleOpenTask)
   document.addEventListener('click', handleOverflowOutsideClick)
@@ -880,11 +876,28 @@ async function handleOverlayGoBack() {
     }
 }
 
-async function handleOverlayOpenFile(path) {
+async function handleOverlayOpenFile(payload) {
+    const { path, lineStart, lineEnd } = typeof payload === 'string' ? { path: payload } : payload
+    // Try as directory first — navigate into dir and close overlay
+    if (!path.startsWith('/')) {
+        try {
+            const resp = await fetch(`/api/dir?path=${encodeURIComponent(path)}`)
+            if (resp.ok) {
+                await store.pushDir(path)
+                window.dispatchEvent(new CustomEvent('close-file-overlay'))
+                window.dispatchEvent(new CustomEvent('open-file-manager'))
+                return
+            }
+        } catch {
+            // Not a directory, fall through to open as file
+        }
+    }
+    // Open as file in the overlay nav stack
     const isExternal = path.startsWith('/')
     const ok = await store.selectFile(path)
     if (ok) {
         fileNav.openFile(path)
+        if (lineStart) scrollToLine(lineStart, lineEnd)
         if (isExternal) {
             toast.show(gt('file.toast.externalFile'), { type: 'info', duration: 2000 })
         }
@@ -892,11 +905,11 @@ async function handleOverlayOpenFile(path) {
 }
 
 function handleOpenFileOverlay(e) {
-    const { path, lineStart } = e.detail || {}
+    const { path, lineStart, lineEnd } = e.detail || {}
     if (!path) return
     activeTab.value = 'browse'
     fileNav.openFile(path)
-    if (lineStart) scrollToLine(lineStart)
+    if (lineStart) scrollToLine(lineStart, lineEnd)
 }
 
 function onTaskCardClick(taskId) {
@@ -1050,14 +1063,35 @@ function handleOpenTerminal(cwd) {
     switchTab('terminal')
 }
 
-function scrollToLine(line) {
-    nextTick(() => {
-        const el = document.querySelector(`.code-line[data-line="${line}"]`)
-        if (!el) return
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        el.classList.add('line-flash')
-        el.addEventListener('animationend', () => el.classList.remove('line-flash'), { once: true })
-    })
+function scrollToLine(line, lineEnd) {
+    const startLine = Math.max(1, line)
+    const endLine = Math.min(lineEnd && lineEnd > startLine ? lineEnd : startLine, startLine + 200)
+    const selector = `.code-line[data-line="${startLine}"]`
+    const maxAttempts = 30
+    let attempts = 0
+    function tryScroll() {
+        attempts++
+        const firstEl = document.querySelector(selector)
+        if (firstEl) {
+            // Cancel any pending scroll-position restore in FileViewer
+            // so it doesn't override our scroll target
+            window.dispatchEvent(new CustomEvent('cancel-scroll-restore'))
+            firstEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            // Flash the range
+            for (let i = startLine; i <= endLine; i++) {
+                const el = document.querySelector(`.code-line[data-line="${i}"]`)
+                if (el) {
+                    el.classList.add('line-flash')
+                    el.addEventListener('animationend', () => el.classList.remove('line-flash'), { once: true })
+                }
+            }
+            return
+        }
+        if (attempts < maxAttempts) {
+            nextTick(tryScroll)
+        }
+    }
+    nextTick(tryScroll)
 }
 
 function toggleTheme() {

@@ -7,9 +7,18 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func indexOf(slice []string, target string) int {
+	for i, v := range slice {
+		if v == target {
+			return i
+		}
+	}
+	return -1
+}
+
 func parseOpenCodeLine(line string) []StreamEvent {
 	ch := make(chan StreamEvent, 64)
-	parser := &OpenCodeStreamParser{}
+	parser := &OpenCodeStreamParser{InputRemaps: openCodeInputRemaps}
 	parser.ParseLine(line, ch)
 	close(ch)
 	var events []StreamEvent
@@ -187,7 +196,7 @@ func TestOpenCodeStream_ParseLine_StepStart(t *testing.T) {
 }
 
 func TestOpenCodeStream_GetCapturedSessionID(t *testing.T) {
-	parser := &OpenCodeStreamParser{}
+	parser := &OpenCodeStreamParser{InputRemaps: openCodeInputRemaps}
 
 	// Before any parsing, session ID is empty
 	if id := parser.GetCapturedSessionID(); id != "" {
@@ -237,7 +246,7 @@ func TestOpenCodeStream_ParseLine_UnknownType(t *testing.T) {
 }
 
 func TestOpenCodeStream_SessionIDCapture(t *testing.T) {
-	parser := &OpenCodeStreamParser{}
+	parser := &OpenCodeStreamParser{InputRemaps: openCodeInputRemaps}
 	ch := make(chan StreamEvent, 64)
 
 	// First message captures session ID
@@ -274,7 +283,7 @@ func TestOpenCodeStream_MultiStepFlow(t *testing.T) {
 	}
 
 	ch := make(chan StreamEvent, 64)
-	parser := &OpenCodeStreamParser{}
+	parser := &OpenCodeStreamParser{InputRemaps: openCodeInputRemaps}
 	for _, line := range lines {
 		parser.ParseLine(line, ch)
 	}
@@ -321,71 +330,6 @@ func TestOpenCodeStream_MultiStepFlow(t *testing.T) {
 	}
 }
 
-func TestBuildOpenCodeStreamArgs_NewSession(t *testing.T) {
-	req := ChatRequest{
-		Prompt:  "say hello",
-		WorkDir: "/home/user/project",
-		Model:   "minimax-cn-coding-plan/MiniMax-M2.7",
-	}
-	args := buildOpenCodeStreamArgs(req)
-
-	expected := []string{"run", "say hello", "--format", "json", "--dangerously-skip-permissions", "--dir", "/home/user/project", "--model", "minimax-cn-coding-plan/MiniMax-M2.7"}
-	if len(args) != len(expected) {
-		t.Fatalf("expected %d args, got %d: %v", len(expected), len(args), args)
-		return
-	}
-	for i, v := range expected {
-		if args[i] != v {
-			t.Errorf("arg %d: expected %q, got %q", i, v, args[i])
-		}
-	}
-
-	// Should NOT contain --session (new session, Resume=false)
-	for _, a := range args {
-		if a == "--session" {
-			t.Error("should not contain --session for new session")
-		}
-	}
-}
-
-func TestBuildOpenCodeStreamArgs_NewSessionWithClawBenchUUID(t *testing.T) {
-	// When ClawBench sends a UUID session ID but Resume=false, should NOT pass --session
-	req := ChatRequest{
-		Prompt:    "hello",
-		SessionID: "c8abd620-87e9-43d7-a031-fa20674667d0", // ClawBench UUID
-		Resume:    false,
-	}
-	args := buildOpenCodeStreamArgs(req)
-
-	for _, a := range args {
-		if a == "--session" {
-			t.Error("should not contain --session when Resume=false even with UUID SessionID")
-		}
-	}
-}
-
-func TestBuildOpenCodeStreamArgs_ResumeSession(t *testing.T) {
-	req := ChatRequest{
-		Prompt:    "continue",
-		SessionID: "ses_abc123", // OpenCode session ID
-		Resume:    true,
-		WorkDir:   "/home/user/project",
-	}
-	args := buildOpenCodeStreamArgs(req)
-
-	// Should contain --session ses_abc123 because Resume=true
-	found := false
-	for i, a := range args {
-		if a == "--session" && i+1 < len(args) && args[i+1] == "ses_abc123" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Error("expected --session ses_abc123 in args when Resume=true")
-	}
-}
-
 func TestNormalizeOpenCodeToolName(t *testing.T) {
 	tests := []struct {
 		input    string
@@ -416,6 +360,85 @@ func TestNormalizeOpenCodeToolName(t *testing.T) {
 			t.Errorf("normalizeToolName(%q) = %q, want %q", tt.input, got, tt.expected)
 		}
 	}
+}
+
+func TestBuildOpenCodeStreamArgs_ResumeWithSessionID(t *testing.T) {
+	req := ChatRequest{
+		Prompt:    "continue",
+		SessionID: "ses_abc123",
+		Resume:    true,
+	}
+	args := buildOpenCodeStreamArgs(req)
+	assert.Contains(t, args, "--session")
+	idx := indexOf(args, "--session")
+	assert.Equal(t, "ses_abc123", args[idx+1])
+}
+
+func TestBuildOpenCodeStreamArgs_NewSessionNoResume(t *testing.T) {
+	req := ChatRequest{
+		Prompt:    "hello",
+		SessionID: "ses_abc123",
+		Resume:    false,
+	}
+	args := buildOpenCodeStreamArgs(req)
+	assert.NotContains(t, args, "--session")
+}
+
+func TestBuildOpenCodeStreamArgs_WithWorkDir(t *testing.T) {
+	req := ChatRequest{
+		Prompt:  "hello",
+		WorkDir: "/home/user/project",
+	}
+	args := buildOpenCodeStreamArgs(req)
+	assert.Contains(t, args, "--dir")
+	idx := indexOf(args, "--dir")
+	assert.Equal(t, "/home/user/project", args[idx+1])
+}
+
+func TestBuildOpenCodeStreamArgs_WithModel(t *testing.T) {
+	req := ChatRequest{
+		Prompt: "hello",
+		Model:  "minimax-cn/MiniMax-M2.7",
+	}
+	args := buildOpenCodeStreamArgs(req)
+	assert.Contains(t, args, "--model")
+	idx := indexOf(args, "--model")
+	assert.Equal(t, "minimax-cn/MiniMax-M2.7", args[idx+1])
+}
+
+func TestBuildOpenCodeStreamArgs_WithThinkingEffort(t *testing.T) {
+	req := ChatRequest{
+		Prompt:         "hello",
+		ThinkingEffort: "high",
+	}
+	args := buildOpenCodeStreamArgs(req)
+	assert.Contains(t, args, "--variant")
+	idx := indexOf(args, "--variant")
+	assert.Equal(t, "high", args[idx+1])
+}
+
+func TestBuildOpenCodeStreamArgs_SystemPromptInjection(t *testing.T) {
+	req := ChatRequest{
+		Prompt:       "hello",
+		SystemPrompt: "you are helpful",
+	}
+	args := buildOpenCodeStreamArgs(req)
+	// System prompt should be injected into the prompt text, not as a flag
+	assert.NotContains(t, args, "--system-prompt")
+	// The prompt (at index 1, after "run") should contain the system instruction
+	assert.Contains(t, args[1], "you are helpful")
+}
+
+func TestBuildOpenCodeStreamArgs_MinimalRequest(t *testing.T) {
+	req := ChatRequest{
+		Prompt: "hello",
+	}
+	args := buildOpenCodeStreamArgs(req)
+	assert.Contains(t, args, "run")
+	assert.Contains(t, args, "--format")
+	assert.Contains(t, args, "json")
+	assert.Contains(t, args, "--dangerously-skip-permissions")
+	assert.Equal(t, "hello", args[1])
 }
 
 func TestNormalizeOpenCodeInput_FieldRemapping(t *testing.T) {
@@ -631,21 +654,62 @@ func TestOpenCodeStream_ParseLine_ToolUse_NewTools(t *testing.T) {
 	}
 }
 
-func TestBuildOpenCodeStreamArgs_Minimal(t *testing.T) {
-	req := ChatRequest{
-		Prompt: "hello",
+func TestOpenCodeStream_ParseLine_ToolUse_ToolNameMap(t *testing.T) {
+	ch := make(chan StreamEvent, 64)
+	parser := &OpenCodeStreamParser{
+		ToolNameMap: map[string]string{"custom_read": "Read"},
+		InputRemaps: openCodeInputRemaps,
 	}
-	args := buildOpenCodeStreamArgs(req)
+	line := `{"type":"tool_use","timestamp":1,"sessionID":"ses_1","part":{"type":"tool","tool":"custom_read","callID":"call_1","state":{"status":"completed","input":{"filePath":"/tmp/test.go"},"output":"ok"}}}`
+	parser.ParseLine(line, ch)
+	close(ch)
 
-	// Minimal args: run, prompt, --format json, --thinking, --dangerously-skip-permissions
-	expected := []string{"run", "hello", "--format", "json", "--dangerously-skip-permissions"}
-	if len(args) != len(expected) {
-		t.Fatalf("expected %d args, got %d: %v", len(expected), len(args), args)
-		return
+	var events []StreamEvent
+	for ev := range ch {
+		events = append(events, ev)
 	}
-	for i, v := range expected {
-		if args[i] != v {
-			t.Errorf("arg %d: expected %q, got %q", i, v, args[i])
-		}
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
 	}
+	assert.Equal(t, "Read", events[0].Tool.Name, "ToolNameMap should map custom_read to Read")
+}
+
+func TestOpenCodeStream_ParseLine_ToolUse_ToolNameMapFallback(t *testing.T) {
+	ch := make(chan StreamEvent, 64)
+	parser := &OpenCodeStreamParser{
+		ToolNameMap: map[string]string{"other_tool": "Skill"},
+		InputRemaps: openCodeInputRemaps,
+	}
+	line := `{"type":"tool_use","timestamp":1,"sessionID":"ses_1","part":{"type":"tool","tool":"read_file","callID":"call_1","state":{"status":"completed","input":{},"output":"ok"}}}`
+	parser.ParseLine(line, ch)
+	close(ch)
+
+	var events []StreamEvent
+	for ev := range ch {
+		events = append(events, ev)
+	}
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+	assert.Equal(t, "Read", events[0].Tool.Name, "fallback to normalizeToolName when ToolNameMap has no entry")
+}
+
+func TestOpenCodeStream_ParseLine_ToolUse_NilToolNameMap(t *testing.T) {
+	ch := make(chan StreamEvent, 64)
+	parser := &OpenCodeStreamParser{
+		ToolNameMap: nil,
+		InputRemaps: openCodeInputRemaps,
+	}
+	line := `{"type":"tool_use","timestamp":1,"sessionID":"ses_1","part":{"type":"tool","tool":"read_file","callID":"call_1","state":{"status":"completed","input":{},"output":"ok"}}}`
+	parser.ParseLine(line, ch)
+	close(ch)
+
+	var events []StreamEvent
+	for ev := range ch {
+		events = append(events, ev)
+	}
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+	assert.Equal(t, "Read", events[0].Tool.Name, "nil ToolNameMap should use normalizeToolName")
 }

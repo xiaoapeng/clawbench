@@ -122,6 +122,21 @@ public class MainActivity extends AppCompatActivity {
     // File chooser state for WebView <input type="file"> support
     private ValueCallback<Uri[]> filePathCallback;
     private Uri cameraImageUri; // URI for camera capture image
+    private Intent pendingFileChooserIntent; // Stored chooser intent while waiting for camera permission
+
+    // Camera permission launcher — requests CAMERA runtime permission before
+    // launching the camera intent. On many OEM ROMs (Xiaomi, Huawei, etc.),
+    // ACTION_IMAGE_CAPTURE fails silently without the CAMERA permission granted,
+    // even though AOSP doesn't strictly require it.
+    private final ActivityResultLauncher<String> cameraPermissionLauncher =
+            registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
+                if (isGranted) {
+                    launchFileChooserWithCamera();
+                } else {
+                    AppLog.w(TAG, "CAMERA permission denied — launching file chooser without camera option");
+                    launchFileChooserWithoutCamera();
+                }
+            });
 
     // Notification permission launcher (Android 13+) — required for foreground service notification
     private final ActivityResultLauncher<String> notificationPermissionLauncher =
@@ -312,41 +327,18 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }
 
-                // Offer camera as an additional option
-                Intent cameraIntent = null;
-                try {
-                    cameraIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-                    if (cameraIntent.resolveActivity(getPackageManager()) != null) {
-                        File photoFile = createImageFile();
-                        if (photoFile != null) {
-                            cameraImageUri = androidx.core.content.FileProvider.getUriForFile(
-                                    MainActivity.this,
-                                    getPackageName() + ".fileprovider",
-                                    photoFile
-                            );
-                            cameraIntent.putExtra(MediaStore.EXTRA_OUTPUT, cameraImageUri);
-                        } else {
-                            cameraIntent = null;
-                        }
-                    } else {
-                        cameraIntent = null;
-                    }
-                } catch (Exception e) {
-                    AppLog.w(TAG, "Camera intent not available", e);
-                    cameraIntent = null;
-                }
+                // Store the chooser intent for use after permission check
+                pendingFileChooserIntent = chooserIntent;
 
-                try {
-                    if (cameraIntent != null) {
-                        // Show chooser with both file picker and camera options
-                        chooserIntent = Intent.createChooser(chooserIntent, "选择文件");
-                        chooserIntent.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[]{ cameraIntent });
-                    }
-                    fileChooserLauncher.launch(chooserIntent);
-                } catch (Exception e) {
-                    AppLog.e(TAG, "File chooser failed to launch", e);
-                    filePathCallback = null;
-                    return false;
+                // Request CAMERA runtime permission before offering the camera option.
+                // Many OEM ROMs (Xiaomi, Huawei, Samsung) require this permission to be
+                // granted at runtime, even though AOSP's ACTION_IMAGE_CAPTURE should work
+                // without it when using FileProvider URI.
+                if (ContextCompat.checkSelfPermission(MainActivity.this, Manifest.permission.CAMERA)
+                        == PackageManager.PERMISSION_GRANTED) {
+                    launchFileChooserWithCamera();
+                } else {
+                    cameraPermissionLauncher.launch(Manifest.permission.CAMERA);
                 }
                 return true;
             }
@@ -506,6 +498,70 @@ public class MainActivity extends AppCompatActivity {
         } catch (IOException e) {
             AppLog.e(TAG, "Failed to create image file", e);
             return null;
+        }
+    }
+
+    /**
+     * Launch file chooser with camera option included.
+     * Called after CAMERA runtime permission is confirmed.
+     */
+    private void launchFileChooserWithCamera() {
+        if (filePathCallback == null) return;
+        Intent chooserIntent = pendingFileChooserIntent;
+        pendingFileChooserIntent = null;
+
+        // Build camera intent with FileProvider URI
+        Intent cameraIntent = null;
+        try {
+            cameraIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+            if (cameraIntent.resolveActivity(getPackageManager()) != null) {
+                File photoFile = createImageFile();
+                if (photoFile != null) {
+                    cameraImageUri = androidx.core.content.FileProvider.getUriForFile(
+                            this,
+                            getPackageName() + ".fileprovider",
+                            photoFile
+                    );
+                    cameraIntent.putExtra(MediaStore.EXTRA_OUTPUT, cameraImageUri);
+                    // Grant URI permissions so the camera app can write to the FileProvider URI
+                    cameraIntent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                } else {
+                    cameraIntent = null;
+                }
+            } else {
+                cameraIntent = null;
+            }
+        } catch (Exception e) {
+            AppLog.w(TAG, "Camera intent not available", e);
+            cameraIntent = null;
+        }
+
+        try {
+            if (cameraIntent != null) {
+                // Show chooser with both file picker and camera options
+                chooserIntent = Intent.createChooser(chooserIntent, "选择文件");
+                chooserIntent.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[]{ cameraIntent });
+            }
+            fileChooserLauncher.launch(chooserIntent);
+        } catch (Exception e) {
+            AppLog.e(TAG, "File chooser failed to launch", e);
+            filePathCallback = null;
+        }
+    }
+
+    /**
+     * Launch file chooser without camera option (fallback when CAMERA permission denied).
+     */
+    private void launchFileChooserWithoutCamera() {
+        if (filePathCallback == null) return;
+        Intent chooserIntent = pendingFileChooserIntent;
+        pendingFileChooserIntent = null;
+
+        try {
+            fileChooserLauncher.launch(chooserIntent);
+        } catch (Exception e) {
+            AppLog.e(TAG, "File chooser failed to launch", e);
+            filePathCallback = null;
         }
     }
 
@@ -754,6 +810,10 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /** Timestamp of the last unhandled back press (for double-back-to-exit) */
+    private long lastBackPressTime = 0;
+    private static final long BACK_PRESS_TIMEOUT = 2000; // ms
+
     @Override
     public void onBackPressed() {
         // If in fullscreen video mode, exit fullscreen first
@@ -764,10 +824,16 @@ public class MainActivity extends AppCompatActivity {
             }
             return;
         }
-        // If currently on the login page, allow the system back gesture (exit app)
+        // If currently on the login page, apply double-back-to-exit
         String currentUrl = webView.getUrl();
         if (currentUrl != null && currentUrl.equals(LOGIN_HTML_URL)) {
-            super.onBackPressed();
+            if (System.currentTimeMillis() - lastBackPressTime < BACK_PRESS_TIMEOUT) {
+                lastBackPressTime = 0;
+                super.onBackPressed();
+            } else {
+                lastBackPressTime = System.currentTimeMillis();
+                Toast.makeText(this, R.string.press_again_to_exit, Toast.LENGTH_SHORT).show();
+            }
             return;
         }
         // If the WebView is not connected (stuck on black screen or error),
@@ -779,9 +845,9 @@ public class MainActivity extends AppCompatActivity {
         // Delegate to JS: dispatch a clawbench-back-press event.
         // The JS layer checks if any drill-down page can navigate back.
         // If it can, the JS handler calls goBack() and sets __clawbenchBackHandled = true.
-        // If not, we fall back to the default behavior (super.onBackPressed)
-        // so that non-drill-down pages (chat, terminal, etc.) retain the normal
-        // Android back/edge-swipe-to-exit behavior.
+        // If not, the JS layer implements double-back-to-exit:
+        //   - First press: shows toast tip, sets __clawbenchBackHandled = true (prevents exit)
+        //   - Second press within 2s: sets __clawbenchBackHandled = false (allows exit)
         webView.evaluateJavascript(
             "(function() {" +
             "  if (typeof window.__clawbenchBackHandled === 'undefined') window.__clawbenchBackHandled = false;" +
@@ -792,9 +858,7 @@ public class MainActivity extends AppCompatActivity {
             result -> {
                 boolean handled = "true".equals(result);
                 if (!handled) {
-                    // No JS handler consumed the back press — fall back to default behavior.
-                    // This allows the system edge-swipe-to-exit to work on pages
-                    // without drill-down navigation (chat, terminal, etc.).
+                    // JS confirmed exit — second press within timeout
                     super.onBackPressed();
                 }
             }

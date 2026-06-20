@@ -55,6 +55,14 @@ type OpenCodeTokens struct {
 // fundamentally different (different top-level types, nesting in "part", multi-step lifecycle).
 type OpenCodeStreamParser struct {
 	sessionID string // captured from any message that has a sessionID
+
+	// ToolNameMap maps backend-specific tool names to canonical names.
+	// When set, ParseLine uses this map instead of the global normalizeToolName().
+	ToolNameMap map[string]string
+
+	// InputRemaps maps input field names for tool input normalization.
+	// When set, ParseLine uses this map for normalizing tool input fields.
+	InputRemaps map[string]string
 }
 
 // GetCapturedSessionID returns the OpenCode session ID (ses_xxx) captured from
@@ -117,10 +125,7 @@ func (p *OpenCodeStreamParser) ParseLine(line string, ch chan<- StreamEvent) {
 		if part.State != nil && len(part.State.Input) > 0 {
 			// Normalize input field names from OpenCode's camelCase to canonical snake_case
 			inputStr = func() string {
-				normalized, err := normalizeToolInput(part.State.Input, map[string]string{
-					"oldString": "old_string",
-					"newString": "new_string",
-				})
+				normalized, err := normalizeToolInput(part.State.Input, p.InputRemaps)
 				if err != nil {
 					return string(part.State.Input)
 				}
@@ -136,8 +141,18 @@ func (p *OpenCodeStreamParser) ParseLine(line string, ch chan<- StreamEvent) {
 				status = "success"
 			}
 		}
+		toolName := part.Tool
+		if p.ToolNameMap != nil {
+			if canonical, ok := p.ToolNameMap[toolName]; ok {
+				toolName = canonical
+			} else {
+				toolName = normalizeToolName(toolName)
+			}
+		} else {
+			toolName = normalizeToolName(toolName)
+		}
 		ch <- StreamEvent{Type: "tool_use", Tool: &ToolCall{
-			Name:   normalizeToolName(part.Tool),
+			Name:   toolName,
 			ID:     part.CallID,
 			Input:  inputStr,
 			Done:   done,
@@ -177,7 +192,7 @@ func (p *OpenCodeStreamParser) ParseLine(line string, ch chan<- StreamEvent) {
 // buildOpenCodeStreamArgs constructs the CLI arguments for OpenCode streaming
 func buildOpenCodeStreamArgs(req ChatRequest) []string {
 	// OpenCode CLI has no --system-prompt flag — inject into user prompt.
-	prompt := injectSystemPrompt(req)
+	prompt := InjectSystemPrompt(req)
 
 	args := []string{
 		"run",

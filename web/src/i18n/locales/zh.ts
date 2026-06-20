@@ -40,6 +40,7 @@ export default {
     projectLoadFailed: '项目加载失败，后端服务可能未正确启动',
     fileListLoadFailed: '文件列表加载失败',
     sendFailed: '发送失败，请重试',
+    swipeAgainToExit: '再滑一次退出应用',
   },
   login: {
     slogan: '从终端到掌心',
@@ -539,6 +540,7 @@ export default {
     viewer: {
       fileTooLarge: '文件过大，无法在浏览器中预览',
       binaryFile: '二进制文件，无法在浏览器中预览',
+      truncated: '内容已截断，仅显示部分文本',
     },
     details: {
       title: '文件详情',
@@ -737,6 +739,20 @@ export default {
     },
     diffView: {
       noChanges: '无变更',
+      modified: '已修改',
+      deleted: '已删除',
+      added: '已新增',
+      noDiffDetails: '无变更详情',
+      undo: '撤销',
+      redo: '重做',
+      undoSuccess: '已撤销',
+      undoFailed: '撤销失败',
+      redoSuccess: '已重做',
+      redoFailed: '重做失败',
+      revert: '回退',
+      revertConfirm: '确定要回退到修改前的内容吗？',
+      revertSuccess: '已回退',
+      revertFailed: '回退失败',
     },
     fileType: {
       added: '新增',

@@ -202,19 +202,6 @@ describe('store', () => {
             expect(localStorage.getItem('currentProjectPath')).toBe('/home/user/myproject')
         })
 
-        it('posts project path to recent-projects API', async () => {
-            mockApiGet.mockImplementation((url: string) => {
-                if (url === '/api/roots') return { roots: ['/'] }
-                if (url === '/api/project') return { path: '/home/user/myproject' }
-                return {}
-            })
-            mockApiPost.mockResolvedValue({})
-
-            await store.loadProject()
-
-            expect(mockApiPost).toHaveBeenCalledWith('/api/recent-projects', { path: '/home/user/myproject' })
-        })
-
         it('does not set projectRoot when /api/project returns empty path', async () => {
             store.state.projectRoot = '/previous'
 
@@ -302,20 +289,6 @@ describe('store', () => {
             vi.unstubAllGlobals()
         })
 
-        it('uses forceText=1 query param when forceText is true for non-text file', async () => {
-            const mockFetch = vi.fn().mockResolvedValue({
-                ok: true,
-                json: () => Promise.resolve({ name: 'file.bin', path: '/file.bin', content: 'data' }),
-            })
-            vi.stubGlobal('fetch', mockFetch)
-
-            await store.selectFile('/file.bin', false, false, true, true)
-
-            // Absolute paths use query parameter style with forceText
-            expect(mockFetch).toHaveBeenCalledWith('/api/file?path=%2Ffile.bin&forceText=1')
-            vi.unstubAllGlobals()
-        })
-
         it('returns true for PDF files', async () => {
             const result = await store.selectFile('/doc.pdf')
             expect(result).toBe(true)
@@ -340,10 +313,34 @@ describe('store', () => {
             expect(store.state.currentFile?.isVideo).toBe(true)
         })
 
-        it('returns true for unknown binary files', async () => {
+        it('returns isBinary when backend detects binary content', async () => {
+            const mockFetch = vi.fn().mockResolvedValue({
+                ok: true,
+                json: () => Promise.resolve({ name: 'archive.zip', path: '/archive.zip', content: '', isBinary: true, size: 1024 }),
+            })
+            vi.stubGlobal('fetch', mockFetch)
+
             const result = await store.selectFile('/archive.zip')
             expect(result).toBe(true)
             expect(store.state.currentFile?.isBinary).toBe(true)
+            expect(store.state.currentFile?.content).toBe('')
+            vi.unstubAllGlobals()
+        })
+
+        it('uses forceText=1 to override binary detection', async () => {
+            const mockFetch = vi.fn().mockResolvedValue({
+                ok: true,
+                json: () => Promise.resolve({ name: 'archive.zip', path: '/archive.zip', content: 'PK...', truncated: true }),
+            })
+            vi.stubGlobal('fetch', mockFetch)
+
+            await store.selectFile('/archive.zip', false, false, true, true)
+
+            expect(mockFetch).toHaveBeenCalledWith('/api/file?path=%2Farchive.zip&forceText=1')
+            expect(store.state.currentFile?.isBinary).toBe(false)
+            expect(store.state.currentFile?.content).toBe('PK...')
+            expect(store.state.currentFile?.truncated).toBe(true)
+            vi.unstubAllGlobals()
         })
 
         it('returns true for too-large files', async () => {

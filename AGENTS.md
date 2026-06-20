@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-ClawBench is a mobile-first AI workstation wrapping AI CLI tools (CodeBuddy, Claude Code, OpenCode, Codex, Qoder CLI, VeCLI, DeepSeek TUI, MiMo-Code, Pi, Cline, Copilot, Kimi) into a web-accessible platform. Go backend shells out to CLI tools and streams JSON output via SSE; Vue 3 frontend renders the streamed events in real time. Supports ACP (Agent Client Protocol) stdio transport for agents with native or bridge-adapter support, providing structured mode switching, slash commands, and permission management. Also supports SSH tunnel-based port forwarding for remote/mobile access and a scheduled task (cron) system for recurring AI execution.
+ClawBench is a mobile-first AI workstation wrapping AI CLI tools (CodeBuddy, Claude Code, OpenCode, Codex, Qoder CLI, VeCLI, CodeWhale, MiMo-Code, Pi, Cline, Copilot, Kimi) into a web-accessible platform. Go backend shells out to CLI tools and streams JSON output via SSE; Vue 3 frontend renders the streamed events in real time. Supports ACP (Agent Client Protocol) stdio transport for agents with native or bridge-adapter support, providing structured mode switching, slash commands, and permission management. Also supports SSH tunnel-based port forwarding for remote/mobile access and a scheduled task (cron) system for recurring AI execution.
 
 ## Build & Run Commands
 
@@ -103,6 +103,7 @@ cd android && JAVA_HOME=/usr/lib/jvm/jdk-17.0.12 ./gradlew assembleRelease  # Re
 - **Chat summary modes:** `simple` mode extracts last answer text from blocks (no AI call); `ai` mode uses `AsyncSummarize`; empty string disables summarization. Mode set via `SetChatSummaryMode()`. All summaries stored as `target_type='chat_message'` keyed by assistant message ID; legacy `task_execution` summaries auto-migrated on startup via `MigrateTaskExecutionSummaries()`.
 - **File path annotation in code preview:** `useFilePathAnnotation` detects file paths in code blocks and renders them as clickable links. Supports import path resolution (e.g., `@/composables/useFoo` resolves to `web/src/composables/useFoo.ts`) and external file paths. `useWorktreeAnnotation` runs first to prevent partial matches.
 - **Permission pending push:** ACP `permission_pending` events trigger JPush notifications with tool name, allowing mobile users to approve from notification.
+- **Auto-approve indicator:** Mode chip turns green when auto-approve is enabled, providing visual feedback for ACP permission mode.
 - **File overlay navigation:** `useFileNavStack` manages a stack-based file overlay on the browse tab. Clicking a file pushes it onto the stack (overlay on top of file list); back button pops; close clears the stack. Replaces the separate viewer tab with a unified browse+overlay experience.
 - **Default project persistence:** Server-side `is_default` column in `recent_projects` table. `GetDefaultProject()` fallback chain: `is_default=1` row → most recently accessed project → home dir → first root path. `SetDefaultProject()` called on user-initiated project switch. Replaces cookie-based default project.
 - **Line range navigation:** File path annotations support line ranges (e.g., `file.go:42-50`). `scrollToLine()` flash-highlights a range of lines (200-line cap for performance). `openFile`/`file-open` events emit `{ path, lineStart, lineEnd }` structured objects.

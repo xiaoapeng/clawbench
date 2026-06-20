@@ -17,6 +17,28 @@ vi.mock('@/composables/useQuoteQuestion.ts', () => ({
   }),
 }))
 
+// Mock useMarkdownDiff (diff markers + drawer state)
+vi.mock('@/composables/useMarkdownDiff.ts', () => {
+  const { ref, shallowRef } = require('vue')
+  return {
+    diffMarkers: ref([]),
+    diffDrawerVisible: ref(false),
+    diffDrawerMarker: shallowRef(null),
+    openDiffDrawer: vi.fn(),
+    closeDiffDrawer: vi.fn(),
+    clearDiffMarkers: vi.fn(),
+  }
+})
+
+// Mock DiffDrawer component
+vi.mock('../DiffDrawer.vue', () => ({
+  default: {
+    name: 'DiffDrawer',
+    template: '<div class="mock-diff-drawer" v-if="visible"><slot /></div>',
+    props: ['visible', 'markerType', 'charDiff'],
+  },
+}))
+
 // Mock resolveFilePath for file path annotation
 const mockResolveFilePath = vi.fn()
 const mockTryResolveCodeString = vi.fn()
@@ -256,6 +278,7 @@ describe('CodePreview', () => {
     const mockLineEl = {
       getBoundingClientRect: () => ({ top: -100 }),
       classList: { add: vi.fn(), remove: vi.fn() },
+      addEventListener: vi.fn(),
     }
     const origQSA = preEl.querySelectorAll
     preEl.querySelectorAll = vi.fn().mockImplementation((selector) => {
@@ -311,7 +334,29 @@ describe('CodePreview', () => {
           if (pathEl.exists()) {
             await pathEl.trigger('click')
             expect(wrapper.emitted('openFile')).toBeTruthy()
-            expect(wrapper.emitted('openFile')![0]).toEqual(['src/utils.ts'])
+            expect(wrapper.emitted('openFile')![0]).toEqual([{ path: 'src/utils.ts', lineStart: undefined, lineEnd: undefined }])
+          }
+        }
+      }
+    })
+
+    it('emits openFile with lineStart and lineEnd from data attributes', async () => {
+      const wrapper = mountPreview({ content: 'import "./utils"' })
+      await nextTick()
+      await nextTick()
+
+      const codeEl = wrapper.find('.raw-content-pre')
+      if (codeEl.exists()) {
+        const stringSpan = codeEl.find('.hljs-string')
+        if (stringSpan.exists()) {
+          stringSpan.element.innerHTML = '<span class="code-file-path" data-file-path="src/utils.ts" data-line-start="42" data-line-end="50">./utils:42-50</span>'
+          await nextTick()
+
+          const pathEl = wrapper.find('.code-file-path')
+          if (pathEl.exists()) {
+            await pathEl.trigger('click')
+            expect(wrapper.emitted('openFile')).toBeTruthy()
+            expect(wrapper.emitted('openFile')![0]).toEqual([{ path: 'src/utils.ts', lineStart: 42, lineEnd: 50 }])
           }
         }
       }
