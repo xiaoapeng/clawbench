@@ -860,7 +860,7 @@ type crudHelpers[T any, E any] struct {
 
 // list returns all rows from the helper's table ordered by sort_order.
 func (h crudHelpers[T, E]) list() ([]T, error) {
-	rows, err := DBRead.Query("SELECT " + h.scanCols + " FROM " + h.table + " ORDER BY sort_order") //nolint:gosec // table/scanCols are package constants, not user input
+	rows, err := DBRead.Query("SELECT " + h.scanCols + " FROM " + h.table + " ORDER BY sort_order")
 	if err != nil {
 		return nil, err
 	}
@@ -883,7 +883,7 @@ func (h crudHelpers[T, E]) insert(item T) (int64, error) {
 	// without calling the closure twice.
 	label, command, sortOrder, extra := h.addFn(item)
 	if e, ok := any(extra).(quickCommandExtra); ok && e.autoExec == 1 {
-		if _, err := DB.Exec("UPDATE " + h.table + " SET auto_execute = 0 WHERE auto_execute = 1"); err != nil { //nolint:gosec // table is package constant
+		if _, err := DB.Exec("UPDATE " + h.table + " SET auto_execute = 0 WHERE auto_execute = 1"); err != nil {
 			return 0, err
 		}
 	}
@@ -910,7 +910,7 @@ func (h crudHelpers[T, E]) insert(item T) (int64, error) {
 func (h crudHelpers[T, E]) update(id int64, item T) error {
 	label, command, _, extra := h.addFn(item)
 	if e, ok := any(extra).(quickCommandExtra); ok && e.autoExec == 1 {
-		if _, err := DB.Exec("UPDATE "+h.table+" SET auto_execute = 0 WHERE auto_execute = 1 AND id != ?", id); err != nil { //nolint:gosec // table is package constant
+		if _, err := DB.Exec("UPDATE "+h.table+" SET auto_execute = 0 WHERE auto_execute = 1 AND id != ?", id); err != nil {
 			return err
 		}
 	}
@@ -926,7 +926,7 @@ func (h crudHelpers[T, E]) update(id int64, item T) error {
 
 // delete removes a row by id.
 func (h crudHelpers[T, E]) delete(id int64) error {
-	_, err := DB.Exec("DELETE FROM "+h.table+" WHERE id = ?", id) //nolint:gosec // table is package constant
+	_, err := DB.Exec("DELETE FROM "+h.table+" WHERE id = ?", id)
 	return err
 }
 
@@ -937,7 +937,7 @@ func (h crudHelpers[T, E]) reorder(ids []int64) error {
 		return err
 	}
 	for i, id := range ids {
-		if _, err := tx.Exec("UPDATE "+h.table+" SET sort_order = ? WHERE id = ?", i, id); err != nil { //nolint:gosec // table is package constant
+		if _, err := tx.Exec("UPDATE "+h.table+" SET sort_order = ? WHERE id = ?", i, id); err != nil {
 			_ = tx.Rollback()
 			return err
 		}
