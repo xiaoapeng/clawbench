@@ -3221,3 +3221,71 @@ func TestServeAuthCheck_UsesCookieToken(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, w2.Code,
 		"password hash should NOT be accepted as cookie value (ISS-117, ISS-131, ISS-183)")
 }
+
+// --- isDirtyWorktreeError ---
+
+func TestIsDirtyWorktreeError(t *testing.T) {
+	tests := []struct {
+		name     string
+		errMsg   string
+		expected bool
+	}{
+		{"modified files", "error: Cannot delete worktree with modified files", true},
+		{"untracked files", "error: Cannot delete worktree with untracked files", true},
+		{"uncommitted changes", "error: Cannot delete worktree with uncommitted changes", true},
+		{"no dirty indicators", "fatal: not a git repository", false},
+		{"empty message", "", false},
+		{"other error", "error: unknown option", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, isDirtyWorktreeError(tt.errMsg))
+		})
+	}
+}
+
+// --- resolveSymlinkPath ---
+
+func TestResolveSymlinkPath(t *testing.T) {
+	tmpDir := t.TempDir()
+	realFile := filepath.Join(tmpDir, "real")
+	require.NoError(t, os.WriteFile(realFile, []byte("test"), 0o644))
+
+	linkPath := filepath.Join(tmpDir, "link")
+	require.NoError(t, os.Symlink(realFile, linkPath))
+
+	// Resolving a symlink should return the fully resolved target.
+	// On macOS, EvalSymlinks resolves /var → /private/var for symlink targets
+	// but not necessarily for the direct path, so we compare both through EvalSymlinks.
+	result := resolveSymlinkPath(linkPath)
+	resolvedLinkTarget, _ := filepath.EvalSymlinks(result)
+	resolvedReal, _ := filepath.EvalSymlinks(realFile)
+	assert.Equal(t, resolvedReal, resolvedLinkTarget)
+
+	// Resolving a non-existent path should return the original path
+	nonExistent := filepath.Join(tmpDir, "nonexistent")
+	assert.Equal(t, nonExistent, resolveSymlinkPath(nonExistent))
+
+	// A regular path resolves to its canonical form
+	resultRegular := resolveSymlinkPath(realFile)
+	resolvedResult, _ := filepath.EvalSymlinks(resultRegular)
+	assert.Equal(t, resolvedReal, resolvedResult)
+}
+
+// --- forceRemoveWorktree ---
+
+func TestForceRemoveWorktree_Failure(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	initGitRepo(t, env.ProjectDir)
+
+	// Force remove a non-existent path should fail
+	w := httptest.NewRecorder()
+	result := forceRemoveWorktree(w, env.ProjectDir, "/tmp/nonexistent-wt-force-xyz")
+	assert.False(t, result)
+
+	var resp map[string]interface{}
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	assert.Equal(t, "delete_failed", resp["error"])
+}
