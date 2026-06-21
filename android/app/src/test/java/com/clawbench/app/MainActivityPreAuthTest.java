@@ -195,7 +195,7 @@ public class MainActivityPreAuthTest {
     // =====================================================
 
     @Test
-    public void authenticateAndNavigate_500_navigatesAsFallback() throws Exception {
+    public void authenticateAndNavigate_500_showsLoginPage() throws Exception {
         MainActivity.AuthResult authResult = new MainActivity.AuthResult(500, Collections.emptyList());
         doReturn(authResult).when(activity).performLoginRequest(anyString(), anyString());
 
@@ -203,7 +203,9 @@ public class MainActivityPreAuthTest {
 
         Thread.sleep(500);
 
-        verify(mockWebView).loadUrl(TEST_URL);
+        // Non-200/401/429 status now returns to login page, not WebView fallback to server URL
+        verify(mockWebView).loadUrl(LOGIN_HTML_URL);
+        verify(mockWebView, never()).loadUrl(TEST_URL);
     }
 
     // =====================================================
@@ -211,7 +213,7 @@ public class MainActivityPreAuthTest {
     // =====================================================
 
     @Test
-    public void authenticateAndNavigate_onIOException_navigatesWebViewDirectly() throws Exception {
+    public void authenticateAndNavigate_onIOException_showsLoginPage() throws Exception {
         doThrow(new java.io.IOException("Connection refused"))
                 .when(activity).performLoginRequest(anyString(), anyString());
 
@@ -219,23 +221,27 @@ public class MainActivityPreAuthTest {
 
         Thread.sleep(500);
 
-        verify(mockWebView).loadUrl(TEST_URL);
+        // Network errors now return to login page, not WebView fallback
+        verify(mockWebView).loadUrl(LOGIN_HTML_URL);
+        verify(mockWebView, never()).loadUrl(TEST_URL);
     }
 
     @Test
-    public void authenticateAndNavigate_onException_startsConnectionTimeout() throws Exception {
-        doThrow(new java.io.IOException("SSL handshake failed"))
+    public void authenticateAndNavigate_onException_showsLoginPage() throws Exception {
+        doThrow(new java.io.IOException("Connection refused"))
                 .when(activity).performLoginRequest(anyString(), anyString());
 
         invokeAuthenticateAndNavigate(TEST_URL, "testpass");
 
         Thread.sleep(500);
 
-        verify(mockWebView).postDelayed(any(Runnable.class), anyLong());
+        // Network errors now return to login page
+        verify(mockWebView).loadUrl(LOGIN_HTML_URL);
+        verify(mockWebView, never()).loadUrl(TEST_URL);
     }
 
     @Test
-    public void authenticateAndNavigate_onSslException_navigatesWebViewDirectly() throws Exception {
+    public void authenticateAndNavigate_onSslException_showsSslDialog() throws Exception {
         doThrow(new javax.net.ssl.SSLException("Self-signed certificate"))
                 .when(activity).performLoginRequest(anyString(), anyString());
 
@@ -243,7 +249,8 @@ public class MainActivityPreAuthTest {
 
         Thread.sleep(500);
 
-        verify(mockWebView).loadUrl(TEST_URL);
+        // SSL errors now show confirmation dialog, not WebView fallback to server URL
+        verify(mockWebView, never()).loadUrl(TEST_URL);
     }
 
     // =====================================================
@@ -256,7 +263,7 @@ public class MainActivityPreAuthTest {
             "clawbench_session=abc123; Path=/; HttpOnly"
         );
 
-        invokeHandleAuthResponse(200, TEST_URL, cookies);
+        invokeHandleAuthResponse(200, TEST_URL, "testpass", cookies);
 
         verify(mockWebView).loadUrl(TEST_URL);
     }
@@ -265,21 +272,21 @@ public class MainActivityPreAuthTest {
     public void handleAuthResponse_200_withCookies_startsConnectionTimeout() throws Exception {
         List<String> cookies = Collections.singletonList("clawbench_session=abc123; Path=/");
 
-        invokeHandleAuthResponse(200, TEST_URL, cookies);
+        invokeHandleAuthResponse(200, TEST_URL, "testpass", cookies);
 
         verify(mockWebView).postDelayed(any(Runnable.class), anyLong());
     }
 
     @Test
     public void handleAuthResponse_200_emptyCookies_stillNavigates() throws Exception {
-        invokeHandleAuthResponse(200, TEST_URL, Collections.emptyList());
+        invokeHandleAuthResponse(200, TEST_URL, "testpass", Collections.emptyList());
 
         verify(mockWebView).loadUrl(TEST_URL);
     }
 
     @Test
     public void handleAuthResponse_200_nullCookies_stillNavigates() throws Exception {
-        invokeHandleAuthResponse(200, TEST_URL, null);
+        invokeHandleAuthResponse(200, TEST_URL, "testpass", null);
 
         verify(mockWebView).loadUrl(TEST_URL);
     }
@@ -290,7 +297,7 @@ public class MainActivityPreAuthTest {
 
     @Test
     public void handleAuthResponse_401_showsLoginPageWithWrongPasswordError() throws Exception {
-        invokeHandleAuthResponse(401, TEST_URL, Collections.emptyList());
+        invokeHandleAuthResponse(401, TEST_URL, "testpass", Collections.emptyList());
 
         String pending = (String) getField(activity, "pendingLoginErrorMessage");
         assertEquals("密码错误，请检查登录密码。", pending);
@@ -298,14 +305,14 @@ public class MainActivityPreAuthTest {
 
     @Test
     public void handleAuthResponse_401_navigatesToLoginPage() throws Exception {
-        invokeHandleAuthResponse(401, TEST_URL, Collections.emptyList());
+        invokeHandleAuthResponse(401, TEST_URL, "testpass", Collections.emptyList());
 
         verify(mockWebView).loadUrl(LOGIN_HTML_URL);
     }
 
     @Test
     public void handleAuthResponse_401_doesNotLoadServerUrl() throws Exception {
-        invokeHandleAuthResponse(401, TEST_URL, Collections.emptyList());
+        invokeHandleAuthResponse(401, TEST_URL, "testpass", Collections.emptyList());
 
         verify(mockWebView, never()).loadUrl(TEST_URL);
     }
@@ -316,7 +323,7 @@ public class MainActivityPreAuthTest {
 
     @Test
     public void handleAuthResponse_429_showsLoginPageWithRateLimitError() throws Exception {
-        invokeHandleAuthResponse(429, TEST_URL, Collections.emptyList());
+        invokeHandleAuthResponse(429, TEST_URL, "testpass", Collections.emptyList());
 
         String pending = (String) getField(activity, "pendingLoginErrorMessage");
         assertEquals("尝试次数过多，请稍后再试。", pending);
@@ -324,34 +331,38 @@ public class MainActivityPreAuthTest {
 
     @Test
     public void handleAuthResponse_429_navigatesToLoginPage() throws Exception {
-        invokeHandleAuthResponse(429, TEST_URL, Collections.emptyList());
+        invokeHandleAuthResponse(429, TEST_URL, "testpass", Collections.emptyList());
 
         verify(mockWebView).loadUrl(LOGIN_HTML_URL);
     }
 
     // =====================================================
-    // handleAuthResponse: other status codes — fallback (direct call)
+    // handleAuthResponse: other status codes — show login page (direct call)
     // =====================================================
 
     @Test
-    public void handleAuthResponse_500_navigatesAsFallback() throws Exception {
-        invokeHandleAuthResponse(500, TEST_URL, Collections.emptyList());
+    public void handleAuthResponse_500_showsLoginPage() throws Exception {
+        invokeHandleAuthResponse(500, TEST_URL, "testpass", Collections.emptyList());
 
-        verify(mockWebView).loadUrl(TEST_URL);
+        // Non-200/401/429 status now returns to login page
+        verify(mockWebView).loadUrl(LOGIN_HTML_URL);
+        verify(mockWebView, never()).loadUrl(TEST_URL);
     }
 
     @Test
-    public void handleAuthResponse_403_navigatesAsFallback() throws Exception {
-        invokeHandleAuthResponse(403, TEST_URL, Collections.emptyList());
+    public void handleAuthResponse_403_showsLoginPage() throws Exception {
+        invokeHandleAuthResponse(403, TEST_URL, "testpass", Collections.emptyList());
 
-        verify(mockWebView).loadUrl(TEST_URL);
+        verify(mockWebView).loadUrl(LOGIN_HTML_URL);
+        verify(mockWebView, never()).loadUrl(TEST_URL);
     }
 
     @Test
-    public void handleAuthResponse_302_navigatesAsFallback() throws Exception {
-        invokeHandleAuthResponse(302, TEST_URL, Collections.emptyList());
+    public void handleAuthResponse_302_showsLoginPage() throws Exception {
+        invokeHandleAuthResponse(302, TEST_URL, "testpass", Collections.emptyList());
 
-        verify(mockWebView).loadUrl(TEST_URL);
+        verify(mockWebView).loadUrl(LOGIN_HTML_URL);
+        verify(mockWebView, never()).loadUrl(TEST_URL);
     }
 
     // =====================================================
@@ -684,10 +695,10 @@ public class MainActivityPreAuthTest {
      * via reflection.
      */
     @SuppressWarnings("unchecked")
-    private void invokeHandleAuthResponse(int statusCode, String url, List<String> cookies) throws Exception {
+    private void invokeHandleAuthResponse(int statusCode, String url, String password, List<String> cookies) throws Exception {
         Method method = findMethod(activity.getClass(), "handleAuthResponse",
-                int.class, String.class, java.util.List.class);
+                int.class, String.class, String.class, java.util.List.class);
         method.setAccessible(true);
-        method.invoke(activity, statusCode, url, cookies);
+        method.invoke(activity, statusCode, url, password, cookies);
     }
 }

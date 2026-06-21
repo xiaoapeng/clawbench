@@ -92,7 +92,7 @@ func TestVeCLIModelParsing_SimulatedRegistry(t *testing.T) {
 ];`
 
 	registryStart := -1
-	for i := range len(content) {
+	for i := 0; i < len(content); i++ { //nolint:intrange // index used for content slicing
 		if i+17 <= len(content) && content[i:i+17] == "MODEL_REGISTRY = " {
 			registryStart = i
 			break
@@ -101,7 +101,9 @@ func TestVeCLIModelParsing_SimulatedRegistry(t *testing.T) {
 	require.NotEqual(t, -1, registryStart)
 
 	// Extract first model ID using regex
-	entry := content[strings.Index(content, "{"):] //nolint:gocritic // test data is controlled, Index won't return -1
+	idx := strings.Index(content, "{")
+	require.NotEqual(t, -1, idx)
+	entry := content[idx:]
 	m := vecliModelIDRe.FindStringSubmatch(entry)
 	require.Len(t, m, 2)
 	assert.Equal(t, "minimax-m2.5", m[1])
@@ -113,6 +115,7 @@ func TestVeCLIModelParsing_SimulatedRegistry(t *testing.T) {
 
 	// Test third entry (no name) — find the third { block
 	thirdEntryIdx := strings.Index(content, `"no-name-model"`)
+	require.NotEqual(t, -1, thirdEntryIdx)
 	// Search backwards to find the opening id: for this entry
 	idPrefixIdx := strings.LastIndex(content[:thirdEntryIdx], "id:")
 	noNameSection := content[idPrefixIdx:]

@@ -213,6 +213,22 @@ func setupTestEnv(t *testing.T) (*testEnv, func()) {
 		);
 		CREATE INDEX IF NOT EXISTS idx_chat_metadata_model ON chat_metadata(model);
 		CREATE INDEX IF NOT EXISTS idx_chat_metadata_created ON chat_metadata(created_at);
+		CREATE TABLE IF NOT EXISTS chat_tool_calls (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			message_id INTEGER NOT NULL REFERENCES chat_history(id) ON DELETE CASCADE,
+			session_id TEXT NOT NULL,
+			tool_id TEXT NOT NULL,
+			name TEXT NOT NULL,
+			input TEXT NOT NULL DEFAULT '{}',
+			output TEXT NOT NULL DEFAULT '',
+			status TEXT NOT NULL DEFAULT '',
+			done INTEGER NOT NULL DEFAULT 0,
+			summary TEXT NOT NULL DEFAULT '',
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(tool_id, message_id)
+		);
+		CREATE INDEX IF NOT EXISTS idx_tool_calls_message ON chat_tool_calls(message_id);
+		CREATE INDEX IF NOT EXISTS idx_tool_calls_session ON chat_tool_calls(session_id, created_at DESC);
 	`)
 	if err != nil {
 		t.Fatalf("failed to create tables: %v", err)
@@ -277,7 +293,7 @@ func newRequest(t *testing.T, method, path string, body interface{}) *http.Reque
 // withProjectCookie adds the clawbench_project cookie to the request.
 func withProjectCookie(req *http.Request, projectPath string) *http.Request {
 	req.AddCookie(&http.Cookie{
-		Name:  "clawbench_project",
+		Name:  model.ScopedCookieName("clawbench_project"),
 		Value: url.QueryEscape(projectPath),
 	})
 	return req
@@ -286,7 +302,7 @@ func withProjectCookie(req *http.Request, projectPath string) *http.Request {
 // withAuthCookie adds the clawbench_session cookie to the request.
 func withAuthCookie(req *http.Request, token string) *http.Request { //nolint:unparam // test helper: return value unused but signature supports chaining
 	req.AddCookie(&http.Cookie{
-		Name:  model.SessionCookie,
+		Name:  model.ScopedCookieName(model.SessionCookie),
 		Value: token,
 	})
 	return req
@@ -295,7 +311,7 @@ func withAuthCookie(req *http.Request, token string) *http.Request { //nolint:un
 // withSessionCookie adds the chat_session_id cookie to the request.
 func withSessionCookie(req *http.Request, sessionID string) *http.Request {
 	req.AddCookie(&http.Cookie{
-		Name:  "chat_session_id",
+		Name:  model.ScopedCookieName("chat_session_id"),
 		Value: sessionID,
 	})
 	return req
