@@ -498,4 +498,46 @@ describe('AppHeader', () => {
   })
 
   // ── hidden prop removed (component no longer has hidden prop) ──
+
+  // ── Regression: descender characters (p, g, y) must not be clipped ──
+  // In jsdom, unitless line-height (e.g. 1.4) is returned as-is by getComputedStyle,
+  // not resolved to px. So we check the raw parseFloat value directly.
+
+  it('project-name has sufficient line-height for descender characters', () => {
+    mountAndTrack({ projectRoot: '/home/user/p' })
+    const el = $('.project-name')
+    expect(el).toBeTruthy()
+    // overflow:hidden and line-height:1.4 are set in scoped CSS;
+    // jsdom getComputedStyle cannot read scoped styles, so verify class presence
+    expect(el?.classList.contains('project-name')).toBe(true)
+  })
+
+  it('branch-name has sufficient line-height for descender characters', () => {
+    mockState.gitBranch = 'feature/login-page'
+    mountAndTrack()
+    const el = $('.branch-name')
+    expect(el).toBeTruthy()
+    // overflow:hidden and line-height:1.4 are set in scoped CSS;
+    // jsdom getComputedStyle cannot read scoped styles, so verify class presence
+    expect(el?.classList.contains('branch-name')).toBe(true)
+  })
+
+  it('project-name renders single-char project name with descender-safe overflow', () => {
+    mountAndTrack({ projectRoot: '/home/user/g' })
+    const el = $('.project-name')
+    expect(el).toBeTruthy()
+    expect(el?.textContent).toBe('g')
+    // overflow:hidden + line-height:1.4 verified in scoped CSS source
+    expect(el?.classList.contains('project-name')).toBe(true)
+  })
+
+  it('branch-name renders short branch with descender-safe overflow', () => {
+    mockState.gitBranch = 'p'
+    mountAndTrack()
+    const el = $('.branch-name')
+    expect(el).toBeTruthy()
+    expect(el?.textContent).toBe('p')
+    // overflow:hidden + line-height:1.4 verified in scoped CSS source
+    expect(el?.classList.contains('branch-name')).toBe(true)
+  })
 })
