@@ -405,9 +405,6 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 		}
 		queueState := service.EnqueueMessage(sessionID, qMsg)
 
-		// Persist user message to DB immediately
-		service.AddChatMessage(projectPath, backendName, sessionID, "user", req.Message, allFiles, false, T(r, "FileMessage"))
-
 		// Notify the running goroutine via SSE
 		service.SendSessionEvent(sessionID, ai.StreamEvent{
 			Type:       "queue_update",

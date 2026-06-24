@@ -661,7 +661,7 @@ func CreateSession(projectPath, backend, title, agentID, modelName, agentSource,
 	}
 	_, err := DB.Exec(
 		"INSERT INTO chat_sessions (id, project_path, backend, title, agent_id, agent_source, model, session_type, external_session_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		sessionID, projectPath, backend, title, agentID, agentSource, modelName, sessionType, sessionID,
+		sessionID, projectPath, backend, title, agentID, agentSource, modelName, sessionType, "",
 	)
 	if err != nil {
 		return "", err
