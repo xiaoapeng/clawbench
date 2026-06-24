@@ -44,6 +44,7 @@ var hotReloadFields = map[string]bool{
 	"upload.max_files":            true,
 	"tts.max_cache_files":         true,
 	"default_agent":               true,
+	"require_auth_for_localhost":  true,
 }
 
 // restartGracePeriod is the delay before shutting down the server after a restart
@@ -64,9 +65,10 @@ func SetRestartFunc(f func()) {
 // It only contains fields safe for frontend display — no passwords, keys, or
 // internal paths.
 type configResponse struct {
-	Version        string               `json:"version"`
-	HasPassword    bool                 `json:"has_password"` // true when a password is configured
-	DefaultAgent   string               `json:"default_agent"`
+	Version              string               `json:"version"`
+	HasPassword          bool                 `json:"has_password"` // true when a password is configured
+	RequireAuthForLocalhost bool                `json:"require_auth_for_localhost"` // true = localhost also requires password
+	DefaultAgent         string               `json:"default_agent"`
 	Chat           configChat           `json:"chat"`
 	Session        configSession        `json:"session"`
 	RecentProjects configRecentProjects `json:"recent_projects"`
@@ -225,6 +227,7 @@ var PatchableConfigPaths = map[string]bool{
 	"summarize.api.base_url":      true,
 	"summarize.api.key":           true,
 	"summarize.api.format":        true,
+	"require_auth_for_localhost":  true,
 }
 
 // validTTSEngines is the set of valid TTS engine values.
@@ -293,9 +296,10 @@ func serveConfigGet(w http.ResponseWriter, _ *http.Request) {
 	configMutex.RUnlock()
 
 	resp := configResponse{
-		Version:      getBuildVersion(),
-		HasPassword:  model.SessionToken != "",
-		DefaultAgent: cfg.DefaultAgent,
+		Version:              getBuildVersion(),
+		HasPassword:          model.SessionToken != "",
+		RequireAuthForLocalhost: cfg.RequireAuthForLocalhost,
+		DefaultAgent:         cfg.DefaultAgent,
 		Chat: configChat{
 			InitialMessages:      cfg.Chat.InitialMessages,
 			PageSize:             cfg.Chat.PageSize,
@@ -700,6 +704,10 @@ func applyConfigPatch(patch map[string]any) error { //nolint:gocognit,gocyclo //
 		model.DefaultAgentID = v
 	}
 
+	if v, ok := patch["require_auth_for_localhost"].(bool); ok {
+		cfg.RequireAuthForLocalhost = v
+	}
+
 	if chat, ok := patch["chat"].(map[string]any); ok {
 		if v, ok := chat["collapsed_height"].(float64); ok {
 			cfg.Chat.CollapsedHeight = int(v)
@@ -905,6 +913,7 @@ func applyHotReloadGlobals() {
 	model.UploadMaxFiles = cfg.Upload.MaxFiles
 	model.TTSMaxCacheFiles = cfg.TTS.MaxCacheFiles
 	model.DefaultAgentID = cfg.DefaultAgent
+	model.RequireAuthForLocalhost = cfg.RequireAuthForLocalhost
 }
 
 // writeConfigYAML writes the patched fields back to config/config.yaml atomically.
