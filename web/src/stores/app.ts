@@ -1,11 +1,14 @@
 // Global application state (singleton reactive store)
 import { reactive } from 'vue'
 import { apiGet, apiPost } from '@/utils/api'
+import { appLog } from '@/utils/appLog'
 import { baseName, dirName } from '@/utils/path.ts'
 import { gt } from '@/composables/useLocale'
 import { useToast } from '@/composables/useToast'
 import { useDialog } from '@/composables/useDialog'
 import { useDirStack } from '@/composables/useDirStack'
+
+const TAG = 'Store'
 
 interface DirEntry {
     name: string
@@ -153,13 +156,13 @@ async function loadProject(): Promise<void> {
             state.rootPaths = wd.roots || []
             if (wd.uploadMaxSizeMB > 0) state.uploadMaxSizeMB = wd.uploadMaxSizeMB
             if (wd.uploadMaxFiles > 0) state.uploadMaxFiles = wd.uploadMaxFiles
-            if (wd.chatInitialMessages > 0) state.chatInitialMessages = wd.chatInitialMessages
-            if (wd.chatPageSize > 0) state.chatPageSize = wd.chatPageSize
-            if (wd.chatSessionPageSize > 0) state.chatSessionPageSize = wd.chatSessionPageSize
-            if (wd.sessionMaxCount > 0) state.sessionMaxCount = wd.sessionMaxCount
-            if (wd.recentProjectsMaxCount > 0) state.recentProjectsMaxCount = wd.recentProjectsMaxCount
+            if ((wd.chatInitialMessages ?? 0) > 0) state.chatInitialMessages = wd.chatInitialMessages!
+            if ((wd.chatPageSize ?? 0) > 0) state.chatPageSize = wd.chatPageSize!
+            if ((wd.chatSessionPageSize ?? 0) > 0) state.chatSessionPageSize = wd.chatSessionPageSize!
+            if ((wd.sessionMaxCount ?? 0) > 0) state.sessionMaxCount = wd.sessionMaxCount!
+            if ((wd.recentProjectsMaxCount ?? 0) > 0) state.recentProjectsMaxCount = wd.recentProjectsMaxCount!
         } catch (error) {
-            console.error('[loadProject] roots failed:', error)
+            appLog.e(TAG, '[loadProject] roots failed:', error)
         }
         const data = await apiGet<{ path: string; homeDir?: string }>('/api/project')
         if (!data.path) return
@@ -168,7 +171,7 @@ async function loadProject(): Promise<void> {
         state.homeDir = data.homeDir || ''
         localStorage.setItem('currentProjectPath', data.path)
     } catch (error) {
-        console.error('[loadProject] failed:', error)
+        appLog.e(TAG, '[loadProject] failed:', error)
     }
 }
 
@@ -273,9 +276,17 @@ async function loadFiles(dir = ''): Promise<void> {
         const url = dir ? `/api/dir?path=${encodeURIComponent(dir)}` : '/api/dir?path='
         const data = await apiGet<{ items: DirEntry[] }>(url)
         // A newer loadFiles call started while we were awaiting — discard our result
-        if (seq !== loadFilesSeq) return
+        if (seq !== loadFilesSeq) {
+            appLog.d(TAG, `[loadFiles] seq=${seq} discarded (current=${loadFilesSeq})`)
+            return
+        }
         state.currentDir = dir
         state.dirEntries = data.items || []
+        // Seed the dir stack base if it's empty (app init or project switch)
+        const dirStack = useDirStack()
+        if (dirStack.dirStack.value.length === 0) {
+            dirStack.pushDir(dir)
+        }
     } catch (err) {
         // A newer loadFiles call started — don't corrupt its state
         if (seq !== loadFilesSeq) return
@@ -293,8 +304,6 @@ async function loadFiles(dir = ''): Promise<void> {
 
 async function selectFile(path: string, isImageFile = false, isAudioFile = false, addToHistory = true, forceText = false): Promise<boolean> {
     const seq = ++selectFileSeq // this call supersedes any earlier in-flight call
-    const key = 'clawbenchLastFile_' + state.projectRoot
-    if (key !== 'clawbenchLastFile_') localStorage.setItem(key, path)
 
     // Detect media files by extension (avoids dynamic import)
     const imageExts = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp', '.ico', '.tiff', '.tif', '.avif']
@@ -380,7 +389,6 @@ async function selectFile(path: string, isImageFile = false, isAudioFile = false
         return true
     } catch (err) {
         // Don't replace currentFile — keep the previously opened file visible.
-        // Show the error as a toast bubble instead.
         useToast().show((err as Error).message, { type: 'error', icon: '⚠️' })
         return false
     } finally {
@@ -391,25 +399,73 @@ async function selectFile(path: string, isImageFile = false, isAudioFile = false
 }
 
 async function deleteFile(filePath: string): Promise<void> {
-    if (!await useDialog().confirm(gt('file.header.confirmDelete', { name: baseName(filePath) }), { dangerous: true })) return
-    await apiPost('/api/file/delete', { path: filePath })
+    appLog.d(TAG, '[deleteFile] start:', filePath)
+    const confirmed = await useDialog().confirm(gt('file.header.confirmDelete', { name: baseName(filePath) }), { dangerous: true })
+    appLog.d(TAG, '[deleteFile] dialog result:', confirmed)
+    if (!confirmed) {
+        appLog.d(TAG, '[deleteFile] user cancelled')
+        return
+    }
+    try {
+        await apiPost('/api/file/delete', { path: filePath })
+        appLog.d(TAG, '[deleteFile] API success')
+    } catch (err) {
+        // File not found = already deleted (e.g. concurrent delete), treat as success
+        const msgKey = (err as Error & { msgKey?: string })?.msgKey
+        if (msgKey !== 'FileNotFoundShort') {
+            appLog.e(TAG, '[deleteFile] API error:', err)
+            useToast().show(gt('file.toast.deleteFailed'), { type: 'error', icon: '⚠️' })
+        } else {
+            appLog.d(TAG, '[deleteFile] file already gone (404), treating as success')
+        }
+    }
     if (state.currentFile?.path === filePath) {
         state.currentFile = null
     }
-    await loadFiles(state.currentDir)
+    appLog.d(TAG, '[deleteFile] refreshing, currentDir:', state.currentDir, 'loadFilesSeq:', loadFilesSeq)
+    await Promise.all([loadFiles(state.currentDir), loadGitBranch()])
+    appLog.d(TAG, '[deleteFile] done, dirEntries count:', state.dirEntries.length)
 }
 
 async function deleteFiles(paths: string[]): Promise<void> {
     if (!paths.length) return
-    await Promise.all(paths.map(p => apiPost('/api/file/delete', { path: p })))
+    appLog.d(TAG, '[deleteFiles] start:', paths.length, 'files')
+    const results = await Promise.allSettled(paths.map(p => apiPost('/api/file/delete', { path: p })))
+    const realFailures = results.filter(r => {
+        if (r.status !== 'rejected') return false
+        const msgKey = ((r as PromiseRejectedResult).reason as Error & { msgKey?: string })?.msgKey
+        return msgKey !== 'FileNotFoundShort' // already deleted = not a real failure
+    })
+    if (realFailures.length) {
+        appLog.e(TAG, '[deleteFiles] some deletes failed:', realFailures.map(r => (r as PromiseRejectedResult).reason))
+        useToast().show(gt('file.toast.deleteFailed'), { type: 'error', icon: '⚠️' })
+    }
     if (state.currentFile && paths.includes(state.currentFile.path)) {
         state.currentFile = null
     }
-    await loadFiles(state.currentDir)
+    await Promise.all([loadFiles(state.currentDir), loadGitBranch()])
+    appLog.d(TAG, '[deleteFiles] done, dirEntries count:', state.dirEntries.length)
 }
 
 async function renameFile(path: string, newName: string): Promise<void> {
-    await apiPost('/api/file/rename', { path, name: newName })
+    try {
+        await apiPost('/api/file/rename', { path, name: newName })
+    } catch (err) {
+        const msgKey = (err as Error & { msgKey?: string })?.msgKey
+        if (msgKey === 'FileNotFoundShort') {
+            // File already gone — treat as success
+        } else {
+            const toast = useToast()
+            toast.show(gt('file.toast.renameFailed') || 'Rename failed', { icon: '❌', type: 'error', duration: 2000 })
+            throw err
+        }
+    }
+    // If the renamed file is currently being viewed, re-select it at the new path
+    if (state.currentFile?.path === path) {
+        const dir = dirName(path)
+        const newPath = dir ? `${dir}/${newName}` : newName
+        await selectFile(newPath)
+    }
     await loadFiles(state.currentDir)
 }
 

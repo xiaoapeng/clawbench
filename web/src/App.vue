@@ -244,6 +244,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, provide, nextTick } from 'vue'
+import { appLog } from '@/utils/appLog'
 import { useI18n } from 'vue-i18n'
 import { useSettingsConfig } from '@/composables/useSettingsConfig'
 import { MessageSquare, FolderOpen, GitBranch, EthernetPort, Terminal as TerminalIcon, CalendarClock, MoreHorizontal, Settings } from 'lucide-vue-next'
@@ -275,6 +276,8 @@ import { useTaskTab, registerSwitchTab, onTaskEvent } from '@/composables/useTas
 import { resetAgents } from '@/composables/useAgents'
 import { useSessionIdentity, registerSessionDrawerRef, resetIdentity } from './composables/useSessionIdentity.ts'
 import { loadSessionsOnce, resetChatSessionState } from './composables/useChatSession.ts'
+import { resetTaskTabState } from './composables/useTaskTab.ts'
+import { clearPlanState } from './composables/usePlanProgress.ts'
 import { useToast } from './composables/useToast.ts'
 import { gt } from './composables/useLocale'
 import { useAppMode } from './composables/useAppMode.ts'
@@ -300,6 +303,7 @@ import './assets/hljs-light-override.css'
 const isAuthenticated = ref(null)
 const needsSetup = ref(false)
 const { t } = useI18n()
+const TAG = 'ClawBench'
 
 // SPA hot project switch: key forces Vue to destroy/rebuild the app-container subtree
 const projectKey = ref('initial')
@@ -335,6 +339,8 @@ async function hotSwitchProject(newProjectPath, pendingSessionId) {
   resetIdentity()
   resetAgents()
   resetChatSessionState()
+  clearPlanState()
+  resetTaskTabState()
   fileNav.closeOverlay()
   store.resetDirStack()
 
@@ -349,7 +355,7 @@ async function hotSwitchProject(newProjectPath, pendingSessionId) {
   switchingProject.value = false
 
   // ── Phase 6: Background data loading — all independent, fully parallel, non-blocking ──
-  const bgLoad = Promise.allSettled([
+  Promise.allSettled([
     store.loadFiles(''),
     sessionIdentity.initSessionFromAPI(),
     loadSessionsOnce(),
@@ -361,21 +367,7 @@ async function hotSwitchProject(newProjectPath, pendingSessionId) {
   ])
   if (isAppMode.value) syncToNative().catch(() => {})
 
-  // ── Phase 7: Restore last opened file (non-blocking) ──
-  bgLoad.then(() => {
-    const lastFile = localStorage.getItem('clawbenchLastFile_' + store.state.projectRoot)
-    if (lastFile && lastFile !== store.state.currentFile?.path) {
-      const lastSlash = lastFile.lastIndexOf('/')
-      const targetDir = lastSlash > 0 ? lastFile.slice(0, lastSlash) : ''
-      store.resetDirStack(targetDir)
-      store.loadFiles(targetDir)
-        .then(() => store.selectFile(lastFile))
-        .then(() => { if (store.state.currentFile?.error) store.state.currentFile = null })
-        .catch(() => {})
-    }
-  })
-
-  // ── Phase 8: Handle cross-project pending navigation ──
+  // ── Phase 7: Handle cross-project pending navigation ──
   if (pendingSessionId) {
     // Watch for session identity to be ready instead of polling
     const stopWatch = watch(
@@ -422,6 +414,9 @@ function switchTab(tab) {
     fileHistoryOpen.value = false
     detailsOpen.value = false
   }
+  if (tab === 'browse') {
+    store.loadFiles(store.state.currentDir)
+  }
   if (tab === 'chat') {
     // Recalculate instead of blindly clearing — if the user switches to chat
     // but hasn't opened the unread session, the indicator should keep flashing.
@@ -433,6 +428,7 @@ function switchTab(tab) {
     // Only stop dock button flash — don't clear per-task unread badges.
     // Per-task badges are cleared when the user enters that task's execution history.
     store.state.taskUnreadCount = 0
+    loadTasks()
   }
   // Close overflow menu when switching to a main tab
   if (!overflowTabs.value.includes(tab)) {
@@ -443,25 +439,25 @@ function switchTab(tab) {
 /** Handle clawbench-open-session event from Android push notification tap */
 function handleOpenSession(e) {
   const detail = e?.detail
-  console.log('[ClawBench] clawbench-open-session event received, detail=', detail)
+  appLog.d(TAG, 'clawbench-open-session event received, detail=', detail)
   if (!detail?.sessionId) {
-    console.warn('[ClawBench] clawbench-open-session: no sessionId in detail, ignoring')
+    appLog.w(TAG, 'clawbench-open-session: no sessionId in detail, ignoring')
     return
   }
   const { sessionId, projectPath } = detail
-  console.log('[ClawBench] clawbench-open-session: sessionId=', sessionId, 'projectPath=', projectPath, 'currentProject=', store.state.projectRoot)
+  appLog.d(TAG, 'clawbench-open-session: sessionId=', sessionId, 'projectPath=', projectPath, 'currentProject=', store.state.projectRoot)
   if (projectPath && projectPath !== store.state.projectRoot) {
     // Cross-project: hot switch without page reload
-    console.log('[ClawBench] cross-project navigation, switching to', projectPath)
+    appLog.d(TAG, 'cross-project navigation, switching to', projectPath)
     hotSwitchProject(projectPath, sessionId).catch(() => {
       // If project switch fails, try same-project switch as fallback
-      console.warn('[ClawBench] project switch failed, falling back to same-project switch')
+      appLog.w(TAG, 'project switch failed, falling back to same-project switch')
       switchTab('chat')
       sessionIdentity.switchSession(sessionId)
     })
   } else {
     // Same project: lightweight switch
-    console.log('[ClawBench] same-project navigation, switching to session', sessionId)
+    appLog.d(TAG, 'same-project navigation, switching to session', sessionId)
     switchTab('chat')
     sessionIdentity.switchSession(sessionId)
   }
@@ -470,13 +466,13 @@ function handleOpenSession(e) {
 /** Handle clawbench-open-task event from Android push notification tap (task execution) */
 function handleOpenTask(e) {
   const detail = e?.detail
-  console.log('[ClawBench] clawbench-open-task event received, detail=', detail)
+  appLog.d(TAG, 'clawbench-open-task event received, detail=', detail)
   if (!detail?.taskId) {
-    console.warn('[ClawBench] clawbench-open-task: no taskId in detail, ignoring')
+    appLog.w(TAG, 'clawbench-open-task: no taskId in detail, ignoring')
     return
   }
   const { taskId, executionId, projectPath } = detail
-  console.log('[ClawBench] clawbench-open-task: taskId=', taskId, 'executionId=', executionId, 'currentProject=', store.state.projectRoot)
+  appLog.d(TAG, 'clawbench-open-task: taskId=', taskId, 'executionId=', executionId, 'currentProject=', store.state.projectRoot)
 
   const navigateToTask = () => {
     switchTab('tasks')
@@ -489,7 +485,7 @@ function handleOpenTask(e) {
 
   if (projectPath && projectPath !== store.state.projectRoot) {
     // Cross-project: switch project, store pending task navigation, then reload
-    console.log('[ClawBench] cross-project navigation, switching to', projectPath)
+    appLog.d(TAG, 'cross-project navigation, switching to', projectPath)
     localStorage.setItem('clawbenchPendingNav', JSON.stringify({ taskId, executionId }))
     fetch('/api/project', {
       method: 'POST',
@@ -498,12 +494,12 @@ function handleOpenTask(e) {
     }).then(() => {
       window.location.reload()
     }).catch(() => {
-      console.warn('[ClawBench] project switch failed, falling back to same-project switch')
+      appLog.w(TAG, 'project switch failed, falling back to same-project switch')
       navigateToTask()
     })
   } else {
     // Same project: lightweight switch
-    console.log('[ClawBench] same-project navigation, switching to task', taskId)
+    appLog.d(TAG, 'same-project navigation, switching to task', taskId)
     navigateToTask()
   }
 }
@@ -578,8 +574,19 @@ const removeTaskHandler = onEvent((event, data) => {
 })
 
 const handleForeground = () => {
-    // Full state pull — 3rd defense layer
+    // Only refresh after initialization is complete — during cold start
+    // the onMounted handler loads fresh data; refreshing here with stale
+    // state (e.g. old currentDir from WebView cache) would show wrong dir.
+    if (!isAuthenticated.value) return
+    // Full state pull — refresh everything that may have changed while backgrounded
     loadSessionsOnce()
+    store.loadFiles(store.state.currentDir)
+    store.loadGitBranch()
+    loadTasks()
+    loadTerminalStatus()
+    if (store.state.currentFile?.path) {
+        refreshCurrentFile()
+    }
 }
 
 // Edge swipe back gesture detection (right-edge-left-swipe → go back)
@@ -765,6 +772,8 @@ async function handleLoginSuccess() {
     // clawbench_project cookie, session identity, and all infrastructure
     // are ready before ChatPanelContent mounts and calls loadHistory().
     if (!(await initializeApp())) return
+    // Clean up legacy localStorage keys (no longer used)
+    Object.keys(localStorage).filter(k => k.startsWith('clawbenchLastFile_') || k.startsWith('clawbenchLastDir_')).forEach(k => localStorage.removeItem(k))
     isAuthenticated.value = true
 }
 
@@ -947,12 +956,22 @@ function onTaskCardClick(taskId) {
 }
 
 async function handleRename({ path, name }) {
-    await store.renameFile(path, name)
+    try {
+        await store.renameFile(path, name)
+    } catch (err) {
+        appLog.e(TAG, '[handleRename] error:', err)
+    }
 }
 
 async function handleDelete(path) {
+    appLog.d(TAG, '[handleDelete] called, path:', path)
     const wasOverlay = fileNav.overlayOpen.value
-    await store.deleteFile(path)
+    try {
+        await store.deleteFile(path)
+        appLog.d(TAG, '[handleDelete] store.deleteFile resolved')
+    } catch (err) {
+        appLog.e(TAG, '[handleDelete] unhandled error:', err)
+    }
     if (wasOverlay) {
         if (fileNav.canGoBack.value) {
             const prevPath = fileNav.goBack()
@@ -966,7 +985,11 @@ async function handleDelete(path) {
 }
 
 async function handleBatchDelete(paths) {
-    await store.deleteFiles(paths)
+    try {
+        await store.deleteFiles(paths)
+    } catch (err) {
+        appLog.e(TAG, '[handleBatchDelete] unhandled error:', err)
+    }
 }
 
 async function handleRefresh() {
@@ -1312,7 +1335,7 @@ onMounted(async () => {
       const pollPendingNav = () => {
         try {
           const nav = window.AndroidNative.getPendingNavigation()
-          console.log('[ClawBench] getPendingNavigation poll result:', nav)
+          appLog.d(TAG, 'getPendingNavigation poll result:', nav)
           if (nav) {
             const parsed = JSON.parse(nav)
             const { sessionId, taskId, executionId, projectPath } = parsed
@@ -1352,17 +1375,6 @@ onMounted(async () => {
         pollCount++
         if (pollCount >= 6) clearInterval(pollInterval) // 3 seconds total
       }, 500)
-    }
-    const lastFile = localStorage.getItem('clawbenchLastFile_' + store.state.projectRoot)
-    if (lastFile && lastFile !== store.state.currentFile?.path) {
-        const lastSlash = lastFile.lastIndexOf('/')
-        const targetDir = lastSlash > 0 ? lastFile.slice(0, lastSlash) : ''
-        store.resetDirStack(targetDir)
-        await store.loadFiles(targetDir)
-        await store.selectFile(lastFile)
-        if (store.state.currentFile?.error) store.state.currentFile = null
-        // 不自动切换 Tab 或打开覆盖层，保持默认 tab（chat）
-        // 用户切到 browse 时可以在 handleBrowseSelectFile 中打开覆盖层
     }
 })
 

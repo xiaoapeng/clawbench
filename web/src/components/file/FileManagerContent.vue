@@ -98,10 +98,6 @@
     <div v-if="viewMode === 'list'" class="file-list" id="fileList"
       @click="handleItemClick"
       @contextmenu.prevent="handleCtxMenu"
-      @touchstart="onLongPressStart"
-      @touchmove="onLongPressMove"
-      @touchend="onLongPressEnd"
-      @touchcancel="onLongPressEnd"
     >
       <Transition name="loading-fade">
         <div v-if="dirLoading" class="loading-mask">
@@ -116,6 +112,7 @@
       <template v-for="entry in visibleEntries" :key="entry.name">
         <!-- Directory -->
         <div v-if="entry.type === 'dir'"
+          v-long-press="(e) => onLongPress(entry, e)"
           class="file-item dir-item"
           :class="{
             'ms-selected': multiSelect.active && multiSelect.selected.has(itemPath(entry.name)),
@@ -137,6 +134,7 @@
 
         <!-- File -->
         <div v-else
+          v-long-press="(e) => onLongPress(entry, e)"
           class="file-item"
           :class="{
             active: !multiSelect.active && currentFile?.path === itemPath(entry.name),
@@ -169,10 +167,6 @@
     <div v-else class="file-grid" id="fileList"
       @click="handleItemClick"
       @contextmenu.prevent="handleCtxMenu"
-      @touchstart="onLongPressStart"
-      @touchmove="onLongPressMove"
-      @touchend="onLongPressEnd"
-      @touchcancel="onLongPressEnd"
     >
       <Transition name="loading-fade">
         <div v-if="dirLoading" class="loading-mask">
@@ -185,6 +179,7 @@
       </div>
 
       <div v-for="entry in visibleEntries" :key="entry.name"
+        v-long-press="(e) => onLongPress(entry, e)"
         class="grid-item"
         :class="{
           'grid-dir': entry.type === 'dir',
@@ -285,7 +280,7 @@
           </div>
         </template>
       </div>
-      <div v-if="ctxMenu.visible" class="ctx-overlay" @click="closeCtxMenu" @touchstart="closeCtxMenu" />
+      <div v-if="ctxMenu.visible" class="ctx-overlay" @click="closeCtxMenu" />
     </Teleport>
   </div>
 </template>
@@ -294,6 +289,8 @@
 import '@/assets/loading-mask.css'
 import { ref, computed, reactive, inject, nextTick, onMounted, onUnmounted, Teleport, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { appLog } from '@/utils/appLog'
+import { joinPath } from '@/utils/path'
 import { Folder, ArrowDownAz, ArrowUpZa, ChevronDown, ChevronUp, Clock, FileText, HardDrive, Eye, EyeOff, FileImage, FileMusic, Copy, Scissors, ClipboardPaste, FilePlus, FolderPlus, Pencil, Download, Trash2, FolderOpen, RotateCw, Terminal as TerminalIcon, CheckSquare, Check, X, LayoutList, LayoutGrid, FileVideo, Package, Upload, MoreHorizontal, Paperclip } from 'lucide-vue-next'
 import { getFileType } from '@/utils/fileType.ts'
 import {
@@ -320,6 +317,7 @@ import DirBreadcrumb from './DirBreadcrumb.vue'
 const toast = inject('toast', null)
 const { isAppMode } = useAppMode()
 const { t, locale } = useI18n()
+const TAG = 'FileManager'
 
 // File upload to current directory
 const { dirUploading, dirUploadProgress, dirUploadTotal, dirUploadDone, handleFileSelectToDir } = useFileUpload()
@@ -428,7 +426,7 @@ onUnmounted(() => document.removeEventListener('click', closeDropdowns))
 
 // Helper: build item path from entry name
 function itemPath(name) {
-    return (props.currentDir ? props.currentDir + '/' : '') + name
+    return joinPath(props.currentDir, name)
 }
 
 // ── Multi-select ──
@@ -436,6 +434,12 @@ const { state: multiSelect, enterMultiSelect, exitMultiSelect, toggleSelect } = 
 
 defineExpose({
     multiSelectState: multiSelect,
+    searchQuery,
+    viewMode,
+    // Test helper: set searchQuery and trigger reactivity
+    _setSearchQuery(val) { searchQuery.value = val },
+    _setViewMode(val) { viewMode.value = val },
+    _getFilteredEntries() { return filteredEntries.value },
 })
 
 const isAllSelected = computed(() => {
@@ -469,109 +473,101 @@ function closeCtxMenu() {
 
 // ── Unified context menu trigger (right-click + long-press) ──
 
-function resolveEntryFromEvent(e) {
-    const item = e.target?.closest('.file-item, .grid-item')
-    if (!item) return null
-    const action = item.dataset.action
-    const path = item.dataset.path
-    const name = item.querySelector('.file-name, .grid-name')?.textContent || ''
-    return { type: action === 'dir' ? 'dir' : 'file', name, path }
-}
-
-function handleCtxMenu(e) {
-    const entry = resolveEntryFromEvent(e)
-    ctxMenu.x = e.clientX
-    ctxMenu.y = e.clientY
-    ctxMenu.entry = entry
+function onLongPress(entry, e) {
+    const touch = e.touches[0]
+    ctxMenu.x = touch.clientX
+    ctxMenu.y = touch.clientY + 10
+    // DirEntry from v-for has no .path — compute it like handleCtxMenu does
+    ctxMenu.entry = { type: entry.type, name: entry.name, path: itemPath(entry.name) }
     ctxMenu.visible = true
     nextTick(() => clampCtxMenu())
 }
 
-// Long-press (mobile): single timer, entry resolved on trigger
-let longPressTimer = null
-let longPressMoved = false
-
-function onLongPressStart(e) {
-    longPressMoved = false
-    const touch = e.touches[0]
-    longPressTimer = setTimeout(() => {
-        if (!longPressMoved) {
-            const entry = resolveEntryFromEvent(e)
-            ctxMenu.x = touch.clientX
-            ctxMenu.y = touch.clientY + 10
-            ctxMenu.entry = entry
-            ctxMenu.visible = true
-            nextTick(() => clampCtxMenu())
-        }
-        longPressTimer = null
-    }, 450)
-}
-
-function onLongPressMove() { longPressMoved = true }
-
-function onLongPressEnd() {
-    if (longPressTimer) {
-        clearTimeout(longPressTimer)
-        longPressTimer = null
-    }
+function handleCtxMenu(e) {
+    const item = e.target?.closest('.file-item, .grid-item')
+    if (!item) return
+    const action = item.dataset.action
+    const path = item.dataset.path
+    const name = item.querySelector('.file-name, .grid-name')?.textContent || ''
+    ctxMenu.x = e.clientX
+    ctxMenu.y = e.clientY
+    ctxMenu.entry = { type: action === 'dir' ? 'dir' : 'file', name, path }
+    ctxMenu.visible = true
+    nextTick(() => clampCtxMenu())
 }
 
 // Clipboard now supports multiple entries
 const { clipboard, clear: clearClipboard } = _createClipboard()
 
 function getDestDir(entry) {
-    if (!entry) return props.currentDir
+    if (!entry) return props.currentDir === '/' ? '' : props.currentDir
     if (entry.type === 'dir') return entry.path
     const idx = entry.path.lastIndexOf('/')
     return idx > 0 ? entry.path.slice(0, idx) : ''
 }
 
 async function doCopy() {
-    if (!ctxMenu.entry) return
     clipboard.entries = [ctxMenu.entry]
     clipboard.isCut = false
+    appLog.d(TAG, '[doCopy] entry:', ctxMenu.entry?.path)
     closeCtxMenu()
     if (toast) toast.show(t('common.copied'), { icon: '📋', type: 'success', duration: 1500 })
 }
 
 async function doCut() {
-    if (!ctxMenu.entry) return
     clipboard.entries = [ctxMenu.entry]
     clipboard.isCut = true
+    appLog.d(TAG, '[doCut] entry:', ctxMenu.entry?.path)
     closeCtxMenu()
     if (toast) toast.show(t('file.toast.cutDone'), { icon: '✂️', type: 'success', duration: 1500 })
 }
 
 async function doPaste() {
     if (!clipboard.entries.length) return
+    const entry = ctxMenu.entry
     closeCtxMenu()
-    const destDir = getDestDir(ctxMenu.entry)
+    const destDir = getDestDir(entry)
     const api = clipboard.isCut ? '/api/file/move' : '/api/file/copy'
+    appLog.d(TAG, '[doPaste] api:', api, 'destDir:', destDir, 'entries:', clipboard.entries.map(e => e.path))
     let allOk = true
-    for (const entry of clipboard.entries) {
+    for (const srcEntry of clipboard.entries) {
         try {
-            let destPath = (destDir ? destDir + '/' : '') + entry.name
+            let destPath = (destDir ? destDir + '/' : '') + srcEntry.name
+            appLog.d(TAG, '[doPaste] moving:', srcEntry.path, '→', destPath)
             let resp = await fetch(api, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ path: entry.path, dest: destPath }),
+                body: JSON.stringify({ path: srcEntry.path, dest: destPath }),
             })
             if (resp.status === 409) {
-                const newName = await dialog.prompt(t('file.prompt.pasteNewName', { name: entry.name }), { value: entry.name })
+                const newName = await dialog.prompt(t('file.prompt.pasteNewName', { name: srcEntry.name }), { value: srcEntry.name })
                 if (!newName || !newName.trim()) continue
                 destPath = (destDir ? destDir + '/' : '') + newName.trim()
                 resp = await fetch(api, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ path: entry.path, dest: destPath }),
+                    body: JSON.stringify({ path: srcEntry.path, dest: destPath }),
                 })
             }
-            if (!resp.ok) allOk = false
-        } catch {
+            if (!resp.ok) {
+                const errBody = await resp.text().catch(() => '')
+                appLog.e(TAG, '[doPaste] API error:', resp.status, errBody, 'src:', srcEntry.path, 'dest:', destPath)
+                allOk = false
+            }
+        } catch (err) {
+            appLog.e(TAG, '[doPaste] exception:', err, 'src:', srcEntry.path)
             allOk = false
         }
     }
-    if (clipboard.isCut) clipboard.entries = []
+    if (clipboard.isCut) {
+        // If the currently viewed file was moved, clear it to avoid
+        // refreshCurrentFile hitting 404 and showing "file not found"
+        const currentFilePath = store.state.currentFile?.path
+        if (currentFilePath && clipboard.entries.some(e => e.path === currentFilePath)) {
+            store.state.currentFile = null
+        }
+        clipboard.entries = []
+    }
     emit('refresh')
     if (allOk) {
         if (toast) toast.show(clipboard.isCut ? t('file.toast.moved') : t('common.copied'), { icon: '✅', type: 'success', duration: 1500 })
@@ -581,11 +577,12 @@ async function doPaste() {
 }
 
 async function doNewFile() {
+    const entry = ctxMenu.entry
     closeCtxMenu()
     moreMenuOpen.value = false
     const name = await dialog.prompt(t('file.prompt.fileName'))
     if (!name || !name.trim()) return
-    const dir = getDestDir(ctxMenu.entry)
+    const dir = getDestDir(entry)
     try {
         const resp = await fetch('/api/file/create', {
             method: 'POST',
@@ -605,11 +602,12 @@ async function doNewFile() {
 }
 
 async function doNewFolder() {
+    const entry = ctxMenu.entry
     closeCtxMenu()
     moreMenuOpen.value = false
     const name = await dialog.prompt(t('file.prompt.folderName'))
     if (!name || !name.trim()) return
-    const dir = getDestDir(ctxMenu.entry)
+    const dir = getDestDir(entry)
     try {
         const resp = await fetch('/api/dir/create', {
             method: 'POST',
@@ -789,15 +787,14 @@ function doOpenTerminal() {
 }
 
 async function doRename() {
-    if (!ctxMenu.entry) return
-    const newName = await dialog.prompt(t('file.prompt.newName'), { value: ctxMenu.entry.name })
-    if (!newName || newName === ctxMenu.entry.name) { closeCtxMenu(); return }
-    emit('rename', { path: ctxMenu.entry.path, name: newName })
+    const entry = ctxMenu.entry
+    const newName = await dialog.prompt(t('file.prompt.newName'), { value: entry.name })
+    if (!newName || newName === entry.name) { closeCtxMenu(); return }
+    emit('rename', { path: entry.path, name: newName })
     closeCtxMenu()
 }
 
 function doDownload() {
-    if (!ctxMenu.entry) return
     const path = ctxMenu.entry.path
     const name = ctxMenu.entry.name
     closeCtxMenu()
@@ -879,7 +876,6 @@ function doBatchArchive() {
 }
 
 function doAttachToChat() {
-    if (!ctxMenu.entry) return
     const path = ctxMenu.entry.path
     closeCtxMenu()
     if (hasAttachedFile(path)) {
@@ -914,8 +910,8 @@ function toggleAttach(path) {
 }
 
 function doDelete() {
-    if (!ctxMenu.entry) return
     const path = ctxMenu.entry.path
+    appLog.d(TAG, '[doDelete] emitting delete for:', path)
     closeCtxMenu()
     emit('delete', path)
 }

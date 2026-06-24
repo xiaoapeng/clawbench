@@ -20,13 +20,15 @@ vi.mock('@/composables/useLocale', () => ({
 }))
 
 // Mock useToast
+const mockToastShow = vi.fn()
 vi.mock('@/composables/useToast', () => ({
-    useToast: () => ({ show: vi.fn() }),
+    useToast: () => ({ show: mockToastShow }),
 }))
 
 // Mock useDialog
+const mockDialogConfirm = vi.fn().mockResolvedValue(true)
 vi.mock('@/composables/useDialog', () => ({
-    useDialog: () => ({ confirm: vi.fn().mockResolvedValue(true) }),
+    useDialog: () => ({ confirm: mockDialogConfirm }),
 }))
 
 // Mock useDirStack
@@ -36,6 +38,8 @@ const mockDirStack = {
     truncateToDirAndLoad: vi.fn().mockResolvedValue(undefined),
     replaceTopAndLoad: vi.fn().mockResolvedValue(undefined),
     resetStack: vi.fn(),
+    pushDir: vi.fn(),
+    dirStack: { value: [] },
     currentDir: { value: '/project' },
 }
 vi.mock('@/composables/useDirStack', () => ({
@@ -49,6 +53,8 @@ describe('store', () => {
         vi.clearAllMocks()
         // Reset state to defaults before each test
         store.resetProjectState()
+        // Reset mock dirStack state
+        mockDirStack.dirStack.value = []
     })
 
     // ── resetProjectState ──
@@ -505,6 +511,37 @@ describe('store', () => {
 
             expect(mockApiPost).toHaveBeenCalledWith('/api/file/rename', { path: '/project/old.txt', name: 'new.txt' })
         })
+
+        it('shows error toast on rename failure', async () => {
+            const err = Object.assign(new Error('rename failed'), { msgKey: 'InternalError' })
+            mockApiPost.mockRejectedValue(err)
+            mockToastShow.mockClear()
+
+            await expect(store.renameFile('/project/old.txt', 'new.txt')).rejects.toThrow('rename failed')
+            expect(mockToastShow).toHaveBeenCalled()
+        })
+
+        it('treats FileNotFoundShort as success', async () => {
+            const err = Object.assign(new Error('not found'), { msgKey: 'FileNotFoundShort' })
+            mockApiPost.mockRejectedValue(err)
+            mockApiGet.mockResolvedValue({ entries: [] })
+            mockToastShow.mockClear()
+
+            await store.renameFile('/project/old.txt', 'new.txt')
+            expect(mockToastShow).not.toHaveBeenCalled()
+        })
+
+        it('re-selects current file at new path after rename', async () => {
+            store.state.currentDir = '/project'
+            store.state.currentFile = { path: '/project/old.txt', name: 'old.txt' }
+            mockApiPost.mockResolvedValue({})
+            mockApiGet.mockResolvedValue({ entries: [] })
+
+            await store.renameFile('/project/old.txt', 'new.txt')
+
+            // Should have called selectFile with the new path
+            expect(mockApiGet).toHaveBeenCalled()
+        })
     })
 
     // ── Directory stack navigation ──
@@ -542,6 +579,18 @@ describe('store', () => {
             await store.popDir()
 
             expect(mockDirStack.popDirAndLoad).not.toHaveBeenCalled()
+        })
+    })
+
+    describe('resetDirStack', () => {
+        it('calls dirStack.resetStack', () => {
+            store.resetDirStack('/project')
+            expect(mockDirStack.resetStack).toHaveBeenCalledWith('/project')
+        })
+
+        it('calls resetStack without path', () => {
+            store.resetDirStack()
+            expect(mockDirStack.resetStack).toHaveBeenCalledWith(undefined)
         })
     })
 
@@ -955,6 +1004,93 @@ describe('store', () => {
             await store.loadFiles('')
 
             expect(mockApiGet).toHaveBeenCalledWith('/api/dir?path=')
+        })
+    })
+
+    // ── deleteFile error handling ──
+
+    describe('deleteFile', () => {
+        it('shows error toast on API failure', async () => {
+            const err = Object.assign(new Error('delete failed'), { msgKey: 'InternalError' })
+            mockApiPost.mockRejectedValue(err)
+            mockApiGet.mockResolvedValue({ items: [] })
+
+            await store.deleteFile('/project/test.txt')
+
+            expect(mockToastShow).toHaveBeenCalledWith('file.toast.deleteFailed', { type: 'error', icon: '⚠️' })
+            // loadFiles should still run even after error
+            expect(mockApiGet).toHaveBeenCalled()
+        })
+
+        it('treats FileNotFoundShort as success (no toast)', async () => {
+            const err = Object.assign(new Error('file not found'), { msgKey: 'FileNotFoundShort' })
+            mockApiPost.mockRejectedValue(err)
+            mockApiGet.mockResolvedValue({ items: [] })
+
+            await store.deleteFile('/project/gone.txt')
+
+            expect(mockToastShow).not.toHaveBeenCalled()
+            // loadFiles should still refresh
+            expect(mockApiGet).toHaveBeenCalled()
+        })
+
+        it('clears currentFile when deleting the viewed file', async () => {
+            mockApiPost.mockResolvedValue({ ok: true })
+            mockApiGet.mockResolvedValue({ items: [] })
+            store.state.currentFile = { name: 'test.txt', path: '/project/test.txt' } as any
+
+            await store.deleteFile('/project/test.txt')
+
+            expect(store.state.currentFile).toBeNull()
+        })
+
+        it('does not delete when dialog is cancelled', async () => {
+            mockDialogConfirm.mockResolvedValueOnce(false)
+
+            await store.deleteFile('/project/test.txt')
+
+            expect(mockApiPost).not.toHaveBeenCalled()
+        })
+    })
+
+    // ── deleteFiles (batch) error handling ──
+
+    describe('deleteFiles', () => {
+        it('shows error toast when some deletes fail', async () => {
+            mockApiPost
+                .mockResolvedValueOnce({ ok: true })
+                .mockRejectedValueOnce(Object.assign(new Error('failed'), { msgKey: 'InternalError' }))
+            mockApiGet.mockResolvedValue({ items: [] })
+
+            await store.deleteFiles(['/project/a.txt', '/project/b.txt'])
+
+            expect(mockToastShow).toHaveBeenCalledWith('file.toast.deleteFailed', { type: 'error', icon: '⚠️' })
+            // loadFiles should still run
+            expect(mockApiGet).toHaveBeenCalled()
+        })
+
+        it('ignores FileNotFoundShort in batch delete', async () => {
+            mockApiPost
+                .mockResolvedValueOnce({ ok: true })
+                .mockRejectedValueOnce(Object.assign(new Error('not found'), { msgKey: 'FileNotFoundShort' }))
+            mockApiGet.mockResolvedValue({ items: [] })
+
+            await store.deleteFiles(['/project/a.txt', '/project/gone.txt'])
+
+            expect(mockToastShow).not.toHaveBeenCalled()
+            expect(mockApiGet).toHaveBeenCalled()
+        })
+
+        it('refreshes file list even with partial failures', async () => {
+            mockApiPost
+                .mockRejectedValueOnce(Object.assign(new Error('fail'), { msgKey: 'InternalError' }))
+                .mockResolvedValueOnce({ ok: true })
+            mockApiGet.mockResolvedValue({ items: [] })
+
+            await store.deleteFiles(['/project/a.txt', '/project/b.txt'])
+
+            // loadFiles should be called despite partial failure
+            expect(mockApiGet).toHaveBeenCalled()
         })
     })
 })

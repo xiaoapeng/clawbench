@@ -223,18 +223,6 @@ describe('FileManagerContent — doAttachToChat', () => {
       expect.objectContaining({ type: 'info' }),
     )
   })
-
-  it('does nothing when no entry in context menu', async () => {
-    const wrapper = mountContent()
-
-    wrapper.vm.ctxMenu.visible = true
-    wrapper.vm.ctxMenu.entry = null
-    await nextTick()
-
-    await wrapper.vm.doAttachToChat()
-
-    expect(mockAddAttachedFile).not.toHaveBeenCalled()
-  })
 })
 
 describe('FileManagerContent — toggleAttach', () => {
@@ -281,53 +269,6 @@ describe('FileManagerContent — closeCtxMenu', () => {
   })
 })
 
-describe('FileManagerContent — resolveEntryFromEvent', () => {
-  it('returns null when target is not a file item', () => {
-    const wrapper = mountContent()
-    const e = { target: document.createElement('div') }
-    expect(wrapper.vm.resolveEntryFromEvent(e)).toBeNull()
-  })
-
-  it('resolves file entry from DOM element with data attributes', () => {
-    const wrapper = mountContent()
-
-    // Create a mock DOM element structure
-    const item = document.createElement('div')
-    item.classList.add('file-item')
-    item.dataset.action = 'file'
-    item.dataset.path = 'src/foo.ts'
-
-    const nameEl = document.createElement('span')
-    nameEl.classList.add('file-name')
-    nameEl.textContent = 'foo.ts'
-    item.appendChild(nameEl)
-
-    const e = { target: item }
-
-    const result = wrapper.vm.resolveEntryFromEvent(e)
-    expect(result).toEqual({ type: 'file', name: 'foo.ts', path: 'src/foo.ts' })
-  })
-
-  it('resolves dir entry from DOM element', () => {
-    const wrapper = mountContent()
-
-    const item = document.createElement('div')
-    item.classList.add('file-item')
-    item.dataset.action = 'dir'
-    item.dataset.path = 'src'
-
-    const nameEl = document.createElement('span')
-    nameEl.classList.add('file-name')
-    nameEl.textContent = 'src'
-    item.appendChild(nameEl)
-
-    const e = { target: item }
-
-    const result = wrapper.vm.resolveEntryFromEvent(e)
-    expect(result).toEqual({ type: 'dir', name: 'src', path: 'src' })
-  })
-})
-
 describe('FileManagerContent — handleCtxMenu', () => {
   it('sets context menu position and visibility from event', async () => {
     const wrapper = mountContent()
@@ -351,33 +292,6 @@ describe('FileManagerContent — handleCtxMenu', () => {
     expect(wrapper.vm.ctxMenu.y).toBe(250)
     expect(wrapper.vm.ctxMenu.visible).toBe(true)
     expect(wrapper.vm.ctxMenu.entry).toEqual({ type: 'file', name: 'test.ts', path: 'test.ts' })
-  })
-})
-
-describe('FileManagerContent — long press', () => {
-  it('onLongPressEnd clears timer', () => {
-    vi.useFakeTimers()
-    const wrapper = mountContent()
-
-    // Start a long press
-    const touchEvent = { touches: [{ clientX: 50, clientY: 50 }] }
-    wrapper.vm.onLongPressStart(touchEvent)
-
-    // End before timer fires
-    wrapper.vm.onLongPressEnd()
-
-    // Advance timer — should NOT fire because timer was cleared
-    vi.advanceTimersByTime(500)
-
-    expect(wrapper.vm.ctxMenu.visible).toBe(false)
-    vi.useRealTimers()
-  })
-
-  it('onLongPressMove sets moved flag', () => {
-    const wrapper = mountContent()
-    wrapper.vm.onLongPressMove()
-    // Just verify it doesn't throw
-    expect(true).toBe(true)
   })
 })
 
@@ -422,16 +336,6 @@ describe('FileManagerContent — doDelete emits correct path after closeCtxMenu'
     expect(wrapper.vm.ctxMenu.visible).toBe(false)
     expect(wrapper.vm.ctxMenu.entry).toBeNull()
   })
-
-  it('does nothing when no entry in context menu', () => {
-    const wrapper = mountContent()
-    wrapper.vm.ctxMenu.visible = true
-    wrapper.vm.ctxMenu.entry = null
-
-    wrapper.vm.doDelete()
-
-    expect(wrapper.emitted('delete')).toBeFalsy()
-  })
 })
 
 describe('FileManagerContent — doDownload uses saved path/name after closeCtxMenu', () => {
@@ -457,18 +361,6 @@ describe('FileManagerContent — doDownload uses saved path/name after closeCtxM
 
     appendSpy.mockRestore()
     removeSpy.mockRestore()
-  })
-
-  it('does nothing when no entry in context menu', () => {
-    const wrapper = mountContent()
-    wrapper.vm.ctxMenu.visible = true
-    wrapper.vm.ctxMenu.entry = null
-
-    const appendSpy = vi.spyOn(document.body, 'appendChild')
-    wrapper.vm.doDownload()
-
-    expect(appendSpy).not.toHaveBeenCalled()
-    appendSpy.mockRestore()
   })
 })
 
@@ -600,5 +492,322 @@ describe('FileManagerContent — doOpenTerminal uses saved cwd after closeCtxMen
 
     expect(wrapper.emitted('openTerminal')).toBeTruthy()
     expect(wrapper.emitted('openTerminal')[0]).toEqual(['docs'])
+  })
+})
+
+describe('FileManagerContent — onSortSelect', () => {
+  it('emits toggleSort and closes sort menu', async () => {
+    const wrapper = mountContent()
+    wrapper.vm.sortMenuOpen = true
+    await nextTick()
+
+    wrapper.vm.onSortSelect('name')
+
+    expect(wrapper.emitted('toggleSort')).toBeTruthy()
+    expect(wrapper.emitted('toggleSort')[0]).toEqual(['name'])
+    expect(wrapper.vm.sortMenuOpen).toBe(false)
+  })
+})
+
+describe('FileManagerContent — handleItemClick', () => {
+  it('emits navigateDir when clicking a dir item', async () => {
+    const wrapper = mountContent()
+    const dirItem = document.createElement('div')
+    dirItem.classList.add('file-item')
+    dirItem.dataset.action = 'dir'
+    dirItem.dataset.path = 'src'
+
+    const event = { target: dirItem, ...new MouseEvent('click') }
+    Object.defineProperty(event, 'target', { value: dirItem, writable: false })
+
+    wrapper.vm.handleItemClick(event)
+
+    expect(wrapper.emitted('navigateDir')).toBeTruthy()
+    expect(wrapper.emitted('navigateDir')[0]).toEqual(['src'])
+  })
+
+  it('emits selectFile when clicking a file item', async () => {
+    const wrapper = mountContent()
+    const fileItem = document.createElement('div')
+    fileItem.classList.add('file-item')
+    fileItem.dataset.action = 'file'
+    fileItem.dataset.path = 'test.ts'
+
+    const event = { target: fileItem, ...new MouseEvent('click') }
+    Object.defineProperty(event, 'target', { value: fileItem, writable: false })
+
+    wrapper.vm.handleItemClick(event)
+
+    expect(wrapper.emitted('selectFile')).toBeTruthy()
+    expect(wrapper.emitted('selectFile')[0]).toEqual(['test.ts'])
+  })
+
+  it('does nothing when loading', async () => {
+    const wrapper = mountContent({ dirLoading: true })
+    const fileItem = document.createElement('div')
+    fileItem.classList.add('file-item')
+    fileItem.dataset.action = 'file'
+    fileItem.dataset.path = 'test.ts'
+
+    const event = { target: fileItem, ...new MouseEvent('click') }
+    Object.defineProperty(event, 'target', { value: fileItem, writable: false })
+
+    wrapper.vm.handleItemClick(event)
+
+    expect(wrapper.emitted('selectFile')).toBeFalsy()
+  })
+})
+
+describe('FileManagerContent — filteredEntries', () => {
+  it('filters by search query', async () => {
+    const wrapper = mountContent()
+    wrapper.vm._setSearchQuery('test')
+    await nextTick()
+
+    const filtered = wrapper.vm._getFilteredEntries()
+    expect(filtered.length).toBe(1)
+    expect(filtered[0].name).toBe('test.ts')
+  })
+
+  it('hides hidden files when showHidden is false', async () => {
+    const entries = [
+      { name: '.git', type: 'dir', modified: '2025-01-01T00:00:00Z', size: 0 },
+      { name: 'src', type: 'dir', modified: '2025-01-01T00:00:00Z', size: 0 },
+    ]
+    const wrapper = mountContent({ entries, showHidden: false })
+
+    const filtered = wrapper.vm._getFilteredEntries()
+    expect(filtered.length).toBe(1)
+    expect(filtered[0].name).toBe('src')
+  })
+
+  it('shows hidden files when showHidden is true', async () => {
+    const entries = [
+      { name: '.git', type: 'dir', modified: '2025-01-01T00:00:00Z', size: 0 },
+      { name: 'src', type: 'dir', modified: '2025-01-01T00:00:00Z', size: 0 },
+    ]
+    const wrapper = mountContent({ entries, showHidden: true })
+
+    const filtered = wrapper.vm._getFilteredEntries()
+    expect(filtered.length).toBe(2)
+  })
+})
+
+describe('FileManagerContent — viewMode', () => {
+  it('switches to grid view', async () => {
+    const wrapper = mountContent()
+    wrapper.vm._setViewMode('grid')
+    await nextTick()
+
+    expect(wrapper.vm.viewMode).toBe('grid')
+  })
+
+  it('defaults to list view', async () => {
+    const wrapper = mountContent()
+    expect(wrapper.vm.viewMode).toBe('list')
+    expect(wrapper.find('.file-list').exists()).toBe(true)
+  })
+})
+
+describe('FileManagerContent — doRename', () => {
+  it('emits rename event with path and new name', async () => {
+    const wrapper = mountContent()
+    wrapper.vm.ctxMenu.visible = true
+    wrapper.vm.ctxMenu.entry = { type: 'file', name: 'old.txt', path: 'old.txt' }
+    await nextTick()
+
+    await wrapper.vm.doRename()
+
+    expect(wrapper.emitted('rename')).toBeTruthy()
+  })
+})
+
+describe('FileManagerContent — entryIcon/entryIconColor', () => {
+  it('returns Folder for dir entries', () => {
+    const wrapper = mountContent()
+    const icon = wrapper.vm.entryIcon({ type: 'dir' })
+    expect(icon).toBeDefined()
+  })
+
+  it('returns FileText for plain file entries', () => {
+    const wrapper = mountContent()
+    const icon = wrapper.vm.entryIcon({ type: 'file', name: 'test.ts' })
+    expect(icon).toBeDefined()
+  })
+})
+
+describe('FileManagerContent — formatDate', () => {
+  it('returns formatted date for today', () => {
+    const wrapper = mountContent()
+    const today = new Date().toISOString()
+    const result = wrapper.vm.formatDate(today)
+    expect(result).toBeTruthy()
+  })
+
+  it('returns formatted date for past dates', () => {
+    const wrapper = mountContent()
+    const result = wrapper.vm.formatDate('2024-06-01T00:00:00Z')
+    expect(result).toBeTruthy()
+  })
+
+  it('returns empty string for null modified', () => {
+    const wrapper = mountContent()
+    const result = wrapper.vm.formatDate(null)
+    expect(result).toBe('')
+  })
+})
+
+describe('FileManagerContent — onLongPress', () => {
+  it('sets context menu from long press event', async () => {
+    const wrapper = mountContent()
+
+    const entry = { type: 'file', name: 'test.ts' }
+    const touchEvent = { touches: [{ clientX: 100, clientY: 200 }] }
+
+    wrapper.vm.onLongPress(entry, touchEvent)
+    await nextTick()
+
+    expect(wrapper.vm.ctxMenu.visible).toBe(true)
+    expect(wrapper.vm.ctxMenu.entry.path).toBe('test.ts')
+  })
+})
+
+describe('FileManagerContent — doBatchCopy/doBatchCut/doBatchDelete', () => {
+  it('doBatchCopy copies selected entries to clipboard', async () => {
+    const wrapper = mountContent()
+    wrapper.vm.multiSelectState.active = true
+    wrapper.vm.multiSelectState.selected.add('test.ts')
+    await nextTick()
+
+    wrapper.vm.doBatchCopy()
+
+    expect(mockToastShow).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ type: 'success' }),
+    )
+  })
+
+  it('doBatchCut cuts selected entries', async () => {
+    const wrapper = mountContent()
+    wrapper.vm.multiSelectState.active = true
+    wrapper.vm.multiSelectState.selected.add('test.ts')
+    await nextTick()
+
+    wrapper.vm.doBatchCut()
+
+    expect(mockToastShow).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ type: 'success' }),
+    )
+  })
+
+  it('doBatchDelete emits batchDelete with paths', async () => {
+    const wrapper = mountContent()
+    wrapper.vm.multiSelectState.active = true
+    wrapper.vm.multiSelectState.selected.add('test.ts')
+    await nextTick()
+
+    await wrapper.vm.doBatchDelete()
+
+    expect(wrapper.emitted('batchDelete')).toBeTruthy()
+  })
+})
+
+describe('FileManagerContent — doBatchArchive', () => {
+  it('calls doArchive with selected paths', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      blob: () => Promise.resolve(new Blob()),
+    })
+    vi.stubGlobal('fetch', fetchSpy)
+
+    const wrapper = mountContent()
+    wrapper.vm.multiSelectState.active = true
+    wrapper.vm.multiSelectState.selected.add('test.ts')
+    await nextTick()
+
+    wrapper.vm.doBatchArchive()
+
+    expect(fetchSpy).toHaveBeenCalledWith('/api/file/archive', expect.objectContaining({
+      method: 'POST',
+    }))
+
+    vi.unstubAllGlobals()
+  })
+})
+
+describe('FileManagerContent — doPaste', () => {
+  it('calls copy API for non-cut clipboard', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({ ok: true })
+    vi.stubGlobal('fetch', fetchSpy)
+
+    const wrapper = mountContent()
+    // Set clipboard entries
+    wrapper.vm.clipboard.entries = [{ type: 'file', name: 'file.txt', path: 'file.txt' }]
+    wrapper.vm.clipboard.isCut = false
+    await nextTick()
+
+    await wrapper.vm.doPaste()
+
+    expect(fetchSpy).toHaveBeenCalledWith('/api/file/copy', expect.objectContaining({
+      method: 'POST',
+    }))
+
+    vi.unstubAllGlobals()
+  })
+
+  it('calls move API for cut clipboard', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({ ok: true })
+    vi.stubGlobal('fetch', fetchSpy)
+
+    const wrapper = mountContent()
+    wrapper.vm.clipboard.entries = [{ type: 'file', name: 'file.txt', path: 'file.txt' }]
+    wrapper.vm.clipboard.isCut = true
+    await nextTick()
+
+    await wrapper.vm.doPaste()
+
+    expect(fetchSpy).toHaveBeenCalledWith('/api/file/move', expect.objectContaining({
+      method: 'POST',
+    }))
+
+    vi.unstubAllGlobals()
+  })
+})
+
+describe('FileManagerContent — doNewFile / doNewFolder', () => {
+  it('calls create file API', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({ ok: true })
+    vi.stubGlobal('fetch', fetchSpy)
+
+    const wrapper = mountContent()
+    await wrapper.vm.doNewFile()
+
+    expect(fetchSpy).toHaveBeenCalledWith('/api/file/create', expect.objectContaining({
+      method: 'POST',
+    }))
+
+    vi.unstubAllGlobals()
+  })
+
+  it('calls create dir API', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({ ok: true })
+    vi.stubGlobal('fetch', fetchSpy)
+
+    const wrapper = mountContent()
+    await wrapper.vm.doNewFolder()
+
+    expect(fetchSpy).toHaveBeenCalledWith('/api/dir/create', expect.objectContaining({
+      method: 'POST',
+    }))
+
+    vi.unstubAllGlobals()
+  })
+})
+
+describe('FileManagerContent — isTerminalDisabled', () => {
+  it('is true when terminal is not enabled', async () => {
+    const wrapper = mountContent()
+    expect(wrapper.vm.isTerminalDisabled).toBe(true)
   })
 })
