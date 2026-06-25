@@ -39,8 +39,11 @@ func InitDB(runFromServer ...bool) error { //nolint:gocognit,gocyclo // multi-ta
 		return fmt.Errorf("failed to open database: %w", err)
 	}
 
-	// SQLite concurrency: single connection + WAL mode + busy timeout
-	DB.SetMaxOpenConns(1)
+	// SQLite concurrency: WAL mode + busy timeout
+	// MaxOpenConns must be > 1 to avoid deadlocks when iterating rows (which holds
+	// a connection) and performing writes (which needs a separate connection) in the
+	// same loop — e.g., MigrateCustomSystemPrompt's SELECT + UPDATE pattern.
+	DB.SetMaxOpenConns(2)
 
 	// Enable WAL mode for concurrent reads during writes
 	if _, err := DB.Exec("PRAGMA journal_mode=WAL"); err != nil {
@@ -323,6 +326,15 @@ func InitDB(runFromServer ...bool) error { //nolint:gocognit,gocyclo // multi-ta
 		}
 	}
 
+	// Migrate: add custom_system_prompt column to agents for user-editable system prompt
+	var hasCustomSystemPrompt int
+	_ = DB.QueryRow("SELECT COUNT(*) FROM pragma_table_info('agents') WHERE name='custom_system_prompt'").Scan(&hasCustomSystemPrompt)
+	if hasCustomSystemPrompt == 0 {
+		if _, err := DB.Exec("ALTER TABLE agents ADD COLUMN custom_system_prompt TEXT NOT NULL DEFAULT ''"); err != nil {
+			return fmt.Errorf("failed to add custom_system_prompt column to agents: %w", err)
+		}
+	}
+
 	// Migrate: drop deleted column from chat_history.
 	// Soft-delete is handled at the session level (chat_sessions.deleted),
 	// so chat_history.deleted is redundant. Removing it simplifies queries
@@ -389,7 +401,7 @@ func InitDB(runFromServer ...bool) error { //nolint:gocognit,gocyclo // multi-ta
 	}
 
 	// Initialize read connection pool for concurrent reads (WAL mode).
-	// WAL contract: DB (MaxOpenConns=1) serializes writes; DBRead (MaxOpenConns=2)
+	// WAL contract: DB (MaxOpenConns=2) serializes writes + avoids deadlocks; DBRead (MaxOpenConns=2)
 	// allows concurrent reads that never block writes and vice versa.
 	// Both pools must use WAL mode + busy_timeout for this to work correctly.
 	DBRead, err = sql.Open("sqlite", dbPath)

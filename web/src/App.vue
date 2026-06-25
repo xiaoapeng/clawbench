@@ -202,7 +202,7 @@
               >
                 <component :is="overflowButtonIcon" />
               </button>
-              <span v-if="overflowHasBadge" class="dock-badge" :class="{ 'dock-badge-pop': overflowBadgeAnim }" @animationend="overflowBadgeAnim = false"></span>
+              <span v-if="overflowBadgeCount > 0 && !isOverflowTabActive" class="dock-badge dock-badge-count" :class="{ 'dock-badge-pop': overflowBadgeAnim }" @animationend="overflowBadgeAnim = false">{{ formatBadgeCount(overflowBadgeCount) }}</span>
             </div>
           </div>
         </div>
@@ -228,8 +228,7 @@
             <span>{{ t('terminal.title') }}</span>
             <span v-if="store.state.terminalSessionCount > 0" class="dock-overflow-count" :class="{ 'dock-badge-pop': terminalBadgeAnim }" @animationend="terminalBadgeAnim = false">{{ formatBadgeCount(store.state.terminalSessionCount) }}</span>
           </button>
-          <div class="dock-overflow-divider"></div>
-          <button class="dock-overflow-item" @click.stop="handleOverflowSettings">
+          <button class="dock-overflow-item" :class="{ active: activeTab === 'settings' }" @click.stop="handleOverflowSelect('settings')">
             <Settings :size="16" />
             <span>{{ t('nav.settings') }}</span>
           </button>
@@ -342,7 +341,6 @@ async function hotSwitchProject(newProjectPath, pendingSessionId) {
   clearPlanState()
   resetTaskTabState()
   fileNav.closeOverlay()
-  store.resetDirStack()
 
   // ── Phase 4: Change key → Vue destroys old component tree & builds new one ──
   projectKey.value = newProjectPath
@@ -860,18 +858,12 @@ function handleToggleSort(field) {
     setSetting('sortDir', sortDir.value)
 }
 
-async function handleNavigateDir(path, mode = 'push') {
-    if (mode === 'truncate') {
-        await store.truncateToDir(path)
-    } else if (mode === 'replace') {
-        await store.replaceDirTop(path)
-    } else {
-        await store.pushDir(path)
-    }
+async function handleNavigateDir(path) {
+    await store.navigateToDir(path)
 }
 
 async function handleNavigateBack() {
-    await store.popDir()
+    await store.navigateToParentDir()
 }
 
 async function handleSelectFile(path) {
@@ -921,7 +913,7 @@ async function handleOverlayOpenFile(payload) {
         try {
             const resp = await fetch(`/api/dir?path=${encodeURIComponent(path)}`)
             if (resp.ok) {
-                await store.pushDir(path)
+                await store.navigateToDir(path)
                 window.dispatchEvent(new CustomEvent('close-file-overlay'))
                 window.dispatchEvent(new CustomEvent('open-file-manager'))
                 return
@@ -1098,8 +1090,8 @@ watch(() => store.state.portForwardActiveCount, (n, o) => {
   }
 })
 
-const overflowHasBadge = computed(() => {
-  return store.state.taskUnreadCount > 0 || store.state.portForwardActiveCount > 0 || store.state.terminalSessionCount > 0
+const overflowBadgeCount = computed(() => {
+  return store.state.taskUnreadCount + store.state.portForwardActiveCount + store.state.terminalSessionCount
 })
 
 const overflowButtonTitle = computed(() => {
@@ -1125,20 +1117,13 @@ function handleOverflowSelect(tab) {
     return
   }
   overflowMenuOpen.value = false
-  // Remember this tab as the dock slot 4 shortcut (except settings)
-  if (tab !== 'settings') {
-    setDockSlot4(tab)
-  }
+  // Remember this tab as the dock slot 4 shortcut
+  setDockSlot4(tab)
   if (tab === 'terminal') {
     handleDockTerminal()
   } else {
     switchTab(tab)
   }
-}
-
-function handleOverflowSettings() {
-  overflowMenuOpen.value = false
-  switchTab('settings')
 }
 
 // Close overflow menu on outside click
@@ -1731,11 +1716,6 @@ onUnmounted(() => {
     flex-shrink: 0;
 }
 
-.dock-overflow-divider {
-    height: 1px;
-    background: var(--border-color);
-    margin: 4px 8px;
-}
 
 /* Popup transition */
 .dock-popup-enter-active {
