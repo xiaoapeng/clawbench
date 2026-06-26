@@ -2,14 +2,20 @@
   <Teleport to="body">
   <header class="header">
     <!-- Logo: hidden in APP mode -->
-    <img v-if="!isAppMode" class="header-logo" src="/logo.png" alt="ClawBench">
+    <img class="header-logo" src="/logo.png" alt="ClawBench">
 
-    <div class="project-dropdown-wrapper" ref="dropdownRef">
-      <button class="project-switch-btn" @click="toggleDropdown" :title="t('appHeader.switchProject')">
-        <Projector :size="16" />
-        <span class="project-name">{{ projectName }}</span>
-        <ChevronDown :size="12" class="switch-chevron" :class="{ open: dropdownOpen }" />
-      </button>
+    <div class="badge-capsule">
+      <div class="project-dropdown-wrapper" ref="dropdownRef">
+        <button class="project-switch-btn" @click="toggleDropdown" :title="t('appHeader.switchProject')">
+          <Projector :size="12" />
+          <span class="project-name">{{ projectName }}</span>
+        </button>
+      </div>
+      <div v-if="gitBranch" class="badge-capsule-divider"></div>
+      <div v-if="gitBranch" class="branch-badge" :class="{ 'branch-switch': branchAnimating }" :title="gitBranch" @click="openHistory" @animationend="branchAnimating = false">
+        <GitBranch :size="12" class="branch-icon" />
+        <span class="branch-name">{{ gitBranch }}</span>
+      </div>
     </div>
     <Teleport to="body">
       <Transition name="dropdown">
@@ -39,11 +45,6 @@
         </div>
       </Transition>
     </Teleport>
-
-    <div v-if="gitBranch" class="branch-badge" :title="gitBranch" @click="openHistory">
-      <GitBranch :size="12" class="branch-icon" />
-      <span class="branch-name">{{ gitBranch }}</span>
-    </div>
 
     <!-- Status dot: in APP mode it doubles as server switcher, in web mode it shows connection status -->
     <button ref="statusBtnRef" class="status-toggle" @click="onStatusDotClick" :title="isAppMode ? t('login.switchServer') : t('appHeader.connectionStatus')">
@@ -95,8 +96,8 @@
 </template>
 
 <script setup>
-import { Projector, ChevronDown, Search, GitBranch, Server, LogOut } from 'lucide-vue-next'
-import { ref, computed, onMounted, onUnmounted, inject, watch } from 'vue'
+import { Projector, Search, GitBranch, Server, LogOut } from 'lucide-vue-next'
+import { ref, computed, onMounted, onUnmounted, inject, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useGlobalEvents } from '@/composables/useGlobalEvents'
 import { formatServerHost } from '@/utils/url'
@@ -147,6 +148,15 @@ const projectName = computed(() => {
 
 // Git branch
 const gitBranch = computed(() => store.state.gitBranch)
+const branchAnimating = ref(false)
+
+// Trigger animation when branch changes (skip initial value)
+watch(gitBranch, (newVal, oldVal) => {
+    if (oldVal !== undefined && newVal !== oldVal) {
+        branchAnimating.value = false
+        nextTick(() => { branchAnimating.value = true })
+    }
+})
 
 function openHistory() {
     setPendingManageNavigation()
@@ -393,40 +403,65 @@ onUnmounted(() => {
     flex-shrink: 0;
 }
 
+/* Badge capsule: combines project + branch into one pill shape */
+.badge-capsule {
+    display: flex;
+    align-items: center;
+    border: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    border-radius: 999px;
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: calc(100% - 44px); /* leave room for logo + status dot */
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.badge-capsule:hover {
+    background: var(--bg-primary);
+    border-color: var(--text-muted);
+}
+
+/* Divider between project and branch inside capsule */
+.badge-capsule-divider {
+    width: 1px;
+    align-self: stretch;
+    background: var(--border-color);
+    flex-shrink: 0;
+}
+
 .project-dropdown-wrapper {
     position: relative;
-    flex: 3;
-    flex-shrink: 1;
+    flex: 0 1 auto;
     min-width: 0;
 }
 
 .project-switch-btn {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 3px 6px 3px 8px;
-    border: 1px solid var(--border-color);
-    background: var(--bg-secondary);
+    gap: 6px;
+    padding: 0 10px;
+    height: 24px;
+    border: none;
+    background: transparent;
     cursor: pointer;
     color: var(--text-primary);
-    border-radius: 999px;
-    font-size: 13px;
+    border-radius: 0;
+    font-size: 12px;
     font-weight: 500;
-    max-width: none;
-    width: 100%;
     min-width: 0;
-    transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
-    line-height: 1.4;
+    max-width: 100%;
+    overflow: hidden;
+    transition: background 0.15s, border-color 0.15s;
+    line-height: 1;
 }
 
 .project-switch-btn:hover {
-    background: var(--bg-primary);
-    border-color: var(--accent-color);
-    box-shadow: 0 0 0 1px var(--accent-color);
+    background: transparent;
+    border-color: transparent;
 }
 
 .project-switch-btn:active {
-    transform: scale(0.97);
+    transform: scale(0.96);
 }
 
 .project-switch-btn svg:first-child {
@@ -434,54 +469,68 @@ onUnmounted(() => {
     flex-shrink: 0;
 }
 
-.switch-chevron {
-    color: var(--text-muted);
-    margin-left: -2px;
-    transition: transform 0.2s;
-}
-
-.switch-chevron.open {
-    transform: rotate(180deg);
-}
-
-.project-switch-btn:hover .switch-chevron {
-    color: var(--accent-color);
-}
-
 .project-name {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     min-width: 0;
+    line-height: 1.4;
 }
 
 /* Branch badge */
 .branch-badge {
     display: flex;
     align-items: center;
-    gap: 4px;
-    padding: 2px 8px;
-    background: color-mix(in srgb, var(--accent-color) 12%, transparent);
-    border: 1px solid color-mix(in srgb, var(--accent-color) 25%, transparent);
-    border-radius: 999px;
-    font-size: 11px;
+    gap: 6px;
+    padding: 0 10px;
+    height: 24px;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    font-size: 12px;
     font-weight: 500;
     color: var(--accent-color);
-    flex: 2;
-    flex-shrink: 1;
+    flex: 0 1 auto;
     min-width: 0;
-    max-width: none;
+    max-width: 100%;
+    overflow: hidden;
     cursor: pointer;
     transition: background 0.15s, border-color 0.15s;
+    line-height: 1;
 }
 
 .branch-badge:hover {
-    background: color-mix(in srgb, var(--accent-color) 20%, transparent);
-    border-color: color-mix(in srgb, var(--accent-color) 40%, transparent);
+    background: color-mix(in srgb, var(--accent-color) 10%, transparent);
+    border-color: transparent;
 }
 
 .branch-badge:active {
     transform: scale(0.96);
+}
+
+/* Branch switch animation — pulse + glow on the capsule */
+.badge-capsule:has(.branch-switch) {
+    animation: branch-pulse 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes branch-pulse {
+    0% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-color) 50%, transparent);
+    }
+    30% {
+        transform: scale(1.18);
+        box-shadow: 0 0 12px 3px color-mix(in srgb, var(--accent-color) 40%, transparent);
+        border-color: var(--accent-color);
+    }
+    60% {
+        transform: scale(0.95);
+        box-shadow: 0 0 6px 1px color-mix(in srgb, var(--accent-color) 20%, transparent);
+    }
+    100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-color) 0%, transparent);
+    }
 }
 
 .branch-icon {
@@ -493,6 +542,7 @@ onUnmounted(() => {
     text-overflow: ellipsis;
     white-space: nowrap;
     min-width: 0;
+    line-height: 1.4;
 }
 
 /* Connection status button / server switcher dot */
@@ -670,7 +720,7 @@ onUnmounted(() => {
 }
 
 .project-dropdown .item-path {
-    flex: 1;
+    flex: 1 1 auto;
     color: var(--text-muted);
     font-size: 11px;
     overflow-x: auto;

@@ -66,6 +66,13 @@ func (c *ACPConn) ensureAliveWithSession(ctx context.Context, cwd string) (bool,
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	// Set cwd on first call — used by spawnLocked to set cmd.Dir so the ACP
+	// process starts in the correct project directory instead of inheriting
+	// the ClawBench server's cwd.
+	if c.cwd == "" && cwd != "" {
+		c.cwd = cwd
+	}
+
 	// If alive and already has a session, reuse
 	if c.alive && c.isAliveLocked() && c.acpSID != "" {
 		slog.Debug("acp conn: reusing existing connection", "clawbench_sid", c.clawbenchSID, "acp_sid", c.acpSID)
@@ -122,15 +129,17 @@ func (c *ACPConn) ensureAliveWithSession(ctx context.Context, cwd string) (bool,
 		if err == nil {
 			return false, nil // recovered successfully
 		}
-		slog.Warn("acp conn: ResumeSession failed, falling back to NewSession",
+		// ResumeSession failed — the session is unrecoverable.
+		// Do NOT silently fall back to NewSession (amnesia): the user
+		// would lose all conversation context without any indication.
+		// Surface the error so the user knows the session needs a fresh start.
+		slog.Error("acp conn: ResumeSession failed, session is unrecoverable",
 			"clawbench_sid", c.clawbenchSID, "acp_sid", acpSID, "error", err)
 		c.killProcessLocked()
-		if err := c.spawnLocked(ctx); err != nil {
-			return false, err
-		}
+		return false, fmt.Errorf("acp: session %s ResumeSession failed: %w", acpSID, err)
 	}
 
-	// No prior session (or ResumeSession failed) — create new session.
+	// No prior session — create new session.
 	newSessCtx, newSessCancel := context.WithTimeout(ctx, 15*time.Second)
 	defer newSessCancel()
 
@@ -305,7 +314,7 @@ func (c *ACPConn) spawnLocked(ctx context.Context) error {
 	cmdArgs := cmdParts[1:]
 
 	cmd := exec.CommandContext(context.Background(), cmdName, cmdArgs...)
-	cmd.Dir = "" // cwd is per-session, set during NewSession/ResumeSession
+	cmd.Dir = c.cwd // project working directory for this ACP session
 	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env, OrphanChildEnvVar)
 

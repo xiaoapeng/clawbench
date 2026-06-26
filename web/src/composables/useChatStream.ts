@@ -1,17 +1,21 @@
 import { onMounted, onUnmounted, type Ref } from 'vue'
 import { cancelChat } from '@/utils/api'
+import { appLog } from '@/utils/appLog'
 import { useReconnect } from './useReconnect'
 import { gt } from '@/composables/useLocale'
-import { updateModeState, updateAvailableModes, updateCommandState, updateThinkingEffortState, updateAvailableThinkingEfforts, currentAgentId, updateUsageState } from './useSessionIdentity'
+import { updateModeState, updateCommandState, updateAvailableThinkingEfforts, currentAgentId, updateUsageState } from './useSessionIdentity'
 import { updateACPModelList } from './useAgents'
 import { updatePlanEntries } from './usePlanProgress'
-import { FILE_MODIFYING_TOOLS, findLastBlockOfType, forceCleanupStreamingState as _forceCleanupStreamingState, findStreamingMsg, drainQueueMessage, syncPendingFromBackend } from '@/utils/chatStreamUtils.ts'
+import { FILE_MODIFYING_TOOLS, findLastBlockOfType, forceCleanupStreamingState as _forceCleanupStreamingState, findStreamingMsg, drainQueueMessage } from '@/utils/chatStreamUtils.ts'
+
+const TAG = 'ChatStream'
 
 export interface UseChatStreamOptions {
   messages: Ref<any[]>
   currentSessionId: Ref<string>
   currentBackend: Ref<string>
   loading: Ref<boolean>
+  pendingStore: ReturnType<typeof import('@/composables/usePendingStore').usePendingStore>
   onRenderNeeded: (forceFull?: boolean) => void
   onScrollBottom: (force?: boolean) => void
   onLoadHistory: () => Promise<void>
@@ -32,6 +36,7 @@ export function useChatStream(options: UseChatStreamOptions) {
     currentSessionId,
     currentBackend,
     loading,
+    pendingStore,
     onRenderNeeded,
     onScrollBottom,
     onLoadHistory,
@@ -48,8 +53,8 @@ export function useChatStream(options: UseChatStreamOptions) {
 
   let eventSource: EventSource | null = null
   let streamTimeout: ReturnType<typeof setTimeout> | null = null
-  let renderTimer: ReturnType<typeof setTimeout> | null = null
-  let pollingInterval: ReturnType<typeof setInterval> | null = null
+  let renderTimer: number | null = null
+  let pollingInterval: number | null = null
   // Flag to indicate the EventSource was closed intentionally by cleanupActiveStream
   // (session switch), so the stale onerror handler should not schedule reconnects.
   let disconnectedByCleanup = false
@@ -98,7 +103,7 @@ export function useChatStream(options: UseChatStreamOptions) {
     // Extend timeout when a permission approval is pending — the user needs time to decide
     const timeoutMs = hasPendingPermissionApproval() ? PERMISSION_STREAM_TIMEOUT_MS : STREAM_TIMEOUT_MS
     streamTimeout = setTimeout(() => {
-      console.warn('SSE stream timeout - no events received, reconnecting')
+      appLog.w(TAG, 'SSE stream timeout - no events received, reconnecting')
       // No SSE event received for too long — reconnect instead of killing the session
       disconnectStream()
       // The AI session continues on the backend; just reconnect SSE
@@ -154,7 +159,7 @@ export function useChatStream(options: UseChatStreamOptions) {
     stopPolling()
     let jsonParseFailures = 0
     const MAX_JSON_PARSE_FAILURES = 5
-    pollingInterval = setInterval(async () => {
+    pollingInterval = window.setInterval(async () => {
       try {
         const resp = await fetch(`/api/ai/chat?session_id=${encodeURIComponent(currentSessionId.value)}&limit=1`, { credentials: 'same-origin' })
         if (!resp.ok) {
@@ -167,14 +172,14 @@ export function useChatStream(options: UseChatStreamOptions) {
         } catch {
           jsonParseFailures++
           if (jsonParseFailures >= MAX_JSON_PARSE_FAILURES) {
-            console.error('Polling: too many invalid JSON responses, giving up')
+            appLog.e(TAG, 'Polling: too many invalid JSON responses, giving up')
             throw new Error('Invalid JSON response')
           }
-          console.error('Polling: invalid JSON response')
+          appLog.e(TAG, 'Polling: invalid JSON response')
           return
         }
         // Parse messages from server response
-        const latestMsgs = (data.messages || []).map(msg => {
+        const latestMsgs = (data.messages || []).map((msg: any) => {
           if (msg.role === 'assistant') {
             const { blocks, metadata, cancelled } = onParseAssistantContent(msg.content)
             msg.blocks = blocks
@@ -211,7 +216,7 @@ export function useChatStream(options: UseChatStreamOptions) {
           return
         }
         // Session still running — incremental update
-        const lastAssistant = latestMsgs.findLast(m => m.role === 'assistant')
+        const lastAssistant = latestMsgs.findLast((m: any) => m.role === 'assistant')
         const existingStreaming = findStreamingMsg(messages.value)
 
         if (lastAssistant && existingStreaming) {
@@ -238,7 +243,7 @@ export function useChatStream(options: UseChatStreamOptions) {
           debouncedRender()
         }
       } catch (err) {
-        console.error('Polling error:', err)
+        appLog.e(TAG, 'Polling error:', err)
         stopPolling()
         const sm = findStreamingMsg(messages.value)
         if (sm) {
@@ -325,7 +330,7 @@ export function useChatStream(options: UseChatStreamOptions) {
       let data
       try { data = JSON.parse(e.data) } catch { /* empty */ }
       if (data?.message_id) {
-        phase2.id = data.message_id
+        (phase2 as any).id = data.message_id
       }
       messages.value.push(phase2)
       onRenderNeeded()
@@ -338,7 +343,7 @@ export function useChatStream(options: UseChatStreamOptions) {
       if (!sm) return
       resetStreamTimeout()
       let data: any
-      try { data = JSON.parse(e.data) } catch { console.warn('SSE content: invalid JSON, skipping'); return }
+      try { data = JSON.parse(e.data) } catch { appLog.w(TAG, 'SSE content: invalid JSON, skipping'); return }
       const blocks = sm.blocks
       const existingText = findLastBlockOfType(blocks, 'text')
       if (existingText) {
@@ -355,7 +360,7 @@ export function useChatStream(options: UseChatStreamOptions) {
       if (!sm) return
       resetStreamTimeout()
       let data: any
-      try { data = JSON.parse(e.data) } catch { console.warn('SSE thinking: invalid JSON, skipping'); return }
+      try { data = JSON.parse(e.data) } catch { appLog.w(TAG, 'SSE thinking: invalid JSON, skipping'); return }
       const blocks = sm.blocks
       const existingThinking = findLastBlockOfType(blocks, 'thinking')
       if (existingThinking) {
@@ -389,9 +394,9 @@ export function useChatStream(options: UseChatStreamOptions) {
       if (!sm) return
       resetStreamTimeout()
       let data: any
-      try { data = JSON.parse(e.data) } catch { console.warn('SSE tool_use: invalid JSON, skipping'); return }
+      try { data = JSON.parse(e.data) } catch { appLog.w(TAG, 'SSE tool_use: invalid JSON, skipping'); return }
       const blocks = sm.blocks
-      const existing = blocks.find(b => b.type === 'tool_use' && b.id === data.id)
+      const existing = blocks.find((b: any) => b.type === 'tool_use' && b.id === data.id)
       if (data.done) {
         if (existing) {
           // Slim SSE: only input present for interactive tools
@@ -444,7 +449,7 @@ export function useChatStream(options: UseChatStreamOptions) {
           if (data.name !== 'PermissionApproval') {
             const timer = setTimeout(() => {
               if (!newBlock.done) {
-                console.warn(`tool_use block ${data.id} timed out without 'done', marking as done`)
+                appLog.w(TAG, `tool_use block ${data.id} timed out without 'done', marking as done`)
                 newBlock.done = true
                 onRenderNeeded()
               }
@@ -465,9 +470,9 @@ export function useChatStream(options: UseChatStreamOptions) {
       if (!sm) return
       resetStreamTimeout()
       let data: any
-      try { data = JSON.parse(e.data) } catch { console.warn('SSE tool_result: invalid JSON, skipping'); return }
+      try { data = JSON.parse(e.data) } catch { appLog.w(TAG, 'SSE tool_result: invalid JSON, skipping'); return }
       const blocks = sm.blocks
-      const existing = blocks.find(b => b.type === 'tool_use' && b.id === data.id)
+      const existing = blocks.find((b: any) => b.type === 'tool_use' && b.id === data.id)
       if (existing) {
         // Slim SSE: no input/output in tool_result events
         if (data.name) existing.name = data.name
@@ -488,7 +493,7 @@ export function useChatStream(options: UseChatStreamOptions) {
       if (!sm) return
       resetStreamTimeout()
       let data: any
-      try { data = JSON.parse(e.data) } catch { console.warn('SSE metadata: invalid JSON, skipping'); return }
+      try { data = JSON.parse(e.data) } catch { appLog.w(TAG, 'SSE metadata: invalid JSON, skipping'); return }
       sm.metadata = data
     })
 
@@ -503,9 +508,10 @@ export function useChatStream(options: UseChatStreamOptions) {
 
       // Diagnostic: log message state when done event received
       const doneSummary = messages.value.map((m: any, i: number) =>
-        `[${i}] ${m.role}${m.id ? ` id=${m.id}` : ''}${m.pending ? ' PENDING' : ''}${m.streaming ? ' STREAMING' : ''} content="${(m.content || '').slice(0, 30)}" blocks=${m.blocks?.length || 0}`
+        `[${i}] ${m.role}${m.id ? ` id=${m.id}` : ''}${m.streaming ? ' STREAMING' : ''} content="${(m.content || '').slice(0, 30)}" blocks=${m.blocks?.length || 0}`
       ).join(' | ')
-      console.log(`[done] before loadHistory: ${doneSummary}`)
+      const pendingCount = pendingStore.getPending(currentSessionId.value).length
+      appLog.d(TAG, `[done] pendingStore has ${pendingCount} item(s); messages: ${doneSummary}`)
 
       disconnectStream()
       reconnect.reset()
@@ -553,12 +559,12 @@ export function useChatStream(options: UseChatStreamOptions) {
       if (!sm) return
       resetStreamTimeout()
       let data: any
-      try { data = JSON.parse(e.data) } catch { console.warn('SSE warning: invalid JSON, skipping'); return }
+      try { data = JSON.parse(e.data) } catch { appLog.w(TAG, 'SSE warning: invalid JSON, skipping'); return }
       if (sm.streamingText) {
         sm.blocks.push({ type: 'text', text: sm.streamingText })
         sm.streamingText = ''
       }
-      const warningBlock = { type: 'warning', text: data.text }
+      const warningBlock: any = { type: 'warning', text: data.text }
       if (data.reason) warningBlock.reason = data.reason
       sm.blocks.push(warningBlock)
       if (isOpen.value) {
@@ -569,7 +575,7 @@ export function useChatStream(options: UseChatStreamOptions) {
     eventSource.addEventListener('mode_update', (e) => {
       if (sessionChanged()) return
       let data: any
-      try { data = JSON.parse(e.data) } catch { console.warn('SSE mode_update: invalid JSON, skipping'); return }
+      try { data = JSON.parse(e.data) } catch { appLog.w(TAG, 'SSE mode_update: invalid JSON, skipping'); return }
       if (data.currentModeId || data.availableModes?.length > 0) {
         updateModeState(data.currentModeId || '', data.availableModes || [])
       }
@@ -578,7 +584,7 @@ export function useChatStream(options: UseChatStreamOptions) {
     eventSource.addEventListener('config_update', (e) => {
       if (sessionChanged()) return
       let data: any
-      try { data = JSON.parse(e.data) } catch { console.warn('SSE config_update: invalid JSON, skipping'); return }
+      try { data = JSON.parse(e.data) } catch { appLog.w(TAG, 'SSE config_update: invalid JSON, skipping'); return }
       for (const opt of (data.options || [])) {
         if (opt.category === 'mode' || opt.id === 'mode') {
           const modes = (opt.values || []).map((v: any) => ({ id: v.id, name: v.name || v.id }))
@@ -593,7 +599,7 @@ export function useChatStream(options: UseChatStreamOptions) {
     eventSource.addEventListener('thinking_effort_update', (e) => {
       if (sessionChanged()) return
       let data: any
-      try { data = JSON.parse(e.data) } catch { console.warn('SSE thinking_effort_update: invalid JSON, skipping'); return }
+      try { data = JSON.parse(e.data) } catch { appLog.w(TAG, 'SSE thinking_effort_update: invalid JSON, skipping'); return }
       if (data.availableLevels?.length > 0) {
         const levels = (data.availableLevels || []).map((l: any) => ({ id: l.id, name: l.name || l.id }))
         updateAvailableThinkingEfforts(levels)
@@ -603,7 +609,7 @@ export function useChatStream(options: UseChatStreamOptions) {
     eventSource.addEventListener('commands_update', (e) => {
       if (sessionChanged()) return
       let data: any
-      try { data = JSON.parse(e.data) } catch { console.warn('SSE commands_update: invalid JSON, skipping'); return }
+      try { data = JSON.parse(e.data) } catch { appLog.w(TAG, 'SSE commands_update: invalid JSON, skipping'); return }
       if (Array.isArray(data.commands)) {
         updateCommandState(data.commands)
       }
@@ -612,7 +618,7 @@ export function useChatStream(options: UseChatStreamOptions) {
     eventSource.addEventListener('model_list_update', (e) => {
       if (sessionChanged()) return
       let data: any
-      try { data = JSON.parse(e.data) } catch { console.warn('SSE model_list_update: invalid JSON, skipping'); return }
+      try { data = JSON.parse(e.data) } catch { appLog.w(TAG, 'SSE model_list_update: invalid JSON, skipping'); return }
       if (Array.isArray(data.models) && data.models.length > 0) {
         const aid = currentAgentId.value
         if (aid) {
@@ -624,7 +630,7 @@ export function useChatStream(options: UseChatStreamOptions) {
     eventSource.addEventListener('plan_update', (e) => {
       if (sessionChanged()) return
       let data: any
-      try { data = JSON.parse(e.data) } catch { console.warn('SSE plan_update: invalid JSON, skipping'); return }
+      try { data = JSON.parse(e.data) } catch { appLog.w(TAG, 'SSE plan_update: invalid JSON, skipping'); return }
       if (Array.isArray(data.entries)) {
         updatePlanEntries(data.entries)
       }
@@ -633,63 +639,58 @@ export function useChatStream(options: UseChatStreamOptions) {
     eventSource.addEventListener('usage_update', (e) => {
       if (sessionChanged()) return
       let data: any
-      try { data = JSON.parse(e.data) } catch { console.warn('SSE usage_update: invalid JSON, skipping'); return }
+      try { data = JSON.parse(e.data) } catch { appLog.w(TAG, 'SSE usage_update: invalid JSON, skipping'); return }
       if (data.size > 0) {
         updateUsageState(data.used ?? 0, data.size, data.cost, data.currency)
       }
     })
 
     // ── Queue drain — atomic replacement for old queue_done + queue_consume ──
-    // Single event that atomically: finalizes current streaming, un-marks pending
-    // user message, creates new streaming placeholder.
+    // Single event that atomically: finalizes current streaming, creates new
+    // streaming placeholder. Pending messages are handled by pendingStore.
     eventSource.addEventListener('queue_drain', (e) => {
       resetStreamTimeout()
       let data: any
-      try { data = JSON.parse(e.data) } catch { console.warn('SSE queue_drain: invalid JSON, skipping'); return }
+      try { data = JSON.parse(e.data) } catch { appLog.w(TAG, 'SSE queue_drain: invalid JSON, skipping'); return }
 
-      const userContent = data.text || ''
-      const userFiles = (data.files || []).map((p: string) => p)
+      if (!sessionChanged()) {
+        // Push the drain message to messages.value BEFORE removing from pendingStore.
+        // This ensures the formal user message is already rendered when the
+        // pending message disappears, making the transition atomic — the user
+        // never sees a gap where neither is visible.
+        const drainText = data.text || ''
+        const drainFiles = [...(data.filePaths || []), ...(data.files || [])]
+        drainQueueMessage(
+          messages.value, drainText, drainFiles, currentBackend.value,
+          { onRenderNeeded, onExtractScheduledTasks }
+        )
 
-      if (sessionChanged()) {
-        // Session changed — still sync pending messages from backend queue
-        // but don't process the drain (a different session owns it now)
-        syncPendingFromBackend(messages.value, data.queue || [])
-        return
+        if (isOpen.value) {
+          onRenderNeeded()
+          onScrollBottom(true)
+        }
       }
 
-      // Process the drain FIRST: finalize streaming, un-mark pending user msg,
-      // push new streaming placeholder. This must happen before syncPendingFromBackend
-      // because the backend queue no longer contains the drained message — if we
-      // synced first, the pending message would be deleted before we can un-mark it.
-      drainQueueMessage(
-        messages.value, userContent, userFiles, currentBackend.value,
-        { onRenderNeeded, onExtractScheduledTasks }
-      )
-
-      // Now sync pending messages with the backend queue state.
-      // At this point, the drained message's pending flag is already removed,
-      // so syncPendingFromBackend won't touch it.
-      syncPendingFromBackend(messages.value, data.queue || [])
-
-      if (isOpen.value) {
-        onRenderNeeded()
-        onScrollBottom(true)
-      }
+      // After pushing the drain message, sync pendingStore.
+      // The drained message is removed from the backend queue, so syncFromBackendQueue
+      // will remove it from pendingStore[sessionId].
+      // Always update pendingStore — this is per-session so no cross-session contamination.
+      pendingStore.syncFromBackendQueue(sessionId, data.queue || [])
     })
 
     // queue_update: sent when a new message is enqueued while a session is running.
-    // Syncs pending messages with the authoritative backend queue state.
+    // Syncs pendingStore with the authoritative backend queue state.
     eventSource.addEventListener('queue_update', (e) => {
       resetStreamTimeout()
       let data: any
-      try { data = JSON.parse(e.data) } catch { console.warn('SSE queue_update: invalid JSON, skipping'); return }
+      try { data = JSON.parse(e.data) } catch { appLog.w(TAG, 'SSE queue_update: invalid JSON, skipping'); return }
 
-      // Sync pending messages in messages.value with the backend queue
-      syncPendingFromBackend(messages.value, data.queue || [])
+      // Always update pendingStore — per-session, no contamination possible.
+      pendingStore.syncFromBackendQueue(sessionId, data.queue || [])
 
       if (sessionChanged()) return
 
-      // Trigger render when pending messages are added/removed
+      // Trigger render when pending messages are added/removed for the current session
       onRenderNeeded()
     })
 
@@ -700,7 +701,7 @@ export function useChatStream(options: UseChatStreamOptions) {
       sseErrorHandled = true
       disconnectStream()
       let errorData: any
-      try { errorData = JSON.parse(e.data) } catch { /* ignore parse failure */ }
+      try { errorData = JSON.parse((e as MessageEvent).data) } catch { /* ignore parse failure */ }
       if (errorData?.reason === 'sse_busy') {
         sseErrorHandled = false
         return
@@ -710,7 +711,7 @@ export function useChatStream(options: UseChatStreamOptions) {
         if (sessionChanged()) return
         const sm = findStreamingMsg(messages.value)
         if (sm) {
-          const errorBlock = { type: 'error', text: errorData?.error || 'Unknown error' }
+          const errorBlock: any = { type: 'error', text: errorData?.error || 'Unknown error' }
           if (errorData?.reason) errorBlock.reason = errorData.reason
           sm.blocks = [errorBlock]
         }
@@ -752,7 +753,7 @@ export function useChatStream(options: UseChatStreamOptions) {
     try {
       await cancelChat(currentSessionId.value)
     } catch (err) {
-      console.error('Failed to cancel:', err)
+      appLog.e(TAG, 'Failed to cancel:', err)
       disconnectStream()
       forceCleanupStreamingState()
       onStreamEnd?.('cancelled')
@@ -762,7 +763,7 @@ export function useChatStream(options: UseChatStreamOptions) {
   function handleOnline() {
     if (!loading.value || !currentSessionId.value) return
     if (eventSource) {
-      console.info('Network recovered, reconnecting SSE stream')
+      appLog.i(TAG, 'Network recovered, reconnecting SSE stream')
       disconnectStream()
       connectStream(currentSessionId.value)
     }

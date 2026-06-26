@@ -123,8 +123,45 @@ func ServeChatCount(w http.ResponseWriter, r *http.Request) {
 		writeLocalizedError(w, r, model.Forbidden(nil, "AccessDenied"))
 		return
 	}
+	// Verify session is not soft-deleted (GetSessionBackend filters deleted=0)
+	if service.GetSessionBackend(sessionID) == "" {
+		writeLocalizedErrorf(w, r, http.StatusNotFound, "SessionNotFound")
+		return
+	}
 	count := service.GetChatMessageCount(sessionID)
 	writeJSON(w, http.StatusOK, map[string]any{"count": count})
+}
+
+// ServeUserMessageIndex returns lightweight {id, content, files} for all user messages
+// in a session. Used for the user message index navigation feature.
+func ServeUserMessageIndex(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, http.MethodGet) {
+		return
+	}
+	projectPath, ok := requireProject(w, r)
+	if !ok {
+		return
+	}
+	sessionID, ok := requireSessionID(w, r)
+	if !ok {
+		return
+	}
+	// Verify the session belongs to the requesting project
+	if sessionProject := service.GetSessionProjectPath(sessionID); sessionProject != projectPath {
+		writeLocalizedError(w, r, model.Forbidden(nil, "AccessDenied"))
+		return
+	}
+	// Verify session is not soft-deleted (GetSessionBackend filters deleted=0)
+	if service.GetSessionBackend(sessionID) == "" {
+		writeLocalizedErrorf(w, r, http.StatusNotFound, "SessionNotFound")
+		return
+	}
+	messages, err := service.GetUserMessageIndex(sessionID)
+	if err != nil {
+		model.WriteError(w, model.Internal(fmt.Errorf("failed to load user message index")))
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"messages": messages})
 }
 
 // ServeChatMessageUpdate handles PUT to update a specific message's content.

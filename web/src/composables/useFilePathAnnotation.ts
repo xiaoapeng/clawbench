@@ -148,7 +148,7 @@ export function resolveFilePathDual(path: string, projectRoot: string, homeDir?:
 
     // ── Relative path without any root ──
     if (!projectRoot && !baseDir) {
-        let clean = path.replace(/^\.\//, '')
+        const clean = path.replace(/^\.\//, '')
         if (clean.startsWith('../')) return null
         return { primary: clean, fallback: clean }
     }
@@ -643,7 +643,7 @@ export async function openFilePath(resolvedPath: string, lineStart?: number, lin
         try {
             const resp = await fetch(`/api/dir?path=${encodeURIComponent(resolvedPath)}`)
             if (resp.ok) {
-                await store.pushDir(resolvedPath)
+                await store.navigateToDir(resolvedPath)
                 window.dispatchEvent(new CustomEvent('close-file-overlay'))
                 window.dispatchEvent(new CustomEvent('open-file-manager'))
                 return true
@@ -671,12 +671,12 @@ export async function openFilePath(resolvedPath: string, lineStart?: number, lin
             if (isExternal && type === 'dir') {
                 const { useToast } = await import('@/composables/useToast')
                 const { gt } = await import('@/composables/useLocale')
-                useToast().show(gt('file.toast.externalDirNotSupported'), { type: 'warning', icon: '📁', duration: 2000 })
+                useToast().show(gt('file.toast.externalDirNotSupported'), { type: 'info', icon: '📁', duration: 2000 })
                 return false
             }
             if (type === 'dir') {
                 // Path is a directory — navigate into it instead of opening as file
-                await store.pushDir(resolvedPath)
+                await store.navigateToDir(resolvedPath)
                 window.dispatchEvent(new CustomEvent('close-file-overlay'))
                 window.dispatchEvent(new CustomEvent('open-file-manager'))
                 return true

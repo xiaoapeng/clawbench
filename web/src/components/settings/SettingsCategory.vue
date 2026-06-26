@@ -1,5 +1,15 @@
 <template>
-  <div class="settings-category">
+  <!-- Agent config sub-routes -->
+  <SettingsAgentsIndex
+    v-if="categoryId === 'agents'"
+    @navigate="(id: string) => $emit('navigate', id)"
+  />
+  <SettingsAgentDetail
+    v-else-if="categoryId.startsWith('agents:')"
+    :agent-id="categoryId.slice(7)"
+  />
+  <!-- Standard settings category -->
+  <div v-else class="settings-category">
     <SettingsItem
       v-for="item in items"
       :key="item.key"
@@ -33,13 +43,15 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import SettingsItem from './SettingsItem.vue'
 import PasswordChangeDialog from './PasswordChangeDialog.vue'
+import SettingsAgentsIndex from './SettingsAgentsIndex.vue'
+import SettingsAgentDetail from './SettingsAgentDetail.vue'
 import { useSettingsConfig } from '@/composables/useSettingsConfig'
 import { useAgents } from '@/composables/useAgents'
 import { useToast } from '@/composables/useToast'
 import { useDialog } from '@/composables/useDialog'
 import { useAppMode } from '@/composables/useAppMode'
 import { useGlobalEvents } from '@/composables/useGlobalEvents'
-import { categoryItems, type ItemSpec, type DependsOn } from './settingsFieldMap'
+import { categoryItems, engineVoiceOptions, type ItemSpec, type DependsOn } from './settingsFieldMap'
 
 const props = defineProps<{
   categoryId: string
@@ -61,9 +73,9 @@ const { pushRegistered } = useGlobalEvents()
 const activeKey = ref<string | null>(null)
 const showPasswordDialog = ref(false)
 
-// Load agents when chat category is shown (for default_agent options)
+// Load agents when chat or agents category is shown
 watch(() => props.categoryId, (id) => {
-  if (id === 'chat') loadAgents(true)
+  if (id === 'chat' || id === 'agents' || id.startsWith('agents:')) loadAgents(true)
 }, { immediate: true })
 
 function resolveConfigValue(key: string): any {
@@ -126,6 +138,11 @@ const items = computed(() => {
         value: a.id,
         label: `${a.icon} ${a.name}`,
       }))
+    }
+    // Dynamically build options for tts.voice based on current engine
+    if (item.key === 'tts.voice') {
+      const engine = resolveConfigValue('tts.engine') || 'edge'
+      resolvedOptions = engineVoiceOptions[engine] ?? []
     }
 
     return {

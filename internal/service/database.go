@@ -39,8 +39,11 @@ func InitDB(runFromServer ...bool) error { //nolint:gocognit,gocyclo // multi-ta
 		return fmt.Errorf("failed to open database: %w", err)
 	}
 
-	// SQLite concurrency: single connection + WAL mode + busy timeout
-	DB.SetMaxOpenConns(1)
+	// SQLite concurrency: WAL mode + busy timeout
+	// MaxOpenConns must be > 1 to avoid deadlocks when iterating rows (which holds
+	// a connection) and performing writes (which needs a separate connection) in the
+	// same loop — e.g., MigrateCustomSystemPrompt's SELECT + UPDATE pattern.
+	DB.SetMaxOpenConns(2)
 
 	// Enable WAL mode for concurrent reads during writes
 	if _, err := DB.Exec("PRAGMA journal_mode=WAL"); err != nil {
@@ -282,19 +285,6 @@ func InitDB(runFromServer ...bool) error { //nolint:gocognit,gocyclo // multi-ta
 		}
 	}
 
-	// Migrate: backfill external_session_id for sessions where it's empty.
-	// NOTE: This must run AFTER the transport column migration below.
-	// We moved it here for schema compatibility; the actual backfill happens
-	// after the transport column is guaranteed to exist.
-	var needBackfillExternalID bool
-	var backfillErr error
-	// Check if external_session_id needs backfilling (any empty rows exist).
-	var emptyExtIDCount int
-	_ = DB.QueryRow("SELECT COUNT(*) FROM chat_sessions WHERE (external_session_id = '' OR external_session_id IS NULL) AND id != ''").Scan(&emptyExtIDCount)
-	if emptyExtIDCount > 0 {
-		needBackfillExternalID = true
-	}
-
 	// Migrate: add source_session_id column for "continue conversation" feature
 	var hasTransport int
 	_ = DB.QueryRow("SELECT COUNT(*) FROM pragma_table_info('chat_sessions') WHERE name='transport'").Scan(&hasTransport)
@@ -302,35 +292,6 @@ func InitDB(runFromServer ...bool) error { //nolint:gocognit,gocyclo // multi-ta
 		if _, err := DB.Exec("ALTER TABLE chat_sessions ADD COLUMN transport TEXT DEFAULT ''"); err != nil {
 			return fmt.Errorf("failed to add transport column: %w", err)
 		}
-	}
-
-	// Now that transport column exists, run the external_session_id backfill
-	// and cleanup that we deferred from earlier in this function.
-	if needBackfillExternalID {
-		// Only backfill for CLI sessions (transport != 'acp-stdio') — ACP sessions
-		// get their external_session_id from session_capture events, and pre-filling
-		// it with the ClawBench UUID causes ResumeSession to fail.
-		result, err := DB.Exec("UPDATE chat_sessions SET external_session_id = id WHERE (external_session_id = '' OR external_session_id IS NULL) AND id != '' AND COALESCE(transport, '') != 'acp-stdio'")
-		if err != nil {
-			backfillErr = err
-		} else if rowsAffected, _ := result.RowsAffected(); rowsAffected > 0 {
-			slog.Info("backfilled external_session_id for existing CLI sessions", slog.Int64("rows", rowsAffected))
-		}
-	}
-	if backfillErr != nil {
-		return fmt.Errorf("failed to backfill external_session_id: %w", backfillErr)
-	}
-
-	// Clear incorrectly backfilled external_session_id for ACP sessions.
-	// The original migration unconditionally set external_session_id = id for all
-	// sessions, but ACP sessions get their external_session_id from session_capture.
-	// The backfilled ClawBench UUID is not a valid ACP session ID, causing
-	// ResumeSession to fail with "Resource not found".
-	cleanResult, cleanErr := DB.Exec("UPDATE chat_sessions SET external_session_id = '' WHERE transport = 'acp-stdio' AND external_session_id = id")
-	if cleanErr != nil {
-		slog.Warn("failed to clean external_session_id for ACP sessions", "error", cleanErr)
-	} else if rows, _ := cleanResult.RowsAffected(); rows > 0 {
-		slog.Info("cleaned incorrectly backfilled external_session_id for ACP sessions", slog.Int64("rows", rows))
 	}
 
 	// Migrate: add auto_approve column for per-session auto-approve (甩手掌柜) mode
@@ -362,6 +323,15 @@ func InitDB(runFromServer ...bool) error { //nolint:gocognit,gocyclo // multi-ta
 		// Backfill: local_port = port for existing rows
 		if _, err := DB.Exec("UPDATE forwarded_ports SET local_port = port WHERE local_port IS NULL"); err != nil {
 			return fmt.Errorf("failed to backfill local_port in forwarded_ports: %w", err)
+		}
+	}
+
+	// Migrate: add custom_system_prompt column to agents for user-editable system prompt
+	var hasCustomSystemPrompt int
+	_ = DB.QueryRow("SELECT COUNT(*) FROM pragma_table_info('agents') WHERE name='custom_system_prompt'").Scan(&hasCustomSystemPrompt)
+	if hasCustomSystemPrompt == 0 {
+		if _, err := DB.Exec("ALTER TABLE agents ADD COLUMN custom_system_prompt TEXT NOT NULL DEFAULT ''"); err != nil {
+			return fmt.Errorf("failed to add custom_system_prompt column to agents: %w", err)
 		}
 	}
 
@@ -431,7 +401,7 @@ func InitDB(runFromServer ...bool) error { //nolint:gocognit,gocyclo // multi-ta
 	}
 
 	// Initialize read connection pool for concurrent reads (WAL mode).
-	// WAL contract: DB (MaxOpenConns=1) serializes writes; DBRead (MaxOpenConns=2)
+	// WAL contract: DB (MaxOpenConns=2) serializes writes + avoids deadlocks; DBRead (MaxOpenConns=2)
 	// allows concurrent reads that never block writes and vice versa.
 	// Both pools must use WAL mode + busy_timeout for this to work correctly.
 	DBRead, err = sql.Open("sqlite", dbPath)

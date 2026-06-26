@@ -1,11 +1,13 @@
 // Global application state (singleton reactive store)
 import { reactive } from 'vue'
 import { apiGet, apiPost } from '@/utils/api'
+import { appLog } from '@/utils/appLog'
 import { baseName, dirName } from '@/utils/path.ts'
 import { gt } from '@/composables/useLocale'
 import { useToast } from '@/composables/useToast'
 import { useDialog } from '@/composables/useDialog'
-import { useDirStack } from '@/composables/useDirStack'
+
+const TAG = 'Store'
 
 interface DirEntry {
     name: string
@@ -45,7 +47,6 @@ interface AppState {
     chatInitialMessages: number
     chatPageSize: number
     chatSessionPageSize: number
-    chatCollapsedHeight: number
     sessionMaxCount: number
     sessionCount: number
 
@@ -111,7 +112,6 @@ const state = reactive<AppState>({
     chatInitialMessages: 20,
     chatPageSize: 20,
     chatSessionPageSize: 10,
-    chatCollapsedHeight: 150,
     sessionMaxCount: 10,
     sessionCount: 0,
     recentProjectsMaxCount: 10,
@@ -151,18 +151,17 @@ const state = reactive<AppState>({
 async function loadProject(): Promise<void> {
     try {
         try {
-            const wd = await apiGet<{ roots: string[]; uploadMaxSizeMB: number; uploadMaxFiles: number; chatInitialMessages?: number; chatPageSize?: number; chatSessionPageSize?: number; chatCollapsedHeight?: number; sessionMaxCount?: number; recentProjectsMaxCount?: number }>('/api/roots')
+            const wd = await apiGet<{ roots: string[]; uploadMaxSizeMB: number; uploadMaxFiles: number; chatInitialMessages?: number; chatPageSize?: number; chatSessionPageSize?: number; sessionMaxCount?: number; recentProjectsMaxCount?: number }>('/api/roots')
             state.rootPaths = wd.roots || []
             if (wd.uploadMaxSizeMB > 0) state.uploadMaxSizeMB = wd.uploadMaxSizeMB
             if (wd.uploadMaxFiles > 0) state.uploadMaxFiles = wd.uploadMaxFiles
-            if (wd.chatInitialMessages > 0) state.chatInitialMessages = wd.chatInitialMessages
-            if (wd.chatPageSize > 0) state.chatPageSize = wd.chatPageSize
-            if (wd.chatSessionPageSize > 0) state.chatSessionPageSize = wd.chatSessionPageSize
-            if (wd.chatCollapsedHeight > 0) state.chatCollapsedHeight = wd.chatCollapsedHeight
-            if (wd.sessionMaxCount > 0) state.sessionMaxCount = wd.sessionMaxCount
-            if (wd.recentProjectsMaxCount > 0) state.recentProjectsMaxCount = wd.recentProjectsMaxCount
+            if ((wd.chatInitialMessages ?? 0) > 0) state.chatInitialMessages = wd.chatInitialMessages!
+            if ((wd.chatPageSize ?? 0) > 0) state.chatPageSize = wd.chatPageSize!
+            if ((wd.chatSessionPageSize ?? 0) > 0) state.chatSessionPageSize = wd.chatSessionPageSize!
+            if ((wd.sessionMaxCount ?? 0) > 0) state.sessionMaxCount = wd.sessionMaxCount!
+            if ((wd.recentProjectsMaxCount ?? 0) > 0) state.recentProjectsMaxCount = wd.recentProjectsMaxCount!
         } catch (error) {
-            console.error('[loadProject] roots failed:', error)
+            appLog.e(TAG, '[loadProject] roots failed:', error)
         }
         const data = await apiGet<{ path: string; homeDir?: string }>('/api/project')
         if (!data.path) return
@@ -171,7 +170,7 @@ async function loadProject(): Promise<void> {
         state.homeDir = data.homeDir || ''
         localStorage.setItem('currentProjectPath', data.path)
     } catch (error) {
-        console.error('[loadProject] failed:', error)
+        appLog.e(TAG, '[loadProject] failed:', error)
     }
 }
 
@@ -180,7 +179,7 @@ async function setProject(path: string): Promise<string> {
         ok: string; path: string; homeDir?: string
         roots?: string[]; uploadMaxSizeMB?: number; uploadMaxFiles?: number
         chatInitialMessages?: number; chatPageSize?: number; chatSessionPageSize?: number
-        chatCollapsedHeight?: number; sessionMaxCount?: number; recentProjectsMaxCount?: number
+        sessionMaxCount?: number; recentProjectsMaxCount?: number
     }>('/api/project', { path })
     resetProjectState()
     // Apply expanded response from POST — eliminates follow-up GET /api/roots + GET /api/project
@@ -196,7 +195,6 @@ async function setProject(path: string): Promise<string> {
     if ((data as any).chatInitialMessages > 0) state.chatInitialMessages = (data as any).chatInitialMessages
     if ((data as any).chatPageSize > 0) state.chatPageSize = (data as any).chatPageSize
     if ((data as any).chatSessionPageSize > 0) state.chatSessionPageSize = (data as any).chatSessionPageSize
-    if ((data as any).chatCollapsedHeight > 0) state.chatCollapsedHeight = (data as any).chatCollapsedHeight
     if ((data as any).sessionMaxCount > 0) state.sessionMaxCount = (data as any).sessionMaxCount
     if ((data as any).recentProjectsMaxCount > 0) state.recentProjectsMaxCount = (data as any).recentProjectsMaxCount
     return data.path || path
@@ -214,7 +212,6 @@ function resetProjectState(): void {
     state.dirLoading = false
     state.fileLoading = false
     state.currentFile = null
-    useDirStack().resetStack()
     // Git
     state.gitBranch = ''
     state.gitHead = ''
@@ -235,7 +232,6 @@ function resetProjectState(): void {
     state.chatInitialMessages = 20
     state.chatPageSize = 20
     state.chatSessionPageSize = 10
-    state.chatCollapsedHeight = 150
     state.sessionMaxCount = 10
     state.sessionCount = 0
     state.recentProjectsMaxCount = 10
@@ -271,6 +267,10 @@ let selectFileSeq = 0 // monotonic counter to suppress stale concurrent file loa
 
 async function loadFiles(dir = ''): Promise<void> {
     const seq = ++loadFilesSeq // this call supersedes any earlier in-flight call
+    // Defensive: strip leading slashes so currentDir is always a project-relative path.
+    // The Go backend treats paths starting with "/" as absolute filesystem paths,
+    // which causes 500 errors when they're not under configured root paths.
+    dir = dir.replace(/^\/+/, '')
     const prevDir = state.currentDir
     const prevEntries = state.dirEntries.slice()
     state.dirLoading = true
@@ -278,7 +278,10 @@ async function loadFiles(dir = ''): Promise<void> {
         const url = dir ? `/api/dir?path=${encodeURIComponent(dir)}` : '/api/dir?path='
         const data = await apiGet<{ items: DirEntry[] }>(url)
         // A newer loadFiles call started while we were awaiting — discard our result
-        if (seq !== loadFilesSeq) return
+        if (seq !== loadFilesSeq) {
+            appLog.d(TAG, `[loadFiles] seq=${seq} discarded (current=${loadFilesSeq})`)
+            return
+        }
         state.currentDir = dir
         state.dirEntries = data.items || []
     } catch (err) {
@@ -298,8 +301,6 @@ async function loadFiles(dir = ''): Promise<void> {
 
 async function selectFile(path: string, isImageFile = false, isAudioFile = false, addToHistory = true, forceText = false): Promise<boolean> {
     const seq = ++selectFileSeq // this call supersedes any earlier in-flight call
-    const key = 'clawbenchLastFile_' + state.projectRoot
-    if (key !== 'clawbenchLastFile_') localStorage.setItem(key, path)
 
     // Detect media files by extension (avoids dynamic import)
     const imageExts = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp', '.ico', '.tiff', '.tif', '.avif']
@@ -385,7 +386,6 @@ async function selectFile(path: string, isImageFile = false, isAudioFile = false
         return true
     } catch (err) {
         // Don't replace currentFile — keep the previously opened file visible.
-        // Show the error as a toast bubble instead.
         useToast().show((err as Error).message, { type: 'error', icon: '⚠️' })
         return false
     } finally {
@@ -396,58 +396,90 @@ async function selectFile(path: string, isImageFile = false, isAudioFile = false
 }
 
 async function deleteFile(filePath: string): Promise<void> {
-    if (!await useDialog().confirm(gt('file.header.confirmDelete', { name: baseName(filePath) }), { dangerous: true })) return
-    await apiPost('/api/file/delete', { path: filePath })
+    appLog.d(TAG, '[deleteFile] start:', filePath)
+    const confirmed = await useDialog().confirm(gt('file.header.confirmDelete', { name: baseName(filePath) }), { dangerous: true })
+    appLog.d(TAG, '[deleteFile] dialog result:', confirmed)
+    if (!confirmed) {
+        appLog.d(TAG, '[deleteFile] user cancelled')
+        return
+    }
+    try {
+        await apiPost('/api/file/delete', { path: filePath })
+        appLog.d(TAG, '[deleteFile] API success')
+    } catch (err) {
+        // File not found = already deleted (e.g. concurrent delete), treat as success
+        const msgKey = (err as Error & { msgKey?: string })?.msgKey
+        if (msgKey !== 'FileNotFoundShort') {
+            appLog.e(TAG, '[deleteFile] API error:', err)
+            useToast().show(gt('file.toast.deleteFailed'), { type: 'error', icon: '⚠️' })
+        } else {
+            appLog.d(TAG, '[deleteFile] file already gone (404), treating as success')
+        }
+    }
     if (state.currentFile?.path === filePath) {
         state.currentFile = null
     }
-    await loadFiles(state.currentDir)
+    appLog.d(TAG, '[deleteFile] refreshing, currentDir:', state.currentDir, 'loadFilesSeq:', loadFilesSeq)
+    await Promise.all([loadFiles(state.currentDir), loadGitBranch()])
+    appLog.d(TAG, '[deleteFile] done, dirEntries count:', state.dirEntries.length)
 }
 
 async function deleteFiles(paths: string[]): Promise<void> {
     if (!paths.length) return
-    await Promise.all(paths.map(p => apiPost('/api/file/delete', { path: p })))
+    appLog.d(TAG, '[deleteFiles] start:', paths.length, 'files')
+    const results = await Promise.allSettled(paths.map(p => apiPost('/api/file/delete', { path: p })))
+    const realFailures = results.filter(r => {
+        if (r.status !== 'rejected') return false
+        const msgKey = ((r as PromiseRejectedResult).reason as Error & { msgKey?: string })?.msgKey
+        return msgKey !== 'FileNotFoundShort' // already deleted = not a real failure
+    })
+    if (realFailures.length) {
+        appLog.e(TAG, '[deleteFiles] some deletes failed:', realFailures.map(r => (r as PromiseRejectedResult).reason))
+        useToast().show(gt('file.toast.deleteFailed'), { type: 'error', icon: '⚠️' })
+    }
     if (state.currentFile && paths.includes(state.currentFile.path)) {
         state.currentFile = null
+    }
+    await Promise.all([loadFiles(state.currentDir), loadGitBranch()])
+    appLog.d(TAG, '[deleteFiles] done, dirEntries count:', state.dirEntries.length)
+}
+
+async function renameFile(path: string, newName: string): Promise<void> {
+    try {
+        await apiPost('/api/file/rename', { path, name: newName })
+    } catch (err) {
+        const msgKey = (err as Error & { msgKey?: string })?.msgKey
+        if (msgKey === 'FileNotFoundShort') {
+            // File already gone — treat as success
+        } else {
+            const toast = useToast()
+            toast.show(gt('file.toast.renameFailed') || 'Rename failed', { icon: '❌', type: 'error', duration: 2000 })
+            throw err
+        }
+    }
+    // If the renamed file is currently being viewed, re-select it at the new path
+    if (state.currentFile?.path === path) {
+        const dir = dirName(path)
+        const newPath = dir ? `${dir}/${newName}` : newName
+        await selectFile(newPath)
     }
     await loadFiles(state.currentDir)
 }
 
-async function renameFile(path: string, newName: string): Promise<void> {
-    await apiPost('/api/file/rename', { path, name: newName })
-    await loadFiles(state.currentDir)
-}
-
 // =============================================
-// Directory stack navigation
+// Directory navigation
 // =============================================
 
-async function pushDir(path: string): Promise<void> {
+async function navigateToDir(path: string): Promise<void> {
     if (state.dirLoading) return
-    const dirStack = useDirStack()
-    await dirStack.pushDirAndLoad(path, () => loadFiles(path))
+    await loadFiles(path)
 }
 
-async function popDir(): Promise<void> {
+async function navigateToParentDir(): Promise<void> {
     if (state.dirLoading) return
-    const dirStack = useDirStack()
-    await dirStack.popDirAndLoad(() => loadFiles(useDirStack().currentDir.value))
-}
-
-async function truncateToDir(path: string): Promise<void> {
-    if (state.dirLoading) return
-    const dirStack = useDirStack()
-    await dirStack.truncateToDirAndLoad(path, () => loadFiles(path))
-}
-
-async function replaceDirTop(path: string): Promise<void> {
-    if (state.dirLoading) return
-    const dirStack = useDirStack()
-    await dirStack.replaceTopAndLoad(path, () => loadFiles(path))
-}
-
-function resetDirStack(path?: string): void {
-    useDirStack().resetStack(path)
+    if (state.currentDir === '') return // already at project root, nothing to go back to
+    const parent = dirName(state.currentDir)
+    await loadFiles(parent)
 }
 
 export const store = {
@@ -461,9 +493,6 @@ export const store = {
     deleteFile,
     deleteFiles,
     renameFile,
-    pushDir,
-    popDir,
-    truncateToDir,
-    replaceDirTop,
-    resetDirStack,
+    navigateToDir,
+    navigateToParentDir,
 }

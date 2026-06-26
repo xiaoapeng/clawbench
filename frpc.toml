@@ -1,0 +1,18 @@
+serverAddr = "ha.wwszxc.tax"
+serverPort = 17769
+auth.method = "token"
+auth.token = "877227"
+
+[[proxies]]
+name = "wsl-ssh"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 2222
+remotePort = 17772
+
+[[proxies]]
+name = "clawbench"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 20000
+remotePort = 17774

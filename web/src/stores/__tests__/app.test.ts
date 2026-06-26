@@ -11,7 +11,7 @@ vi.mock('@/utils/api', () => ({
 // Mock path utils
 vi.mock('@/utils/path.ts', () => ({
     baseName: (p: string) => p.split('/').pop() || '',
-    dirName: (p: string) => p.split('/').slice(0, -1).join('/') || '/',
+    dirName: (p: string) => { const parts = p.split('/'); parts.pop(); return parts.join('/') },
 }))
 
 // Mock useLocale
@@ -20,26 +20,15 @@ vi.mock('@/composables/useLocale', () => ({
 }))
 
 // Mock useToast
+const mockToastShow = vi.fn()
 vi.mock('@/composables/useToast', () => ({
-    useToast: () => ({ show: vi.fn() }),
+    useToast: () => ({ show: mockToastShow }),
 }))
 
 // Mock useDialog
+const mockDialogConfirm = vi.fn().mockResolvedValue(true)
 vi.mock('@/composables/useDialog', () => ({
-    useDialog: () => ({ confirm: vi.fn().mockResolvedValue(true) }),
-}))
-
-// Mock useDirStack
-const mockDirStack = {
-    pushDirAndLoad: vi.fn().mockResolvedValue(undefined),
-    popDirAndLoad: vi.fn().mockResolvedValue(undefined),
-    truncateToDirAndLoad: vi.fn().mockResolvedValue(undefined),
-    replaceTopAndLoad: vi.fn().mockResolvedValue(undefined),
-    resetStack: vi.fn(),
-    currentDir: { value: '/project' },
-}
-vi.mock('@/composables/useDirStack', () => ({
-    useDirStack: () => mockDirStack,
+    useDialog: () => ({ confirm: mockDialogConfirm }),
 }))
 
 import { store } from '@/stores/app'
@@ -118,7 +107,6 @@ describe('store', () => {
             store.state.chatInitialMessages = 999
             store.state.chatPageSize = 999
             store.state.chatSessionPageSize = 999
-            store.state.chatCollapsedHeight = 999
             store.state.sessionMaxCount = 999
             store.state.recentProjectsMaxCount = 999
 
@@ -129,7 +117,6 @@ describe('store', () => {
             expect(store.state.chatInitialMessages).toBe(20)
             expect(store.state.chatPageSize).toBe(20)
             expect(store.state.chatSessionPageSize).toBe(10)
-            expect(store.state.chatCollapsedHeight).toBe(150)
             expect(store.state.sessionMaxCount).toBe(10)
             expect(store.state.recentProjectsMaxCount).toBe(10)
         })
@@ -507,79 +494,101 @@ describe('store', () => {
 
             expect(mockApiPost).toHaveBeenCalledWith('/api/file/rename', { path: '/project/old.txt', name: 'new.txt' })
         })
+
+        it('shows error toast on rename failure', async () => {
+            const err = Object.assign(new Error('rename failed'), { msgKey: 'InternalError' })
+            mockApiPost.mockRejectedValue(err)
+            mockToastShow.mockClear()
+
+            await expect(store.renameFile('/project/old.txt', 'new.txt')).rejects.toThrow('rename failed')
+            expect(mockToastShow).toHaveBeenCalled()
+        })
+
+        it('treats FileNotFoundShort as success', async () => {
+            const err = Object.assign(new Error('not found'), { msgKey: 'FileNotFoundShort' })
+            mockApiPost.mockRejectedValue(err)
+            mockApiGet.mockResolvedValue({ entries: [] })
+            mockToastShow.mockClear()
+
+            await store.renameFile('/project/old.txt', 'new.txt')
+            expect(mockToastShow).not.toHaveBeenCalled()
+        })
+
+        it('re-selects current file at new path after rename', async () => {
+            store.state.currentDir = '/project'
+            store.state.currentFile = { path: '/project/old.txt', name: 'old.txt' }
+            mockApiPost.mockResolvedValue({})
+            mockApiGet.mockResolvedValue({ entries: [] })
+
+            await store.renameFile('/project/old.txt', 'new.txt')
+
+            // Should have called selectFile with the new path
+            expect(mockApiGet).toHaveBeenCalled()
+        })
     })
 
-    // ── Directory stack navigation ──
+    // ── Directory navigation ──
 
-    describe('pushDir', () => {
-        it('calls dirStack.pushDirAndLoad', async () => {
+    describe('navigateToDir', () => {
+        it('calls loadFiles with the given path (normalized)', async () => {
             store.state.dirLoading = false
+            mockApiGet.mockResolvedValue({ items: [] })
 
-            await store.pushDir('/project/sub')
+            await store.navigateToDir('/project/sub')
 
-            expect(mockDirStack.pushDirAndLoad).toHaveBeenCalledWith('/project/sub', expect.any(Function))
+            // Leading slashes are stripped so the backend receives a relative path
+            expect(mockApiGet).toHaveBeenCalledWith('/api/dir?path=project%2Fsub')
         })
 
         it('skips if dirLoading is true', async () => {
             store.state.dirLoading = true
 
-            await store.pushDir('/project/sub')
+            await store.navigateToDir('/project/sub')
 
-            expect(mockDirStack.pushDirAndLoad).not.toHaveBeenCalled()
+            // loadFiles should not have been called (apiGet not called for dir)
+            expect(mockApiGet).not.toHaveBeenCalled()
         })
     })
 
-    describe('popDir', () => {
-        it('calls dirStack.popDirAndLoad', async () => {
+    describe('navigateToParentDir', () => {
+        it('navigates to parent directory using dirName', async () => {
             store.state.dirLoading = false
+            store.state.currentDir = 'src/composables'
+            mockApiGet.mockResolvedValue({ items: [] })
 
-            await store.popDir()
+            await store.navigateToParentDir()
 
-            expect(mockDirStack.popDirAndLoad).toHaveBeenCalledWith(expect.any(Function))
+            // dirName('src/composables') = 'src'
+            expect(mockApiGet).toHaveBeenCalledWith('/api/dir?path=src')
         })
 
         it('skips if dirLoading is true', async () => {
             store.state.dirLoading = true
+            store.state.currentDir = 'src/composables'
 
-            await store.popDir()
+            await store.navigateToParentDir()
 
-            expect(mockDirStack.popDirAndLoad).not.toHaveBeenCalled()
+            expect(mockApiGet).not.toHaveBeenCalled()
         })
-    })
 
-    describe('truncateToDir', () => {
-        it('calls dirStack.truncateToDirAndLoad', async () => {
+        it('navigates to root from one-level-deep directory', async () => {
             store.state.dirLoading = false
+            store.state.currentDir = 'src'
+            mockApiGet.mockResolvedValue({ items: [] })
 
-            await store.truncateToDir('/project')
+            await store.navigateToParentDir()
 
-            expect(mockDirStack.truncateToDirAndLoad).toHaveBeenCalledWith('/project', expect.any(Function))
+            // dirName('src') = ''
+            expect(mockApiGet).toHaveBeenCalledWith('/api/dir?path=')
         })
 
-        it('skips if dirLoading is true', async () => {
-            store.state.dirLoading = true
-
-            await store.truncateToDir('/project')
-
-            expect(mockDirStack.truncateToDirAndLoad).not.toHaveBeenCalled()
-        })
-    })
-
-    describe('replaceDirTop', () => {
-        it('calls dirStack.replaceTopAndLoad', async () => {
+        it('no-op when already at project root', async () => {
             store.state.dirLoading = false
+            store.state.currentDir = ''
 
-            await store.replaceDirTop('/project/other')
+            await store.navigateToParentDir()
 
-            expect(mockDirStack.replaceTopAndLoad).toHaveBeenCalledWith('/project/other', expect.any(Function))
-        })
-
-        it('skips if dirLoading is true', async () => {
-            store.state.dirLoading = true
-
-            await store.replaceDirTop('/project/other')
-
-            expect(mockDirStack.replaceTopAndLoad).not.toHaveBeenCalled()
+            expect(mockApiGet).not.toHaveBeenCalled()
         })
     })
 
@@ -696,18 +705,6 @@ describe('store', () => {
             expect(store.state.chatSessionPageSize).toBe(20)
         })
 
-        it('reads chatCollapsedHeight from roots API', async () => {
-            mockApiGet.mockImplementation((url: string) => {
-                if (url === '/api/roots') return { roots: ['/'], chatCollapsedHeight: 200 }
-                if (url === '/api/project') return { path: '/home/user/project' }
-                return {}
-            })
-
-            await store.loadProject()
-
-            expect(store.state.chatCollapsedHeight).toBe(200)
-        })
-
         it('reads sessionMaxCount from roots API', async () => {
             mockApiGet.mockImplementation((url: string) => {
                 if (url === '/api/roots') return { roots: ['/'], sessionMaxCount: 50 }
@@ -769,7 +766,6 @@ describe('store', () => {
                 chatInitialMessages: 15,
                 chatPageSize: 30,
                 chatSessionPageSize: 8,
-                chatCollapsedHeight: 100,
                 sessionMaxCount: 20,
                 recentProjectsMaxCount: 5,
             })
@@ -781,7 +777,6 @@ describe('store', () => {
             expect(store.state.chatInitialMessages).toBe(15)
             expect(store.state.chatPageSize).toBe(30)
             expect(store.state.chatSessionPageSize).toBe(8)
-            expect(store.state.chatCollapsedHeight).toBe(100)
             expect(store.state.sessionMaxCount).toBe(20)
             expect(store.state.recentProjectsMaxCount).toBe(5)
         })
@@ -922,7 +917,8 @@ describe('store', () => {
 
             await store.loadFiles('/project')
 
-            expect(store.state.currentDir).toBe('/project')
+            // Leading slashes are stripped: /project → project
+            expect(store.state.currentDir).toBe('project')
             expect(store.state.dirEntries).toHaveLength(2)
             expect(store.state.dirLoading).toBe(false)
         })
@@ -933,6 +929,15 @@ describe('store', () => {
             await store.loadFiles('')
 
             expect(store.state.dirLoading).toBe(false)
+        })
+
+        it('strips leading slashes from directory path', async () => {
+            mockApiGet.mockResolvedValue({ items: [] })
+
+            await store.loadFiles('///deeply/nested')
+
+            expect(mockApiGet).toHaveBeenCalledWith('/api/dir?path=deeply%2Fnested')
+            expect(store.state.currentDir).toBe('deeply/nested')
         })
 
         it('rolls back state on failure', async () => {
@@ -971,6 +976,93 @@ describe('store', () => {
             await store.loadFiles('')
 
             expect(mockApiGet).toHaveBeenCalledWith('/api/dir?path=')
+        })
+    })
+
+    // ── deleteFile error handling ──
+
+    describe('deleteFile', () => {
+        it('shows error toast on API failure', async () => {
+            const err = Object.assign(new Error('delete failed'), { msgKey: 'InternalError' })
+            mockApiPost.mockRejectedValue(err)
+            mockApiGet.mockResolvedValue({ items: [] })
+
+            await store.deleteFile('/project/test.txt')
+
+            expect(mockToastShow).toHaveBeenCalledWith('file.toast.deleteFailed', { type: 'error', icon: '⚠️' })
+            // loadFiles should still run even after error
+            expect(mockApiGet).toHaveBeenCalled()
+        })
+
+        it('treats FileNotFoundShort as success (no toast)', async () => {
+            const err = Object.assign(new Error('file not found'), { msgKey: 'FileNotFoundShort' })
+            mockApiPost.mockRejectedValue(err)
+            mockApiGet.mockResolvedValue({ items: [] })
+
+            await store.deleteFile('/project/gone.txt')
+
+            expect(mockToastShow).not.toHaveBeenCalled()
+            // loadFiles should still refresh
+            expect(mockApiGet).toHaveBeenCalled()
+        })
+
+        it('clears currentFile when deleting the viewed file', async () => {
+            mockApiPost.mockResolvedValue({ ok: true })
+            mockApiGet.mockResolvedValue({ items: [] })
+            store.state.currentFile = { name: 'test.txt', path: '/project/test.txt' } as any
+
+            await store.deleteFile('/project/test.txt')
+
+            expect(store.state.currentFile).toBeNull()
+        })
+
+        it('does not delete when dialog is cancelled', async () => {
+            mockDialogConfirm.mockResolvedValueOnce(false)
+
+            await store.deleteFile('/project/test.txt')
+
+            expect(mockApiPost).not.toHaveBeenCalled()
+        })
+    })
+
+    // ── deleteFiles (batch) error handling ──
+
+    describe('deleteFiles', () => {
+        it('shows error toast when some deletes fail', async () => {
+            mockApiPost
+                .mockResolvedValueOnce({ ok: true })
+                .mockRejectedValueOnce(Object.assign(new Error('failed'), { msgKey: 'InternalError' }))
+            mockApiGet.mockResolvedValue({ items: [] })
+
+            await store.deleteFiles(['/project/a.txt', '/project/b.txt'])
+
+            expect(mockToastShow).toHaveBeenCalledWith('file.toast.deleteFailed', { type: 'error', icon: '⚠️' })
+            // loadFiles should still run
+            expect(mockApiGet).toHaveBeenCalled()
+        })
+
+        it('ignores FileNotFoundShort in batch delete', async () => {
+            mockApiPost
+                .mockResolvedValueOnce({ ok: true })
+                .mockRejectedValueOnce(Object.assign(new Error('not found'), { msgKey: 'FileNotFoundShort' }))
+            mockApiGet.mockResolvedValue({ items: [] })
+
+            await store.deleteFiles(['/project/a.txt', '/project/gone.txt'])
+
+            expect(mockToastShow).not.toHaveBeenCalled()
+            expect(mockApiGet).toHaveBeenCalled()
+        })
+
+        it('refreshes file list even with partial failures', async () => {
+            mockApiPost
+                .mockRejectedValueOnce(Object.assign(new Error('fail'), { msgKey: 'InternalError' }))
+                .mockResolvedValueOnce({ ok: true })
+            mockApiGet.mockResolvedValue({ items: [] })
+
+            await store.deleteFiles(['/project/a.txt', '/project/b.txt'])
+
+            // loadFiles should be called despite partial failure
+            expect(mockApiGet).toHaveBeenCalled()
         })
     })
 })

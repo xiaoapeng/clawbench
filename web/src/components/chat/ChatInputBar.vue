@@ -23,6 +23,11 @@
           :title="t('chat.actions.forkSession')">
           <Split :size="14" />
         </button>
+        <button v-if="showResumeIcon" class="chat-action-btn"
+          @click.stop="openResumeDrawer"
+          :title="t('chat.acpSession.title')">
+          <RotateCcw :size="14" />
+        </button>
         <button class="chat-action-btn chat-action-btn-delete" :class="{ disabled: !currentSessionId }"
           @click="handleDelete"
           :title="currentSessionId ? t('chat.actions.deleteCurrentSession') : t('chat.actions.noSessionToDelete')">
@@ -233,7 +238,7 @@
       </PopupMenu>
     </div>
     <!-- Session info bar (model + mode + thinking + transport) -->
-    <div class="chat-session-info" v-if="currentModelName || showModeInfo || showThinkingInfo || showTransportInfo || showResumeIcon || showUsageInfo">
+    <div class="chat-session-info" v-if="currentModelName || showModeInfo || showThinkingInfo || showTransportInfo || showUsageInfo">
       <span class="session-info-model" @click.stop="openSettingsModal('model')"><Cpu :size="11" />{{ currentModelName }}</span>
       <template v-if="showModeInfo">
         <span class="session-info-divider"></span>
@@ -246,10 +251,6 @@
       <template v-if="showTransportInfo">
         <span class="session-info-divider"></span>
         <span class="session-info-transport" @click.stop="openSettingsModal('transport')"><Cable :size="11" />{{ currentTransport === 'acp-stdio' ? 'ACP' : 'CLI' }}</span>
-      </template>
-      <template v-if="showResumeIcon">
-        <span class="session-info-divider"></span>
-        <span class="session-info-resume" @click.stop="openResumeDrawer" :title="t('chat.acpSession.title')"><RotateCcw :size="11" /></span>
       </template>
       <template v-if="showUsageInfo">
         <span class="session-info-divider"></span>
@@ -301,7 +302,7 @@ const isACPTransport = computed(() => {
 const showModeInfo = computed(() => availableModes.value.length > 0 && isACP.value)
 const showThinkingInfo = computed(() => isACP.value && (availableThinkingEfforts.value.length > 0 || hasThinkingEffortLevels(props.currentAgentId || '')))
 const showTransportInfo = computed(() => supportsDualTransport(props.currentAgentId || '') || !isACP.value)
-const showResumeIcon = computed(() => props.currentAgentId && agentCanResume(props.currentAgentId))
+const showResumeIcon = computed(() => isACPTransport.value && props.currentAgentId && agentCanResume(props.currentAgentId))
 const showUsageInfo = computed(() => contextSize.value > 0)
 const usagePct = computed(() => contextSize.value > 0 ? Math.round((contextUsed.value / contextSize.value) * 100) : 0)
 const usageColor = computed(() => {
@@ -900,23 +901,21 @@ defineExpose({
 .session-info-model,
 .session-info-mode,
 .session-info-thinking,
-.session-info-transport,
-.session-info-resume {
+.session-info-transport {
   display: inline-flex;
   align-items: center;
   gap: 3px;
   flex-shrink: 1;
   overflow: hidden;
   text-overflow: ellipsis;
-  min-width: 0;
+  min-width: 14px;
   cursor: pointer;
   transition: color 0.15s;
 }
 
 .session-info-model:active,
 .session-info-thinking:active,
-.session-info-transport:active,
-.session-info-resume:active {
+.session-info-transport:active {
   color: var(--accent-color, #0066cc);
 }
 
@@ -936,12 +935,12 @@ defineExpose({
 .session-info-mode svg,
 .session-info-thinking svg,
 .session-info-transport svg,
-.session-info-resume svg {
+.session-info-usage svg {
   flex-shrink: 0;
 }
 
 .session-info-divider {
-  flex-shrink: 0;
+  flex-shrink: 1;
   width: 1px;
   height: 10px;
   background: var(--border-color, #e5e5e5);
@@ -951,8 +950,7 @@ defineExpose({
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  flex-shrink: 1;
-  overflow: hidden;
+  flex-shrink: 0;
   cursor: pointer;
 }
 

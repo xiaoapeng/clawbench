@@ -1,11 +1,13 @@
 import { ref, computed, type Ref } from 'vue'
 import { gt } from '@/composables/useLocale'
 import { useToast } from '@/composables/useToast.ts'
-import { useNotification } from '@/composables/useNotification.ts'
 import { useSessionIdentity } from '@/composables/useSessionIdentity.ts'
+import { appLog } from '@/utils/appLog'
+
+const TAG = 'ChatSession'
 import { clearModeState, updateAvailableModes, clearCommandState, updateCommandState, updateAvailableThinkingEfforts, clearThinkingEffortState, clearUsageState, updateUsageState, currentAgentId as _currentAgentId } from '@/composables/useSessionIdentity.ts'
 import { clearPlanState, updatePlanEntries } from '@/composables/usePlanProgress'
-import { useAgents, restoreOriginalModels, populateACPStateFromCache, getAgentThinkingEffortLevels } from '@/composables/useAgents'
+import { useAgents, restoreOriginalModels, getAgentThinkingEffortLevels } from '@/composables/useAgents'
 import { store } from '@/stores/app.ts'
 import { buildMessageSnapshot, parseMessages } from '@/utils/chatSessionUtils.ts'
 import { warmWorktreeCache } from '@/composables/useWorktreeAnnotation.ts'
@@ -94,12 +96,9 @@ export function useChatSession(options: UseChatSessionOptions) {
     onConnectStream,
     onStopPolling,
     onDisconnectStream,
-    onOpen,
-    onStreamDone,
   } = options
 
   const toast = useToast()
-  const notification = useNotification()
 
   // ── Identity refs from singleton ──
   const identity = useSessionIdentity()
@@ -185,8 +184,8 @@ export function useChatSession(options: UseChatSessionOptions) {
 
   // Helper: sync usage state from server data
   function syncUsageFromData(usageStateData?: { used?: number; size?: number; cost?: number; currency?: string }) {
-    if (usageStateData && usageStateData.size > 0) {
-      updateUsageState(usageStateData.used ?? 0, usageStateData.size, usageStateData.cost, usageStateData.currency)
+    if (usageStateData && (usageStateData.size ?? 0) > 0) {
+      updateUsageState(usageStateData.used ?? 0, usageStateData.size ?? 0, usageStateData.cost, usageStateData.currency)
     }
   }
 
@@ -314,23 +313,14 @@ export function useChatSession(options: UseChatSessionOptions) {
               lastMessageSnapshot = newSnapshot
               const prevCount = messages.value.length
               const newCount = recoverMsgs.length
-              const sameCore = prevCount === newCount && prevCount > 0 && recoverMsgs.slice(0, -1).every((m, i) => m.id === messages.value[i]?.id)
+              const sameCore = prevCount === newCount && prevCount > 0 && recoverMsgs.slice(0, -1).every((m: any, i: number) => m.id === messages.value[i]?.id)
               if (!sameCore) {
                 expandedTools.value = {}
               }
               Object.keys(blockAskQuestions).forEach(k => delete blockAskQuestions[k])
               Object.keys(blockRagResults).forEach(k => delete blockRagResults[k])
-              const localPending = messages.value.filter((m: any) => m.pending)
-              const dbIds = new Set(recoverMsgs.filter((m: any) => m.id).map((m: any) => m.id))
+              // Replace messages — pending messages are in pendingStore, not messages.value
               messages.value = parseMessages(recoverMsgs, onParseAssistantContent, messages.value)
-              for (const pm of localPending) {
-                const alreadyInDB = messages.value.some(
-                  (m: any) => m.role === 'user' && m.content === pm.content && m.id
-                )
-                if (!alreadyInDB) {
-                  messages.value.push(pm)
-                }
-              }
               totalMessages.value = recoverData.total || messages.value.length
               // Sync remaining session metadata from recovery response
               if (recoverData.modeState && recoverData.modeState?.availableModes?.length > 0) {
@@ -365,7 +355,7 @@ export function useChatSession(options: UseChatSessionOptions) {
           // clawbench_project cookie is missing). Don't silently bail —
           // log the error so it's visible in devtools. If initSessionFromAPI
           // sets currentSessionId later, the normal path below will fetch messages.
-          console.warn('loadHistory recovery failed:', recoverResp.status, recoverResp.statusText)
+          appLog.w(TAG, 'loadHistory recovery failed:', recoverResp.status, recoverResp.statusText)
         }
         // If recovery still yields no session, bail — createSession will handle it
         if (!currentSessionId.value) {
@@ -419,7 +409,7 @@ export function useChatSession(options: UseChatSessionOptions) {
       // Only reset when message count or non-last message identities differ.
       const prevCount = messages.value.length
       const newCount = rawMsgs.length
-      const sameCore = prevCount === newCount && prevCount > 0 && rawMsgs.slice(0, -1).every((m, i) => m.id === messages.value[i]?.id)
+      const sameCore = prevCount === newCount && prevCount > 0 && rawMsgs.slice(0, -1).every((m: any, i: number) => m.id === messages.value[i]?.id)
       if (!sameCore) {
         expandedTools.value = {}
       }
@@ -429,25 +419,11 @@ export function useChatSession(options: UseChatSessionOptions) {
       Object.keys(blockAskQuestions).forEach(k => delete blockAskQuestions[k])
       Object.keys(blockRagResults).forEach(k => delete blockRagResults[k])
 
-      // Preserve pending user messages — they exist in messages.value with `pending: true`
-      // but haven't been persisted to the DB yet (backend persists them during queue_drain).
-      // Without this, loadHistory would replace the array and lose pending messages.
-      const localPending = messages.value.filter((m: any) => m.pending)
-      const dbIds = new Set(rawMsgs.filter((m: any) => m.id).map((m: any) => m.id))
-
+      // Replace messages with server data. Pending messages are NOT in
+      // messages.value — they live in a separate per-session pendingStore.
+      // No need to preserve/re-append pending messages here.
       messages.value = parseMessages(rawMsgs, onParseAssistantContent, messages.value)
 
-      // Re-append pending messages that aren't yet in the DB.
-      // Dedup by content: if the DB already contains the message (persisted by
-      // queue_drain), don't add the local pending version back.
-      for (const pm of localPending) {
-        const alreadyInDB = messages.value.some(
-          (m: any) => m.role === 'user' && m.content === pm.content && m.id
-        )
-        if (!alreadyInDB) {
-          messages.value.push(pm)
-        }
-      }
       totalMessages.value = data.total || messages.value.length
       // Sanity check: if the backend returned a different sessionId than what we
       // requested, log a warning — this indicates a potential issue (e.g. session
@@ -457,7 +433,7 @@ export function useChatSession(options: UseChatSessionOptions) {
       const requestedId = currentSessionId.value
       const returnedId = data.sessionId || ''
       if (returnedId && requestedId && returnedId !== requestedId) {
-        console.warn(`loadHistory: session ID mismatch (requested=${requestedId}, returned=${returnedId})`)
+        appLog.w(TAG, `loadHistory: session ID mismatch (requested=${requestedId}, returned=${returnedId})`)
       }
       currentSessionId.value = returnedId
       currentSessionTitle.value = data.sessionTitle || ''
@@ -521,7 +497,7 @@ export function useChatSession(options: UseChatSessionOptions) {
         loadHistoryDeferred = null
       }
     } catch (err) {
-      console.error('Failed to load chat history:', err)
+      appLog.e(TAG, 'Failed to load chat history:', err)
       const _msg = err instanceof Error ? err.message : ''
       toast.show(_msg ? gt('chat.session.loadHistoryFailedDetail', { error: _msg }) : gt('chat.session.loadHistoryFailed'), { icon: '⚠️', type: 'error' })
       loadHistoryInProgress = false
@@ -565,13 +541,13 @@ export function useChatSession(options: UseChatSessionOptions) {
         onRenderUpdate(true)
       }
     } catch (err) {
-      console.error('Failed to load more messages:', err)
+      appLog.e(TAG, 'Failed to load more messages:', err)
     } finally {
       loadingMore.value = false
     }
   }
 
-  async function switchSession(sessionId) {
+  async function switchSession(sessionId: string) {
     // Increment sequence counter — if another switch starts before we finish,
     // our results will be discarded (last writer wins)
     const mySeq = ++switchSessionSeq
@@ -679,7 +655,7 @@ export function useChatSession(options: UseChatSessionOptions) {
     } catch (err) {
       // If another switch happened, don't touch state
       if (switchSessionSeq !== mySeq) return
-      console.error('Failed to switch session:', err)
+      appLog.e(TAG, 'Failed to switch session:', err)
       toast.show(gt('chat.session.switchFailed'), { icon: '⚠️', type: 'error' })
     } finally {
       // Always restore input — switchSession is the only place that locks it,
@@ -690,7 +666,7 @@ export function useChatSession(options: UseChatSessionOptions) {
     }
   }
 
-  async function createSession(agentId) {
+  async function createSession(agentId: string) {
     // Stop msg count polling for the previous session to prevent race
     // conditions — if the polling fires during creation, loadHistory could
     // overwrite the new sessionId and revert to the old session.
@@ -719,13 +695,13 @@ export function useChatSession(options: UseChatSessionOptions) {
       if (typeof data.sessionCount === 'number') store.state.sessionCount = data.sessionCount
       toast.show(gt('chat.session.created', { count: data.sessionCount ?? '', max: maxCount }), { icon: '✨', type: 'success', duration: 1500 })
     } catch (err) {
-      console.error('Failed to create session:', err)
+      appLog.e(TAG, 'Failed to create session:', err)
       const _msg = err instanceof Error ? err.message : ''
       toast.show(_msg ? gt('chat.session.createSessionFailedDetail', { error: _msg }) : gt('chat.session.createSessionFailed'), { icon: '⚠️', type: 'error' })
     }
   }
 
-  async function deleteSession(sessionId, backend) {
+  async function deleteSession(sessionId: string, backend: string) {
     // Prevent concurrent deletes for the same session
     if (deletingSessionIds.value.has(sessionId)) return
     deletingSessionIds.value.add(sessionId)
@@ -740,10 +716,10 @@ export function useChatSession(options: UseChatSessionOptions) {
           const sessionsResp = await fetch('/api/ai/sessions')
           const sessionsData = await sessionsResp.json()
           if (sessionsData.sessions && sessionsData.sessions.length > 0) {
-            await switchSession(sessionsData.sessions[0].id, sessionsData.sessions[0].backend)
+            await switchSession(sessionsData.sessions[0].id)
           } else {
             // No sessions left, create a default one
-            await createSession()
+            await createSession('')
           }
         } else {
           // Deleted a non-current session — refresh global state (chatUnread, chatRunning, runningSessions)
@@ -756,7 +732,7 @@ export function useChatSession(options: UseChatSessionOptions) {
         toast.show(gt('chat.session.deleteFailed'), { icon: '⚠️', type: 'error' })
       }
     } catch (err) {
-      console.error('Failed to delete session:', err)
+      appLog.e(TAG, 'Failed to delete session:', err)
       toast.show(gt('chat.session.deleteFailed'), { icon: '⚠️', type: 'error' })
     } finally {
       deletingSessionIds.value.delete(sessionId)
@@ -834,7 +810,6 @@ export function useChatSession(options: UseChatSessionOptions) {
   // Track which sessions have already had their completion notification fired.
   // Prevents repeated sound/notification if an exception in the callback
   // prevents runningSessions from being updated.
-  const notifiedSessions = new Set<string>()
 
   function handleVisibilityChange() {
     if (document.visibilityState === 'visible' && loading.value) {
@@ -918,7 +893,7 @@ export function useChatSession(options: UseChatSessionOptions) {
       switchTabFn('chat')
       return true
     } catch (err) {
-      console.error('Failed to continue from execution:', err)
+      appLog.e(TAG, 'Failed to continue from execution:', err)
       toast.show(gt('chat.session.continueFailed'), { icon: '⚠️', type: 'error' })
       return false
     }
@@ -953,7 +928,7 @@ export function useChatSession(options: UseChatSessionOptions) {
       await switchSession(data.sessionId)
       return true
     } catch (err) {
-      console.error('Failed to fork session:', err)
+      appLog.e(TAG, 'Failed to fork session:', err)
       toast.show(gt('chat.session.forkFailed'), { icon: '⚠️', type: 'error' })
       return false
     }

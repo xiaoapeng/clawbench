@@ -1,6 +1,9 @@
 import { ref, computed } from 'vue'
 import { useAgents, registerIdentityUpdaters } from '@/composables/useAgents'
 import { gt } from '@/composables/useLocale'
+import { appLog } from '@/utils/appLog'
+
+const TAG = 'SessionIdentity'
 
 // ───────────────────────────────────────────────────────────
 // Module-level singleton state — shared across the whole app.
@@ -119,7 +122,7 @@ function loadModelPref(agentId: string): string | null {
   return agent?.preferredModel || null
 }
 
-async function saveThinkingPref(agentId: string, level: string) {
+async function saveThinkingPref(agentId: string, _level: string) {
   if (!agentId) return
   // No-op: thinking effort selection in chat is session-scoped and does NOT update
   // the agent's default. The agent's preferredThinkingEffort is configured exclusively
@@ -253,7 +256,7 @@ export function toggleAutoApprove(enabled: boolean) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sessionId: sid, autoApprove: enabled }),
     }).catch(err => {
-      console.error('Failed to update autoApprove:', err)
+      appLog.e(TAG, 'Failed to update autoApprove:', err)
     })
   }
 }
@@ -273,7 +276,6 @@ let _sendMessage: ((text: string, filePaths?: string[]) => Promise<void>) | null
 let _openChatPanel: (() => void) | null = null
 let _continueFromExecution: ((taskId: number, execId: number, switchTabFn: (tab: string) => void) => Promise<boolean>) | null = null
 let _checkContinueSession: ((taskId: number, execId: number) => Promise<{ exists: boolean; sessionId: string }>) | null = null
-let _forkSession: ((sessionId: string) => Promise<boolean>) | null = null
 // SessionDrawer component ref — set by App.vue. Allows any component to
 // trigger openAgentSelector() on the global drawer without coupling.
 let _sessionDrawerRef: any = null
@@ -306,7 +308,6 @@ export function registerSessionActions(actions: SessionActions) {
   _openChatPanel = actions.openChatPanel
   _continueFromExecution = actions.continueFromExecution
   _checkContinueSession = actions.checkContinueSession
-  _forkSession = actions.forkSession
 
   // Expose E2E test bridge on window for Playwright access.
   // These allow tests to create/switch sessions without page reload,
@@ -514,7 +515,7 @@ export function useSessionIdentity() {
         currentThinkingEffort.value = loadThinkingPref(currentAgentId.value) || ''
       }
     } catch (err) {
-      console.error('Failed to create session:', err)
+      appLog.e(TAG, 'Failed to create session:', err)
     }
   }
 
@@ -555,7 +556,7 @@ export function useSessionIdentity() {
         ? `/api/ai/chat?session_id=${encodeURIComponent(sid)}`
         : null
       if (!url) {
-        console.error('sendMessage: no session ID available, cannot send')
+        appLog.e(TAG, 'sendMessage: no session ID available, cannot send')
         return
       }
       await fetch(url, {
@@ -564,7 +565,7 @@ export function useSessionIdentity() {
         body: JSON.stringify({ message: text, filePaths: filePaths || [], modelId: currentModelId.value || undefined, thinkingEffort: currentThinkingEffort.value || undefined, transport: currentTransport.value || undefined }),
       })
     } catch (err) {
-      console.error('Failed to send message:', err)
+      appLog.e(TAG, 'Failed to send message:', err)
     }
   }
 
